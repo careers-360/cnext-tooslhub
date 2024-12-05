@@ -20,23 +20,16 @@ load_dotenv('.env')
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 root = lambda *x: os.path.join(BASE_DIR, *x)
-sys.path.insert(0, root("apps"))
+sys.path.insert(0, root('apps'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # SECRET_KEY = 'django-insecure-g$rhqtlou5yn8^$)tclvbl5gbb5tf!!jqi(q!&ru5^ldc!os*3'
-SECRET_KEY = 'django-insecure-^efs*h@aqke)t)!(qm=ejf9e^_s*min1&!l77@4gky49ro-bv7'
-
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
+SECRET_KEY = os.getenv("SECRET_KEY", 'this_is_a_default_secret_key_for_toolshub')
+DEBUG = os.getenv("DEBUG", False)
 ALLOWED_HOSTS = ['*']
-
-
-# Application definition
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -47,12 +40,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
-# PROJECT_APPS = ["pdf_generator"]
+PROJECT_APPS = [
+	"rank_predictor",
+    "users"
+]
 
 if not DEBUG:
 	INSTALLED_APPS.append('elasticapm.contrib.django')
 
-# INSTALLED_APPS += PROJECT_APPS
+INSTALLED_APPS += PROJECT_APPS
 
 
 MIDDLEWARE = [
@@ -121,6 +117,8 @@ TEMPLATES = [
 
 
 WSGI_APPLICATION = 'cnext_backend.wsgi.application'
+
+AUTH_USER_MODEL = 'users.User'
 
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
