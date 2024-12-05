@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 
 PROJECT_APPS = [
 	"rank_predictor",
+	"tools",
     "users"
 ]
 
@@ -245,7 +246,7 @@ if DEBUG:
 else:
 	DATABASE_ROUTERS = ['utils.dbrouter.PrimaryReplicaRouter']
 
-DATABASE_ROUTERS = ['user_log.dbRouter.UserLogDBRouter', 'utils.dbrouter.PrimaryReplicaRouter']
+
 
 WEB_API_KEY = os.getenv("WEB_API_KEY", "")
 BASE_URL = os.getenv('API_URL', 'https://toolshub-service.careers360.com/')
