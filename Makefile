@@ -34,7 +34,7 @@ collectstatic:
 	python3 manage.py collectstatic --noinput
 
 docker-be:
-	docker build -t backend:$(TAG) -f deploy/Dockerfile.colleges .
+	docker build -t backend:$(TAG) -f deploy/Dockerfile.toolshub .
 
 
 #This uses docker-compose and docker to build the entire project and run it within containers\
