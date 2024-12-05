@@ -2,6 +2,14 @@ FROM public.ecr.aws/careers360/cnext-backend-base:arm64 AS base
 
 FROM base AS backend
 
+# Install required tools and libraries for building Python dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    gcc \
+    libmysqlclient-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Configure project
 WORKDIR /home/ubuntu/main/cnext-toolshub
 COPY requirements.txt /home/ubuntu/main/cnext-toolshub/requirements.txt
