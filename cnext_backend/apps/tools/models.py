@@ -107,3 +107,35 @@ class CPProductCampaign(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class Domain(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(max_length=1023, blank=True)
+    weight = models.PositiveIntegerField(null=True, blank=True)
+    is_stream = models.BooleanField(default=False)
+    display_status = models.BooleanField(default=False)
+    old_domain_name = models.CharField(max_length=255)
+    old_domain_ids = models.IntegerField(null=False, blank=False)
+    published = models.CharField(max_length=255)
+    created = models.DateTimeField(default=timezone.now)
+    created_by = models.IntegerField(null=False, blank=False)
+    updated = models.DateTimeField(default=timezone.now)
+    updated_by = models.IntegerField(null=False, blank=False)
+    cdn_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'domain'
+        verbose_name_plural = 'domains'
+        db_table = 'domain'
+        ordering = ['created']
+        indexes = [
+            models.Index(fields=['name', ]),
+            models.Index(fields=['weight', ]),
+            models.Index(fields=['is_stream', ]),
+            models.Index(fields=['display_status', ]),
+            models.Index(fields=['published', ]),
+        ]
+
+    def __str__(self):
+        return self.name

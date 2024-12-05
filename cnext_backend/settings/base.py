@@ -45,12 +45,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+	'django_extensions',
 ]
 
 PROJECT_APPS = [
+    "users",
 	"rank_predictor",
-	"tools",
-    "users"
+	"tools"
 ]
 
 if not DEBUG:
@@ -243,9 +244,6 @@ if DEBUG:
 	INTERNAL_IPS = [
 		'127.0.0.1',
 	]
-else:
-	DATABASE_ROUTERS = ['utils.dbrouter.PrimaryReplicaRouter']
-
 
 
 WEB_API_KEY = os.getenv("WEB_API_KEY", "")
