@@ -31,7 +31,8 @@ class ManagePredictorToolAPI(APIView):
     def get(self, request, version, format=None, **kwargs):
         try:
             helper = ToolsHelper(request=request)
-            data = helper.get_predictor_tool_list()
+            filter_value = helper.get_manage_predictor_tools_filter()
+            data = helper.get_predictor_tool_list(filter_value)
             return SuccessResponse(data, status=status.HTTP_200_OK)
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_404_NOT_FOUND)

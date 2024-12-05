@@ -1,0 +1,12 @@
+ROM public.ecr.aws/careers360/cnext-backend-base:arm64 AS base
+
+FROM base AS backend
+
+# Configure project
+WORKDIR /home/ubuntu/main/cnext-toolshub
+COPY requirements.txt /home/ubuntu/main/cnext-toolshub/requirements.txt
+RUN pip3 install -r requirements.txt
+
+COPY . /home/ubuntu/main/cnext-toolshub
+EXPOSE 8081
+ENTRYPOINT bash ./deploy/run.bash
