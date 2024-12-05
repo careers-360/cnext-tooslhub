@@ -10,7 +10,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.core.validators import RegexValidator
 from datetime import date
-import requests, random
+import random
 from datetime import datetime
 from unixtimestampfield.fields import UnixTimeStampField
 
