@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+	'django_extensions',
 	'rest_framework',
 ]
 
@@ -250,3 +251,4 @@ WEB_API_KEY = os.getenv("WEB_API_KEY", "")
 BASE_URL = os.getenv('API_URL', 'https://toolshub-service.careers360.com/')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.careers360.com/')
 SESSION_DOMAIN_NAME = os.getenv('SESSION_DOMAIN_NAME', '.careers360.com')
+CAREERS_BASE_IMAGES_URL = os.getenv('CAREERS_BASE_IMAGES_URL', 'www.careers360.com')

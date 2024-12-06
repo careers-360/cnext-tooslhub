@@ -3,6 +3,7 @@ async-timeout==5.0.1
 certifi==2024.8.30
 Django==4.2.13
 django-cors-headers==4.6.0
+django-extensions==3.2.3
 django-redis==5.4.0
 django-unixtimestampfield==0.5.0
 djangorestframework==3.15.2

@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path
 
 from .cms_api_urls import urlpatterns as cms_api_urls
+from .rp_api_urls import urlpatterns as rp_api_urls
 
 
 urlpatterns = [
@@ -25,3 +26,4 @@ urlpatterns = [
 ]
 
 urlpatterns += cms_api_urls
+urlpatterns += rp_api_urls
