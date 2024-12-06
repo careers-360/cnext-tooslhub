@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+	'django_extensions',
 	'rest_framework',
 ]
 
@@ -251,6 +252,7 @@ BASE_URL = os.getenv('API_URL', 'https://toolshub-service.careers360.com/')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.careers360.com/')
 SESSION_DOMAIN_NAME = os.getenv('SESSION_DOMAIN_NAME', '.careers360.com')
 
+
 USE_S3 = os.getenv('USE_S3', False)
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'xxxxxx')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'xxxxxx')
@@ -260,3 +262,5 @@ if USE_S3 == 'True':
 		from .aws import *
 	except ImportError:
 		pass
+
+CAREERS_BASE_IMAGES_URL = os.getenv('CAREERS_BASE_IMAGES_URL', 'www.careers360.com')
