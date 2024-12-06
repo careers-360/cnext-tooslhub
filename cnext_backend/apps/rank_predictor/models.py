@@ -121,9 +121,9 @@ class RpContentSection(models.Model):
     image_web = models.CharField(max_length=255, null=True, blank=True)
     image_wap = models.CharField(max_length=255, null=True, blank=True)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
