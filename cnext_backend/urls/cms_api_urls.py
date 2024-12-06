@@ -6,7 +6,6 @@ cms_prefix = 'api/<int:version>/cms/manage-tool'
 
 urlpatterns = [
     path("", rp_controller.HealthCheck.as_view(), name='health_check'),
-
     # Tools App APIs
     path('tools', tools_controller.HealthCheck.as_view(), name='health_check'),
     path(cms_prefix + '/list', tools_controller.ManagePredictorToolAPI.as_view(), name='predictor-tools-list'),

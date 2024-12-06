@@ -4,6 +4,7 @@ boto3==1.35.76
 certifi==2024.8.30
 Django==4.2.13
 django-cors-headers==4.6.0
+django-extensions==3.2.3
 django-redis==5.4.0
 django-unixtimestampfield==0.5.0
 djangorestframework==3.15.2
@@ -20,6 +21,6 @@ python-dotenv==0.21.1
 redis==5.2.0
 six==1.17.0
 sqlparse==0.5.2
-urllib3==2.2.3
+urllib3==1.25.4
 wrapt==1.17.0
 uWSGI==2.0.28
