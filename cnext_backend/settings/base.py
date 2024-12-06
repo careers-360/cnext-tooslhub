@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
+from datetime import timedelta
+
 load_dotenv('.env')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -45,8 +47,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+	'corsheaders',
 	'django_extensions',
 	'rest_framework',
+	'rest_framework.authtoken',
+	'rest_framework_simplejwt',
 ]
 
 PROJECT_APPS = [
@@ -63,8 +68,8 @@ INSTALLED_APPS += PROJECT_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-	'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+	'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -107,10 +112,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'cnext_backend.wsgi.application'
 
-AUTH_USER_MODEL = 'users.User'
-
-# Database
-# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
 DATABASES = {
     'default': {
@@ -146,6 +147,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REST_FRAMEWORK = {
+	'DEFAULT_AUTHENTICATION_CLASSES': (
+		'utils.helpers.custom_authorization.CookieHandlerJWTAuthentication',
+	),
+	'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
@@ -164,6 +171,18 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 STATIC_ROOT = root('../static')
 MEDIA_ROOT = root('../media')
+
+SIMPLE_JWT = {
+	"ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+	"REFRESH_TOKEN_LIFETIME": timedelta(days=90),
+}
+JWT_COOKIE_NAME = os.getenv("JWT_COOKIE_NAME", default="refresh_token")
+JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", default="Lax")
+STATICFILES_FINDERS = (
+	'django.contrib.staticfiles.finders.FileSystemFinder',
+	'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+)
+AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'cnext_backend.services.auth_backend_service.EmailAuthBackend')
 LOGIN_REDIRECT_URL = '/'
