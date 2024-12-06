@@ -47,9 +47,9 @@ class CMSToolsFilterAPI(APIView):
 class ManagePredictorToolAPI(APIView):
     """
     Predictor List API
-    Endpoint -> api/<int:version>/cms/manage-predictor-tool
+    Endpoint -> api/<int:version>/cms/manage-tool/list
     version -> v1 required
-    GET API ->api/1/cms/manage-predictor-tool
+    GET API ->api/1/cms/manage-tool/list
     """
     permission_classes = (
         ApiKeyPermission,
@@ -61,4 +61,4 @@ class ManagePredictorToolAPI(APIView):
             data = helper.get_predictor_tool_list(filter_value)
             return SuccessResponse(data, status=status.HTTP_200_OK)
         except Exception as e:
-            return ErrorResponse(e.__str__(), status=status.HTTP_404_NOT_FOUND)
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
