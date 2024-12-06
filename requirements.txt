@@ -1,5 +1,6 @@
 asgiref==3.8.1
 async-timeout==5.0.1
+boto3==1.35.76
 certifi==2024.8.30
 Django==4.2.13
 django-cors-headers==4.6.0
@@ -7,6 +8,7 @@ django-redis==5.4.0
 django-unixtimestampfield==0.5.0
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
+django-storages==1.14.4
 ecs-logging==2.2.0
 elastic-apm==6.23.0
 gunicorn==23.0.0
