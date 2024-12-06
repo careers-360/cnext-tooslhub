@@ -250,3 +250,13 @@ WEB_API_KEY = os.getenv("WEB_API_KEY", "")
 BASE_URL = os.getenv('API_URL', 'https://toolshub-service.careers360.com/')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.careers360.com/')
 SESSION_DOMAIN_NAME = os.getenv('SESSION_DOMAIN_NAME', '.careers360.com')
+
+USE_S3 = os.getenv('USE_S3', False)
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'xxxxxx')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'xxxxxx')
+
+if USE_S3 == 'True':
+	try:
+		from .aws import *
+	except ImportError:
+		pass

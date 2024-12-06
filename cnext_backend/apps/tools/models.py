@@ -1,7 +1,9 @@
 from django.db import models
 from django.utils import timezone
-
+from django.db import models
 # Create your models here.
+def upload_to(instance, filename):
+    return 'tools/images/{filename}'.format(filename=filename)
 
 class CPProductCampaign(models.Model):
     type = models.CharField(max_length=255)
@@ -18,7 +20,7 @@ class CPProductCampaign(models.Model):
     #                                 'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
     listing_desc = models.CharField(max_length=500)
     # icon = VersatileImageField('Images', upload_to='products/', blank=True, null=True)
-    # image = VersatileImageField('Images2', upload_to='products/', blank=True, null=True)
+    image = models.ImageField(upload_to=upload_to, blank=True, null=True)
     youtube = models.CharField(max_length=255, null=True, blank=True)
     published = models.CharField(max_length=255, null=True, blank=True)
     app_status = models.CharField(max_length=255, null=True, blank=True)
@@ -67,7 +69,7 @@ class CPProductCampaign(models.Model):
     display_preference = models.IntegerField(null=True, blank=True)
     gif = models.CharField(max_length=255, null=True, blank=True)
     video = models.CharField(max_length=255, null=True, blank=True)
-    secondary_image = models.CharField(max_length=255, null=True, blank=True)
+    secondary_image = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
     exam = models.IntegerField(null=True, blank=True)
     tool_system_name = models.CharField(max_length=255, null=True, blank=True)
     usage_count_matrix = models.CharField(max_length=255, null=True, blank=True)
