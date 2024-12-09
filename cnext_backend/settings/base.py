@@ -46,6 +46,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 	'rest_framework',
+	'rest_framework.authtoken',
+	'rest_framework_simplejwt',
+	'django_extensions'
 ]
 
 PROJECT_APPS = [
@@ -163,6 +166,40 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 STATIC_ROOT = root('../static')
 MEDIA_ROOT = root('../media')
+
+
+
+#Cors Settings
+from corsheaders.defaults import default_headers
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + ['x-api-key','Set-Cookie', 'x-highlight-request', 'device-type']
+CORS_EXPOSE_HEADERS = ['WWW-Authenticate','Set-Cookie']
+
+
+REST_FRAMEWORK = {
+	'DEFAULT_AUTHENTICATION_CLASSES': (
+		'utils.helpers.custom_authorization.CookieHandlerJWTAuthentication',
+	),
+	'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema'
+}
+
+# JWT Settings
+from datetime import timedelta
+
+
+SIMPLE_JWT = {
+	"ACCESS_TOKEN_LIFETIME": timedelta(seconds=86400) if DEBUG else timedelta(days=30),
+	"REFRESH_TOKEN_LIFETIME": timedelta(seconds=86400) if DEBUG else timedelta(days=90),
+}
+
+
+JWT_COOKIE_NAME = os.getenv("JWT_COOKIE_NAME", default="refresh_token")
+JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", default="Lax")
+
+# print(JWT_COOKIE_NAME , " JWT_COOKIE_NAME")
+# print(JWT_COOKIE_SAMESITE , " JWT_COOKIE_SAMESITE")
+ 
 
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'cnext_backend.services.auth_backend_service.EmailAuthBackend')
 LOGIN_REDIRECT_URL = '/'
