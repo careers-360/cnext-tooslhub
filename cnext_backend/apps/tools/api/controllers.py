@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from utils.helpers.response import SuccessResponse,ErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
+from rest_framework.response import Response
 
 from tools.helpers.helpers import ToolsHelper
 from tools.models import CPProductCampaign, Domain
@@ -77,21 +78,28 @@ class CMSToolsBasicDetailAPI(APIView):
         except CPProductCampaign.DoesNotExist:
             return None
 
-    def get(self, request, version, pk, format=None, **kwargs):
+    def get(self, request, version, format=None, **kwargs):
         try:
-            obj = self.get_object(pk)
+            product_id = request.query_params.get('product_id')
+            obj = self.get_object(product_id)
             if obj is None:
-                return Response({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+                return Response({'message': f'Tool with id: {product_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
             helper = ToolsHelper(request=request)
-            data = helper.get_basic_detail_data(pk)
+            data = helper.get_basic_detail_data(product_id)
             return SuccessResponse(data, status=status.HTTP_200_OK)
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
 
-
-    def put(self, request, version, pk, format=None, **kwargs):
-        obj = self.get_object(pk)
+    def put(self, request, version, format=None, **kwargs):
+        product_id = request.query_params.get('product_id')
+        obj = self.get_object(product_id)
         request_data = request.data.copy()
-        helper = ToolsHelper(request=request)
-        data = helper.edit_basic_detail(pk,request_data)	
+        helper = ToolsHelper()
+        data = helper.edit_basic_detail(obj, request_data = request_data)
+        return SuccessResponse(data, status=status.HTTP_200_OK)
+    
+    def post(self, request, version, format=None, **kwargs):
+        request_data = request.data.copy()
+        helper = ToolsHelper()
+        data = helper.add_basic_detail(request_data = request_data)
         return SuccessResponse(data, status=status.HTTP_200_OK)

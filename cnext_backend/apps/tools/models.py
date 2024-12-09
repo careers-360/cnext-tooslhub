@@ -8,17 +8,15 @@ def upload_to(instance, filename):
 class CPProductCampaign(models.Model):
     type = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
-    alias = models.CharField(max_length=255)
-    # description = FroalaField(max_length=10000000, null=True, blank=True,
-    #                        options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
-    #                                 'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
+    alias = models.CharField(max_length=100)
+    # description = models.TextField(max_length=500, blank=True, null=True, default=None)
     # aakash_input_desc = FroalaField(max_length=10000000, null=True, blank=True,
     #                          options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
     #                                   'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
     # input_desc = FroalaField(max_length=10000000, null=True, blank=True,
     #                        options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
     #                                 'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
-    listing_desc = models.CharField(max_length=500)
+    listing_desc = models.CharField(max_length=500,blank=True, null=True)
     # icon = VersatileImageField('Images', upload_to='products/', blank=True, null=True)
     image = models.ImageField(upload_to=upload_to, blank=True, null=True)
     youtube = models.CharField(max_length=255, null=True, blank=True)
@@ -46,10 +44,7 @@ class CPProductCampaign(models.Model):
                             #  options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
                             #           'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
     seo_heading = models.CharField(max_length=255, null=True, blank=True)
-    # seo_desc = FroalaField(max_length=10000000, null=True, blank=True,
-                                    # options={
-                                    #     'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
-                                    #     'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
+    seo_desc = models.TextField(max_length=600, default=None)
     parent_pid = models.ForeignKey("self", blank=True, null=True, on_delete=models.DO_NOTHING,db_column='parent_pid')
     recharge_limit = models.IntegerField(default=None, null=True, blank=True)
     recharge_pid_status = models.SmallIntegerField(default=1, null=True, blank=True)
@@ -71,8 +66,8 @@ class CPProductCampaign(models.Model):
     video = models.CharField(max_length=255, null=True, blank=True)
     secondary_image = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
     exam = models.IntegerField(null=True, blank=True)
-    tool_system_name = models.CharField(max_length=255, null=True, blank=True)
-    usage_count_matrix = models.CharField(max_length=255, null=True, blank=True)
+    tool_system_name = models.CharField(max_length=100, null=True, blank=True)
+    usage_count_matrix = models.CharField(max_length=10, null=True, blank=True)
     positive_feedback_per = models.FloatField(null=True, blank=True)
     for_web = models.BooleanField(default=False)
     for_app = models.BooleanField(default=False)
