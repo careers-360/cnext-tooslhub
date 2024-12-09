@@ -16,8 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-
+from django.conf import settings
+from django.contrib import admin
+from django.conf.urls.static import static
 from .cms_api_urls import urlpatterns as cms_api_urls
+from .rp_api_urls import urlpatterns as rp_api_urls
 
 
 urlpatterns = [
@@ -25,3 +28,9 @@ urlpatterns = [
 ]
 
 urlpatterns += cms_api_urls
+
+# Static and Media URls
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+urlpatterns += rp_api_urls
