@@ -42,7 +42,6 @@ class CMSToolsFilterAPI(APIView):
 
         except Exception as e:
             return ErrorResponse("An unexpected error occurred.", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 class ManagePredictorToolAPI(APIView):
     """
@@ -166,3 +165,40 @@ class CMSToolsFaqAPI(APIView):
         
         
         return SuccessResponse({"message": "FAQs updated successfully"}, status=200)
+
+
+class CMSToolsBasicDetailAPI(APIView):
+    """
+    Tools basic detail API
+    Endpoint -> api/<int:version>/cms/manage-tool/basic-detail/<int:pk>
+    version -> v1 required
+    GET API ->api/1/cms/manage-tool/basic-detail
+    """
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+    def get_object(self, pk):
+        try:
+            return CPProductCampaign.objects.get(pk=pk)
+        except CPProductCampaign.DoesNotExist:
+            return None
+
+    def get(self, request, version, pk, format=None, **kwargs):
+        try:
+            obj = self.get_object(pk)
+            if obj is None:
+                return Response({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            helper = ToolsHelper(request=request)
+            data = helper.get_basic_detail_data(pk)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
+
+
+    def put(self, request, version, pk, format=None, **kwargs):
+        obj = self.get_object(pk)
+        request_data = request.data.copy()
+        helper = ToolsHelper(request=request)
+        data = helper.edit_basic_detail(pk,request_data)	
+        return SuccessResponse(data, status=status.HTTP_200_OK)

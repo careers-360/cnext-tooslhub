@@ -24,13 +24,19 @@ class ToolsHelper():
 
     def get_manage_predictor_tools_filter(self):
         id =  self.request.query_params.get('name')
+        domain = self.request.query_params.get('domain')
+        tool_type = self.request.query_params.get('tool_type') 
         consumption_type = self.request.query_params.get('consumption_type')
-        published_status_web_wap = self.request.query_params.get('status')
-        published_status_app = self.request.query_params.get('app_status')
+        published_status_app = self.request.query_params.get('published_status_app')
+        published_status_web_wap = self.request.query_params.get('published_status_web_wap')
 
         filter_data = dict()
         if id:
             filter_data['id'] = id
+        if domain:
+            filter_data['domain'] = domain
+        if tool_type:
+            filter_data['type'] = tool_type
         if consumption_type:
             filter_data['consume_type'] = consumption_type
         if published_status_app:
@@ -74,3 +80,28 @@ class ToolsHelper():
         if date:
             return localtime(date).strftime('%b %d, %Y %I:%M %p')
         return None
+
+    def get_basic_detail_data(self,pk):
+        data = CPProductCampaign.objects.filter(pk=pk).values('type','name','usage_count_matrix',\
+                'exam','positive_feedback_per','app_status','status','display_preference','gif','video',\
+                    'image','secondary_image')
+        return data
+    
+    def edit_basic_detail(self,pk,request_data):
+        fields = dict()
+        data = request_data
+
+        if data:
+            fields = {
+                "exam": data.get("exam"),
+                "status": data.get("status"),
+                "created_by": data.get("created_by"),
+                "updated_by": data.get("updated_by"),
+                "secondary_image": data.get("secondary_image"),
+                "usage_count_matrix": data.get("usage_count_matrix"),
+                "display_preference": data.get("display_preference"),
+                "positive_feedback_per": data.get("positive_feedback_per"),
+            }
+            instance = CPProductCampaign.objects.create(**fields)
+            print(instance,"-09876543234567890")
+        return "Ok"
