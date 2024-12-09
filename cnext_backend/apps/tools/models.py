@@ -61,6 +61,7 @@ class CPProductCampaign(models.Model):
     # rp_disclaimer = FroalaField(max_length=10000, null=True, blank=True,
     #                          options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html',],
     #                                   'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000})
+    rp_disclaimer = models.TextField(null=True, blank=True)
     one_step_login = models.IntegerField(default=0)
     gst_include = models.IntegerField(default=0, null=False, blank=True)
     almanac_offer_price = models.IntegerField(default=0, null=False, blank=True)
@@ -91,8 +92,8 @@ class CPProductCampaign(models.Model):
     mapped_product_cta_label = models.CharField(max_length=255, null=True, blank=True)
     mapped_product_destination_url = models.CharField(max_length=255, null=True, blank=True)
     mapped_product_pitch = models.CharField(max_length=255, null=True, blank=True)
-    promotion_banner_web = models.CharField(max_length=255, null=True, blank=True)
-    promotion_banner_wap = models.CharField(max_length=255, null=True, blank=True)
+    promotion_banner_web = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
+    promotion_banner_wap = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
     banner_destination = models.CharField(max_length=255, null=True, blank=True)
     smart_registration = models.BooleanField(default=False)
     status = models.BooleanField(default=True)

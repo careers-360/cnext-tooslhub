@@ -1,4 +1,5 @@
 from requests import request
+from tools.api.serializers import ToolBasicDetailSerializer
 from tools.helpers.helpers import ToolsHelper
 from rest_framework.views import APIView
 from utils.helpers.response import SuccessResponse,ErrorResponse, CustomErrorResponse
@@ -125,7 +126,6 @@ class CMSToolsFaqAPI(APIView):
         """
         Handles the creation, update, deletion of FAQs.
         """
-        print(request.data)
         faqs = request.data.get('faqs', [])  # List of ToolsFAQ dictionaries
         product_id = request.data.get('product_id')  # List of ToolsFAQ dictionaries
         product_type = request.data.get('product_type')  # List of ToolsFAQ dictionaries
@@ -202,3 +202,76 @@ class CMSToolsBasicDetailAPI(APIView):
         helper = ToolsHelper(request=request)
         data = helper.edit_basic_detail(pk,request_data)	
         return SuccessResponse(data, status=status.HTTP_200_OK)
+    
+
+class CMSToolsResultPageAPI(APIView):
+
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+    def get_object(self, pk):
+        """Helper method to get a specific object by primary key."""
+        try:
+            return CPProductCampaign.objects.get(id=pk)
+        except CPProductCampaign.DoesNotExist:
+            return None
+
+    def get(self, request, version, format=None, **kwargs):
+        try:
+            # Retrieve product_id from query parameters
+            pk = request.query_params.get('product_id')
+            
+            if not pk:
+                return ErrorResponse({'message': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Fetch the object using .get() to ensure it exists
+            obj = CPProductCampaign.objects.get(id=pk)
+            
+            if obj is None:
+                return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Prepare the response data
+            result = {
+                'rp_disclaimer': obj.rp_disclaimer,
+                'cp_cta_name': obj.cp_cta_name,
+                'cp_destination_url': obj.cp_destination_url,
+                'cp_pitch': obj.cp_pitch,
+                'mapped_product_title': obj.mapped_product_title,
+                'mapped_product_cta_label': obj.mapped_product_cta_label,
+                'mapped_product_destination_url': obj.mapped_product_destination_url,
+                'mapped_product_pitch': obj.mapped_product_pitch,
+                'promotion_banner_web': obj.promotion_banner_web,
+                'promotion_banner_wap': obj.promotion_banner_wap,
+            }
+            
+            return SuccessResponse({"result": result}, status=status.HTTP_200_OK)
+
+        except CPProductCampaign.DoesNotExist:
+            return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    def put(self, request, version, format=None, **kwargs):
+        try:
+            pk = request.data.get('product_id')
+            
+            if not pk:
+                return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch the object using .get() to ensure it exists
+            obj = CPProductCampaign.objects.get(id=pk)
+            
+            # Update fields
+            print("this is the data ", request.data)
+            serializer = ToolBasicDetailSerializer(data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save(updated_by=request.user.id)
+                return SuccessResponse({"message": "Tool updated successfully", "result": serializer.data}, status=status.HTTP_200_OK)
+            else:
+                return ErrorResponse({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        except CPProductCampaign.DoesNotExist:
+            return ErrorResponse({"error": "Tool does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return ErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
