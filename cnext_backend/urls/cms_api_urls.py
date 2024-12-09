@@ -10,5 +10,6 @@ urlpatterns = [
     path('tools', tools_controller.HealthCheck.as_view(), name='health_check'),
     path(cms_prefix + '/list', tools_controller.ManagePredictorToolAPI.as_view(), name='predictor-tools-list'),
     path(cms_prefix + '/filter', tools_controller.CMSToolsFilterAPI.as_view(),name='tools-filter'),
+    path(cms_prefix + '/faq', tools_controller.CMSToolsFaqAPI.as_view(),name='tools-filter'),
 
 ]
