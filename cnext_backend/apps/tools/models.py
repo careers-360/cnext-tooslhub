@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.db import models
-# Create your models here.
+from users.models import User
 def upload_to(instance, filename):
     return 'tools/images/{filename}'.format(filename=filename)
 
@@ -136,3 +136,27 @@ class Domain(models.Model):
 
     def __str__(self):
         return self.name
+
+
+
+class ToolsFAQ(models.Model):
+    """
+    Model for storing FAQ data related to products.
+    """
+    product_id = models.IntegerField(verbose_name="Product ID")
+    product_type = models.IntegerField(verbose_name="Product Type")
+    question = models.CharField(max_length=255, verbose_name="Question")
+    answer = models.TextField(verbose_name="Answer")
+    status = models.BooleanField(default=True, verbose_name="Status")
+    updated = models.DateTimeField(auto_now=True, verbose_name="Last Updated")
+    created = models.DateTimeField(auto_now_add=True, verbose_name="Date Created")
+    updated_by = models.IntegerField(verbose_name="Product ID")
+    created_by = models.IntegerField(verbose_name="Product ID")
+    class Meta:
+        db_table = "cnext_tools_faq_section" #TODO change the table name 
+        verbose_name = "FAQ Section"
+        verbose_name_plural = "FAQ Sections"
+        ordering = ["-updated"]
+
+    def __str__(self):
+        return f"FAQ {self.id}: {self.question}"
