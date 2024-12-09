@@ -7,6 +7,7 @@ django-cors-headers==4.6.0
 django-extensions==3.2.3
 django-redis==5.4.0
 django-unixtimestampfield==0.5.0
+django-extensions==3.2.3
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-storages==1.14.4
@@ -24,3 +25,4 @@ sqlparse==0.5.2
 urllib3==1.25.4
 wrapt==1.17.0
 uWSGI==2.0.28
+requests==2.32.3
