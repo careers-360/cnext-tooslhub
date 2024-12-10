@@ -57,7 +57,8 @@ INSTALLED_APPS = [
 PROJECT_APPS = [
     "users",
 	"rank_predictor",
-	"tools"
+	"tools",
+	"college_compare"
 ]
 
 if not DEBUG:
@@ -121,6 +122,9 @@ DATABASES = {
 			'PASSWORD': os.getenv('MASTER_DB_PASSWORD'),
 			'HOST': os.getenv('MASTER_DB_HOST'),  # Or an IP Address that your DB is hosted on
 			'PORT': os.getenv('MASTER_DB_PORT'),
+			 'OPTIONS': {
+            'sql_mode': 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,ONLY_FULL_GROUP_BY',
+        },
 		},
     'slave': {
             'ENGINE': 'django.db.backends.mysql',
@@ -129,6 +133,10 @@ DATABASES = {
             'PASSWORD': os.getenv('SLAVE_DB_PASSWORD',''),
             'HOST': os.getenv('SLAVE_DB_HOST','localhost'),  # Empty for localhost through domain sockets or '127.0.0.1' for localhost through TCP.
             'PORT': '3306',  # Set to empty string for default.
+			 'OPTIONS': {
+            'sql_mode': 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,ONLY_FULL_GROUP_BY',
+			
+        },
         },
 }
 
