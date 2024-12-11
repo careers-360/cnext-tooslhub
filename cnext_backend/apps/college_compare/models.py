@@ -309,6 +309,9 @@ class CollegeCompareData(models.Model):
             models.Index(fields=['college_2', 'course_2']),
             models.Index(fields=['college_3', 'course_3']),
             models.Index(fields=['college_4', 'course_4']),
+             models.Index(fields=['college_1', 'college_2', 'college_3', 'college_4']),
+            models.Index(fields=['course_1', 'course_2', 'course_3', 'course_4']),
+      
         ]
         verbose_name = 'College Comparison Data'
         verbose_name_plural = 'College Comparison Data'
