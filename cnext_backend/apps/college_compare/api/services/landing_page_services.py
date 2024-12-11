@@ -201,12 +201,12 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v2_{user_context.get('domain_id')}_{user_context.get('education_level')}"
+            cache_key = f"top_colleges_courses_v4_{user_context.get('domain_id')}"
 
             if cached := cache.get(cache_key):
                 return cached
 
-            # Create a pool of workers and run parallel tasks
+            
             with Pool(processes=cls.MAX_WORKERS) as pool:
                 colleges_future = pool.apply_async(partial(cls._get_top_colleges, user_context))
                 courses_future = pool.apply_async(partial(cls._get_top_courses, user_context))
@@ -229,8 +229,9 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
+            print(domain_id)
         
-            cache_key = f"top_colleges_v2_{domain_id}"
+            cache_key = f"top_colleges_v4_{domain_id}"
 
             if cached := cache.get(cache_key):
                 return cached
@@ -299,7 +300,7 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v2_{domain_id}_{education_level}"
+            cache_key = f"top_courses_v5_{domain_id}"
 
             if cached := cache.get(cache_key):
                 return cached
