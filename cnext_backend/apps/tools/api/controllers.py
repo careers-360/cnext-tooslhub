@@ -39,7 +39,9 @@ class CMSToolsFilterAPI(APIView):
                 'published_status_app': PUBLISHING_TYPE,
                 'domain': domain,
                 'tools_name': tools_name,
+
             }
+            exam_list = Exam.objects.exclude(type_of_exam = 'counselling').filter(exam_name='', exam_short_name='',status='published'). values('exam_short_name', 'exam_name')
             return SuccessResponse(result,status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -234,29 +236,18 @@ class CMSToolsResultPageAPI(APIView):
                 return ErrorResponse({'message': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Fetch the object using .get() to ensure it exists
-            obj = CPProductCampaign.objects.get(id=pk)
+            response = CPProductCampaign.objects.filter(id=pk).values('rp_disclaimer','cp_cta_name', 'cp_destination_url', \
+                                                                    'cp_pitch', 'mapped_product_title', 'mapped_product_cta_label',
+                                                                    'mapped_product_destination_url','mapped_product_pitch',\
+                                                                    'promotion_banner_web','promotion_banner_wap').first()  
+
+            if response is None:
+                return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
             
-            if obj is None:
-                return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-            
-            # Prepare the response data
-            result = {
-                'rp_disclaimer': obj.rp_disclaimer,
-                'cp_cta_name': obj.cp_cta_name,
-                'cp_destination_url': obj.cp_destination_url,
-                'cp_pitch': obj.cp_pitch,
-                'mapped_product_title': obj.mapped_product_title,
-                'mapped_product_cta_label': obj.mapped_product_cta_label,
-                'mapped_product_destination_url': obj.mapped_product_destination_url,
-                'mapped_product_pitch': obj.mapped_product_pitch,
-                # 'promotion_banner_web': obj.promotion_banner_web,
-                # 'promotion_banner_wap': obj.promotion_banner_wap,
-            }
-            
-            return SuccessResponse({"result": result}, status=status.HTTP_200_OK)
+            return SuccessResponse(response, status=status.HTTP_200_OK)
 
         except CPProductCampaign.DoesNotExist:
-            return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
@@ -269,14 +260,14 @@ class CMSToolsResultPageAPI(APIView):
                 return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Fetch the object using .get() to ensure it exists
-            obj = CPProductCampaign.objects.get(id=pk)
+            instance = CPProductCampaign.objects.get(id=pk)
             
             # Update fields
             print("this is the data ", request.data)
-            serializer = ToolBasicDetailSerializer(data=request.data, partial=True)
+            serializer = ToolBasicDetailSerializer(instance=instance,data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save(updated_by=request.user.id)
-                return SuccessResponse({"message": "Tool updated successfully", "result": serializer.data}, status=status.HTTP_200_OK)
+                return SuccessResponse({"message": "Tool updated successfully"}, status=status.HTTP_200_OK)
             else:
                 return ErrorResponse({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except CPProductCampaign.DoesNotExist:
