@@ -1,6 +1,6 @@
 
 from django.urls import path
-from cnext_backend.apps.college_compare.api.controllers import compare_college_page_controllers,landing_page_controllers
+from cnext_backend.apps.college_compare.api.controllers import compare_college_page_controllers,landing_page_controllers,popular_comparison_tabs_controllers as comparison_controllers
 
 
 compare_prefix = 'api/1/college_compare/'
@@ -21,4 +21,20 @@ urlpatterns = [
 
     path('api/1/landing_page/peer-comparison/', landing_page_controllers.PeerComparisonCollegesView.as_view(), name='peer-comparison'),
     path('api/1/landing_page/top-colleges-courses/', landing_page_controllers.TopCollegesCoursesView.as_view(), name='top-colleges-courses'),
+    
+    path(f'{compare_prefix}blogs/degree-branch-comparison/',
+         comparison_controllers.DegreeBranchComparisonView.as_view(),
+         name='degree-branch-comparison'),
+    
+    path(f'{compare_prefix}blogs/degree-comparison/',
+         comparison_controllers.DegreeComparisonView.as_view(),
+         name='degree-comparison'),
+    
+    path(f'{compare_prefix}blogs/domain-comparison/',
+         comparison_controllers.DomainComparisonView.as_view(),
+         name='domain-comparison'),
+    
+    path(f'{compare_prefix}blogs/college-comparison/',
+         comparison_controllers.CollegeComparisonView.as_view(),
+         name='college-comparison'),
 ]

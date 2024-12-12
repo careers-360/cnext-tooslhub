@@ -161,7 +161,6 @@ class Branch(models.Model):
         return self.name
 
 
-
 class Course(models.Model):
     LEVEL_CHOICES = [
         (1, 'Undergraduate'),
@@ -178,6 +177,8 @@ class Course(models.Model):
     branch = models.ForeignKey(
         Branch, on_delete=models.CASCADE, null=True, blank=True, related_name='course'
     )
+    degree_domain = models.ForeignKey(
+        Domain, on_delete=models.SET_NULL, null=True, blank=True, related_name='courses', db_index=True,db_column="degree_domain")
     level = models.IntegerField(choices=LEVEL_CHOICES)
     status = models.BooleanField(default=True)
 
@@ -202,6 +203,7 @@ class Course(models.Model):
             status=True
         ).count()
 
+
 class CollegeDomain(models.Model):
     college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='collegedomain', db_index=True)
     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='collegedomain_course', db_index=True)
@@ -218,6 +220,7 @@ class CollegeDomain(models.Model):
 
     def __str__(self):
         return f"{self.college.name} - {self.domain.name} - {self.college_course}"
+
 
 
 class CollegeReviews(models.Model):
@@ -313,6 +316,8 @@ class CollegeCompareData(models.Model):
             models.Index(fields=['course_1', 'course_2', 'course_3', 'course_4']),
       
         ]
+
+        unique_together = ['course_1', 'course_2','college_1',"college_2"] 
         verbose_name = 'College Comparison Data'
         verbose_name_plural = 'College Comparison Data'
 

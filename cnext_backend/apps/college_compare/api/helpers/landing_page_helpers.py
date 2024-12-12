@@ -1,3 +1,6 @@
+#landind_page_helpers.py ----
+
+
 from college_compare.models import (
     College, Course, Domain, User, SocialMediaGallery, Location, 
     CollegeReviews, RankingUploadList, CollegeCompareData
