@@ -81,11 +81,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'cnext_backend.urls'
 
-
-
-# from django_jinja.builtins import DEFAULT_EXTENSIONS
-
-
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -162,9 +157,6 @@ REST_FRAMEWORK = {
 	'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
 }
 
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'Asia/Kolkata'
@@ -184,12 +176,7 @@ SIMPLE_JWT = {
 	"ACCESS_TOKEN_LIFETIME": timedelta(days=30),
 	"REFRESH_TOKEN_LIFETIME": timedelta(days=90),
 }
-JWT_COOKIE_NAME = os.getenv("JWT_COOKIE_NAME", default="refresh_token")
-JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", default="Lax")
-STATICFILES_FINDERS = (
-	'django.contrib.staticfiles.finders.FileSystemFinder',
-	'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-)
+
 AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'cnext_backend.services.auth_backend_service.EmailAuthBackend')
@@ -291,3 +278,16 @@ if USE_S3 == 'True':
 		pass
 
 CAREERS_BASE_IMAGES_URL = os.getenv('CAREERS_BASE_IMAGES_URL', 'www.careers360.com')
+
+
+SIMPLE_JWT = {
+	"ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+	"REFRESH_TOKEN_LIFETIME": timedelta(days=90),
+}
+JWT_COOKIE_NAME = os.getenv("JWT_COOKIE_NAME", default="refresh_token")
+JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", default="Lax")
+STATICFILES_FINDERS = (
+	'django.contrib.staticfiles.finders.FileSystemFinder',
+	'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+)
+AUTH_USER_MODEL = 'users.User'

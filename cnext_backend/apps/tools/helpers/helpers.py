@@ -1,6 +1,9 @@
 from django.utils.timezone import localtime
+from tools.api.serializers import ToolBasicDetailSerializer
 from tools.models import CPProductCampaign
 from rest_framework.pagination import PageNumberPagination
+from utils.helpers.response import SuccessResponse,ErrorResponse
+from rest_framework import status
 
 class CustomPaginator(PageNumberPagination):
     page_size = 10
@@ -82,26 +85,24 @@ class ToolsHelper():
         return None
 
     def get_basic_detail_data(self,pk):
-        data = CPProductCampaign.objects.filter(pk=pk).values('type','name','usage_count_matrix',\
+        data = CPProductCampaign.objects.filter(pk=pk).values('id','type','name','usage_count_matrix',\
                 'exam','positive_feedback_per','app_status','status','display_preference','gif','video',\
-                    'image','secondary_image')
+                    'image','secondary_image','seo_desc','tool_system_name','alias','smart_registration',)
         return data
     
-    def edit_basic_detail(self,pk,request_data):
-        fields = dict()
-        data = request_data
-
-        if data:
-            fields = {
-                "exam": data.get("exam"),
-                "status": data.get("status"),
-                "created_by": data.get("created_by"),
-                "updated_by": data.get("updated_by"),
-                "secondary_image": data.get("secondary_image"),
-                "usage_count_matrix": data.get("usage_count_matrix"),
-                "display_preference": data.get("display_preference"),
-                "positive_feedback_per": data.get("positive_feedback_per"),
-            }
-            instance = CPProductCampaign.objects.create(**fields)
-            print(instance,"-09876543234567890")
-        return "Ok"
+    def edit_basic_detail(self,*args, **kwargs,):
+        data = kwargs.get('request_data')
+        serializer = ToolBasicDetailSerializer(*args, data = data)
+        if serializer.is_valid():
+            serializer.save()
+            return "Ok"
+        else:
+            return serializer.errors
+    def add_basic_detail(self,*args,**kwargs):
+        request_data = kwargs.get('request_data',False)
+        serializer = ToolBasicDetailSerializer(data = request_data)
+        if serializer.is_valid():
+            serializer.save()
+            return "Ok"
+        else:
+            return serializer.errors
