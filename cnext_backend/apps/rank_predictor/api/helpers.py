@@ -1,6 +1,6 @@
 from django.conf import settings
 from rank_predictor.models import RpContentSection
-from tools.models import CPProductCampaign, CollegeCourse
+from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 
 
 class ResultPageStaticHelper:
@@ -36,6 +36,42 @@ class ResultPageStaticHelper:
             faq_["image_wap"] = f"{settings.CAREERS_BASE_IMAGES_URL}{faq_.get('image_wap')}"
 
         return faq_data
+    
+    def _get_user_feedback_section(self, product_id=None):
+        default_feedback = [
+            {
+                "id": 9999991,
+                "product_id": 1,
+                "custom_feedback": "Great job! Your product is amazing.",
+                "user_name": "John Doe",
+                "user_image": f"{settings.CAREERS_BASE_IMAGES_URL}john_doe.jpg",
+                "created": "2022-05-25 12:30:00",
+                "is_default": True,
+            },
+            {
+                "id": 9999992,
+                "product_id": 1,
+                "custom_feedback": "Keep up the good work! Your product is fantastic.",
+                "user_name": "Jane Smith",
+                "user_image": f"{settings.CAREERS_BASE_IMAGES_URL}jane_smith.jpg",
+                "created": "2022-05-24 10:45:00",
+                "is_default": True,
+            }
+        ]
+        feedback_section = []
+        # Fetch user feedback section from database based on rp_id
+        if product_id:
+            feedback_section = list(CPFeedback.objects.filter(is_moderated=1, product_id=product_id, response_type="yes").values("id", "product_id", "custom_feedback", "user_name", "user_image", "created").order_by("-created"))
+            for feedback in feedback_section:
+                feedback["user_image"] = f"{settings.CAREERS_BASE_IMAGES_URL}{feedback.get('user_image')}"
+                feedback["is_default"] = False
+
+            index = 0
+            while len(feedback_section) < 20 and index < len(default_feedback):
+                feedback_section.append(default_feedback[index])
+                index += 1
+
+        return feedback_section
     
     def _get_exam_from_product(self, product_id=None):
         exam_id = None

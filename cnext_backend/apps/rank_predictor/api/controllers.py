@@ -81,7 +81,7 @@ class ReviewSectionAPI(APIView):
     permission_classes = [ApiKeyPermission]
 
     """
-    NOTE : UNCOPLETE API* Logic to be implement.
+    NOTE : TABLE DB needs to update in oither projects
     """
 
     def get(self, request, version, **kwargs):
@@ -94,11 +94,11 @@ class ReviewSectionAPI(APIView):
 
         # Fetch faq from database and return it to client.
         rp_static_helper = ResultPageStaticHelper()
-        faq_section = rp_static_helper._get_faq_section(product_id=product_id)
+        feedback_section = rp_static_helper._get_user_feedback_section(product_id=product_id)
         resp = {
             "product_id" : product_id,
-            "heading" : "What Students Are Saying",
-            "faq" : faq_section,
+            "heading" : "Top User Feedbacks",
+            "feedback" : feedback_section,
         }
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     

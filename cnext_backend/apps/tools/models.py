@@ -796,3 +796,40 @@ class CollegeCourse(models.Model):
 	
 	def __str__(self):
 		return self.course_name
+
+
+class CPFeedback(models.Model):
+    id = models.AutoField(primary_key=True)
+    is_moderated = models.SmallIntegerField(default=0, null=False, blank=True)
+    feedback_type = models.CharField(max_length=100,null=False, blank=True)
+    exam_id = models.CharField(max_length=255, null=True, blank=True)
+    counselling_id = models.CharField(max_length=255, null=True, blank=True)
+    session_id = models.IntegerField(null=True, blank=True)
+    product_id = models.CharField(max_length=255, null=True, blank=True)
+    response_type = models.CharField(max_length=255, null=True, blank=True)
+    complement = models.CharField(max_length=255, null=True, blank=True)
+    msg = models.CharField(max_length=255, null=True, blank=True)
+    gd_chance_count = models.IntegerField(null=True, blank=True)
+    tf_chance_count = models.IntegerField(null=True, blank=True)
+    maybe_chance_count = models.IntegerField(null=True, blank=True)
+    counselling_change = models.IntegerField(default=0, blank=True, null=True)
+    user_type = models.CharField(max_length=255, default='Careers360', blank=False)
+    device = models.CharField(max_length=255, null=True, blank=True)
+    user_name = models.CharField(max_length=255, null=True, blank=True)
+    user_image = models.ImageField(upload_to='tools/images/', blank=True, null=True)
+    custom_feedback = models.TextField(null=True, blank=True)
+    updated = models.DateTimeField(default=timezone.now, blank=True)
+    created = models.DateTimeField(default=timezone.now, blank=True)
+    updated_by = models.IntegerField(default=None, null=False, blank=True)
+    created_by = models.IntegerField(default=None, null=False, blank=True)
+
+    class Meta:
+        verbose_name = 'cp_feedback'
+        verbose_name_plural = 'cp_feedback'
+        db_table = 'cp_feedback'
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.created = timezone.now()
+
+        super(CPFeedback, self).save(*args, **kwargs)
