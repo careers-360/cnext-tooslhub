@@ -5,4 +5,4 @@ class ToolBasicDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CPProductCampaign
-        fields = ('__all__')
+        fields = ('__all__') #TODO include exclude need to added 

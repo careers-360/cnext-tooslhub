@@ -100,17 +100,6 @@ class CustomAuthMiddleware(MiddlewareMixin):
 				response.delete_cookie(careers_cookie_logout_session_id, domain=settings.SESSION_DOMAIN_NAME)
 		else:
 
-			# if request.COOKIES and request.COOKIES.get('sessionid') and not request.COOKIES.get('c360_jwt_access'):
-			# 	user_id = request.session.get('_auth_user_id')
-
-			# 	if User.objects.filter(id=user_id).exists():
-			# 		user = User.objects.get(id=user_id)
-			# 		token = user.token
-			# 		access_token = token.get('access')
-			# 		refresh_token = token.get('refresh')
-			# 		response.set_cookie('c360_jwt_access', access_token, max_age=jwt_settings.ACCESS_TOKEN_LIFETIME.total_seconds(), domain=settings.SESSION_DOMAIN_NAME)
-			# 		response.set_cookie('c360_jwt_refresh', refresh_token, max_age=jwt_settings.REFRESH_TOKEN_LIFETIME.total_seconds(), domain=settings.SESSION_DOMAIN_NAME)
-			
 			if request.COOKIES and careers_cookie_session_id and not request.COOKIES.get('c360_jwt_access'):
 				session = Session.objects.filter(session_key=careers_cookie_session_id.replace('CSESS360__','')).first()
 				if session:
