@@ -1,9 +1,10 @@
 from django.conf import settings
 from rank_predictor.models import RpContentSection
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
+from .static_mappings import RP_DEFAULT_FEEDBACK
 
 
-class ResultPageStaticHelper:
+class InputPageStaticHelper:
 
     def __init__(self):
         pass
@@ -38,26 +39,6 @@ class ResultPageStaticHelper:
         return faq_data
     
     def _get_user_feedback_section(self, product_id=None):
-        default_feedback = [
-            {
-                "id": 9999991,
-                "product_id": 1,
-                "custom_feedback": "Great job! Your product is amazing.",
-                "user_name": "John Doe",
-                "user_image": f"{settings.CAREERS_BASE_IMAGES_URL}john_doe.jpg",
-                "created": "2022-05-25 12:30:00",
-                "is_default": True,
-            },
-            {
-                "id": 9999992,
-                "product_id": 1,
-                "custom_feedback": "Keep up the good work! Your product is fantastic.",
-                "user_name": "Jane Smith",
-                "user_image": f"{settings.CAREERS_BASE_IMAGES_URL}jane_smith.jpg",
-                "created": "2022-05-24 10:45:00",
-                "is_default": True,
-            }
-        ]
         feedback_section = []
         # Fetch user feedback section from database based on rp_id
         if product_id:
@@ -67,8 +48,8 @@ class ResultPageStaticHelper:
                 feedback["is_default"] = False
 
             index = 0
-            while len(feedback_section) < 20 and index < len(default_feedback):
-                feedback_section.append(default_feedback[index])
+            while len(feedback_section) < 20 and index < len(RP_DEFAULT_FEEDBACK):
+                feedback_section.append(RP_DEFAULT_FEEDBACK[index])
                 index += 1
 
         return feedback_section
