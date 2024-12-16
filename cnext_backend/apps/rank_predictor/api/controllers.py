@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
-from rank_predictor.api.helpers import ResultPageStaticHelper
+from rank_predictor.api.helpers import InputPageStaticHelper
 
 
 class HealthCheck(APIView):
@@ -30,7 +30,7 @@ class ContentSectionAPI(APIView):
         product_id = int(product_id)
 
         # Fetch content from database and return it to client.
-        rp_static_helper = ResultPageStaticHelper()
+        rp_static_helper = InputPageStaticHelper()
         content = rp_static_helper._get_content_section(product_id=product_id)
         resp = {
             "product_id" : product_id,
@@ -62,7 +62,7 @@ class FAQSectionAPI(APIView):
         product_id = int(product_id)
 
         # Fetch faq from database and return it to client.
-        rp_static_helper = ResultPageStaticHelper()
+        rp_static_helper = InputPageStaticHelper()
         faq_section = rp_static_helper._get_faq_section(product_id=product_id)
         resp = {
             "product_id" : product_id,
@@ -81,7 +81,7 @@ class ReviewSectionAPI(APIView):
     permission_classes = [ApiKeyPermission]
 
     """
-    NOTE : UNCOPLETE API* Logic to be implement.
+    NOTE : TABLE DB needs to update in oither projects
     """
 
     def get(self, request, version, **kwargs):
@@ -93,12 +93,12 @@ class ReviewSectionAPI(APIView):
         product_id = int(product_id)
 
         # Fetch faq from database and return it to client.
-        rp_static_helper = ResultPageStaticHelper()
-        faq_section = rp_static_helper._get_faq_section(product_id=product_id)
+        rp_static_helper = InputPageStaticHelper()
+        feedback_section = rp_static_helper._get_user_feedback_section(product_id=product_id)
         resp = {
             "product_id" : product_id,
-            "heading" : "What Students Are Saying",
-            "faq" : faq_section,
+            "heading" : "Top User Feedbacks",
+            "feedback" : feedback_section,
         }
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     
@@ -126,7 +126,7 @@ class TopCollegesSectionAPI(APIView):
             return CustomErrorResponse({"message": "product_id or exam_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Fetch top colleges from database and return it to client.
-        rp_static_helper = ResultPageStaticHelper()
+        rp_static_helper = InputPageStaticHelper()
         if not exam_id:
             exam_id = rp_static_helper._get_exam_from_product(product_id=product_id)
         
