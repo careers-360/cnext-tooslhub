@@ -1,4 +1,4 @@
-from requests import request
+from rank_predictor.models import RpContentSection
 from tools.api.serializers import ToolBasicDetailSerializer
 from tools.helpers.helpers import ToolsHelper
 from rest_framework.views import APIView
@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from tools.helpers.helpers import ToolsHelper
-from tools.models import CPProductCampaign, Domain, ToolsFAQ
+from tools.models import CPProductCampaign, Domain, Exam, ToolsFAQ
 from utils.helpers.choices import TOOL_TYPE, CONSUMPTION_TYPE, PUBLISHING_TYPE
 
 
@@ -38,14 +38,48 @@ class CMSToolsFilterAPI(APIView):
                 'published_status_web_wap': PUBLISHING_TYPE,
                 'published_status_app': PUBLISHING_TYPE,
                 'domain': domain,
-                'tools_name': tools_name,
+                # 'tools_name': tools_name,
 
             }
-            exam_list = Exam.objects.exclude(type_of_exam = 'counselling').filter(exam_name='', exam_short_name='',status='published'). values('exam_short_name', 'exam_name')
+            published_exam_list = Exam.objects.exclude(type_of_exam='counselling').exclude(status='unpublished')
+            exam_list = published_exam_list.filter(instance_id=0).values('id','exam_short_name', 'exam_name','parent_exam_id')
+            exam_mappings = dict()
+            print(exam_mappings , " exam_mappings")
+
+            mapping = {
+                "exam_id" : {
+                    "parent_exams" : {
+
+                    },
+                    "child_exams" : {
+
+                    }
+                }
+            }
+            for exam in exam_list:
+                if exam['parent_exam_id'] not in exam_mappings:
+                    exam_mappings[exam['id']] = {
+                        "parent_exams" :exam,
+                        "child_exams" : []
+                    }
+                else:
+                    exam_mappings[exam['parent_exam_id']]["child_exams"].append(exam)
+
+            # for exam in exam_list:
+            #     if exam['parent_exam_id'] in exam_mappings:
+            #         exam_mappings[exam['parent_exam_id']].append(exam)
+
+            # for exam in exam_mappings:
+            #     if exam['parent_exam_id'] in exam_mappings:
+            #         exam_mappings[exam['parent_exam_id']].append(exam)
+
+                
+            result['exam'] = exam_mappings
+
             return SuccessResponse(result,status=status.HTTP_200_OK)
 
         except Exception as e:
-            return ErrorResponse("An unexpected error occurred.", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return ErrorResponse(f"An unexpected error occurred {e}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ManagePredictorToolAPI(APIView):
     """
@@ -276,3 +310,29 @@ class CMSToolsResultPageAPI(APIView):
             return ErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class CMSToolsContentAPI(APIView):
+
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+
+    def get(self, request, version, format=None, **kwargs):
+
+        pk = request.query_params.get('product_id')
+        # heading = data.get('headings')
+        # heading = data.get('upload_image_web')
+        # heading = data.get('upload_image_wap')
+        # heading = data.get('listing_description')
+        
+        data = list(RpContentSection.objects.filter(product_id = pk).values())
+        return SuccessResponse(data, status = status.HTTP_200_OK)
+    
+    def post(self, request, version, format=None, **kwargs):
+
+        data = request.data 
+
+        for content_dict in data: 
+            RpContentSection.objects.create(**content_dict)
+
+        return SuccessResponse("ContentSection is updated", status=status.HTTP_200_OK)

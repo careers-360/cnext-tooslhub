@@ -13,4 +13,5 @@ urlpatterns = [
     path(cms_prefix + '/basic-detail', tools_controller.CMSToolsBasicDetailAPI.as_view(),name='tools-basic-detail'),
     path(cms_prefix + '/faq', tools_controller.CMSToolsFaqAPI.as_view(),name='tools-filter'),
     path(cms_prefix + '/manage-result-page', tools_controller.CMSToolsResultPageAPI.as_view(),name='tools-filter'),
+    path(cms_prefix + '/manage-content', tools_controller.CMSToolsContentAPI.as_view(),name='tools-filter'),
 ]
