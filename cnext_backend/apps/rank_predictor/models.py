@@ -127,7 +127,7 @@ class RpContentSection(models.Model):
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = "cnext_rp_content_section"
+        db_table = "cnext_rp_content_section" #TODO change the table and model name
         verbose_name = "Content Section"
         verbose_name_plural = "Content Sections"
 
