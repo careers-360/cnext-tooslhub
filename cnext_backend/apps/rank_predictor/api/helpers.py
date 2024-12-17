@@ -221,7 +221,6 @@ class RPCmsHelper:
                 student_data["year"] = year
                 student_data["count"] = len(rp_session_year_data) 
                 student_data["student_appeared_data"] = rp_session_year_data 
-                return student_data
         
         if not student_data["student_appeared_data"]:
             rp_max_year = rp_session_data.aggregate(Max('year'))['year__max']
@@ -229,9 +228,14 @@ class RPCmsHelper:
             if rp_session_data:
                 student_data["year"] = rp_max_year 
                 student_data["count"] = len(rp_session_data) 
-                student_data["student_appeared_data"] = rp_session_data 
+                student_data["student_appeared_data"] = rp_session_data
+
+        shift_choices = dict(CnextRpSession.SHIFT_ENUM)
+        difficulty_choices = dict(CnextRpSession.DIFFICULTY_ENUM)
 
         for item in student_data["student_appeared_data"]:
+            item["session_shift_name"] = shift_choices.get(item["session_shift"]) if item.get("session_shift") else ""
+            item["difficulty_name"] = difficulty_choices.get(item["difficulty"]) if item.get("difficulty") else ""
             item["session_date"] = item["session_date"].strftime("%Y-%m-%d") if item.get("session_date") else None
 
         return student_data
@@ -260,14 +264,14 @@ class RPCmsHelper:
         for new_row in student_data:
             session_date = self.convert_str_to_datetime(new_row.get('session_date'))
             session_shift = new_row.get('session_shift')
-            session_difficulty = new_row.get('session_difficulty')
+            difficulty = new_row.get('difficulty')
 
-            if not session_date or not session_shift or not session_difficulty:
+            if not session_date or not session_shift or not difficulty:
                 error.append({"row":new_row, "message": "Incorrect data"})
                 continue
 
             if not new_row.get("id"):
-                to_create.append(CnextRpSession(product_id=product_id, year=year, session_date=session_date, session_shift=session_shift, difficulty=session_difficulty))
+                to_create.append(CnextRpSession(product_id=product_id, year=year, session_date=session_date, session_shift=session_shift, difficulty=difficulty))
         
         if to_create:
             CnextRpSession.objects.bulk_create(to_create)
@@ -277,14 +281,14 @@ class RPCmsHelper:
             row_id = row_.id
             session_date = rp_session_mapping[row_id].get("session_date") #datetime.strptime(row_["session_date"], '%Y-%m-%d').date()
             session_shift = rp_session_mapping[row_id].get("session_shift")
-            session_difficulty = rp_session_mapping[row_id].get("session_difficulty")
-            if not session_date or not session_shift or not session_difficulty:
+            difficulty = rp_session_mapping[row_id].get("difficulty")
+            if not session_date or not session_shift or not difficulty:
                 error.append({"id":row_id, "message": "Incorrect data"})
                 continue
 
             row_.session_date = self.convert_str_to_datetime(session_date)
             row_.session_shift = session_shift
-            row_.difficulty = session_difficulty
+            row_.difficulty = difficulty
 
         if incomming_ids:
             CnextRpSession.objects.bulk_update(to_update, ["session_date", "session_shift", "difficulty"])

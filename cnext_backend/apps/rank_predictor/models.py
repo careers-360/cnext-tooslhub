@@ -197,12 +197,25 @@ class CnextRpVariationFactor(models.Model):
         verbose_name_plural = "Cnext RP Variation Factors"
 
 class CnextRpSession(models.Model):
+
+    DIFFICULTY_ENUM = (
+        (1, 'Easy'),
+        (2, 'Moderate'),
+        (3, 'Hard'),
+    )
+
+    SHIFT_ENUM = (
+        (1, 'Morning'),
+        (2, 'Afternoon'),
+        (3, 'Evening'),
+    )
+    
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     session_date = models.DateTimeField(null=True, blank=True)
-    session_shift = models.IntegerField(null=True, blank=True)
-    difficulty = models.IntegerField(null=True, blank=True)
+    session_shift = models.IntegerField(choices=SHIFT_ENUM, null=True, blank=True)
+    difficulty = models.IntegerField(choices=DIFFICULTY_ENUM, null=True, blank=True)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(null=True, blank=True)
     created_by = models.IntegerField(null=True, blank=True)
