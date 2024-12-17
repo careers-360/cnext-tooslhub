@@ -53,10 +53,10 @@ class FlowTypeAPI(APIView):
             return SuccessResponse({"message": msg}, status=status.HTTP_201_CREATED)
 
 
-class StudentAppearedAPI(APIView):
+class ExamSessiondAPI(APIView):
     """
     API for Student Appeared CMS Pannel
-    Endpoint : api/<int:version>/cms/rp/appeared-student
+    Endpoint : api/<int:version>/cms/rp/exam-session
     Params : product_id, year
     """
 
