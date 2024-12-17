@@ -306,3 +306,25 @@ class RPCmsHelper:
             return datetime.strptime(str_to_datetime, '%Y-%m-%d') + timedelta(hours=6, minutes=31)
         except ValueError:
             return None
+
+
+class CommonDropDownHelper:
+
+    def __init__(self):
+        pass
+
+    def _get_dropdown_list(self, field_name, selected_id=None):
+        dropdown_data = {
+            "field": field_name,
+            "message": "",
+            "dropdown": []
+        }
+        
+        if field_name == "difficulty":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
+        elif field_name == "session_shift":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
+        else:
+            dropdown_data["message"] = "Invalid field name"
+
+        return dropdown_data

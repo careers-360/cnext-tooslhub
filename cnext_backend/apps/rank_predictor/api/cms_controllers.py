@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
-from .helpers import RPCmsHelper
+from .helpers import RPCmsHelper, CommonDropDownHelper
 
 
 class FlowTypeAPI(APIView):
@@ -50,7 +50,7 @@ class FlowTypeAPI(APIView):
         if not resp:
             return CustomErrorResponse(msg, status=status.HTTP_400_BAD_REQUEST)
         else:
-            return SuccessResponse({"message": msg}, status=status.HTTP_201_CREATED)
+            return SuccessResponse({"message": msg}, status=status.HTTP_204_NO_CONTENT)
 
 
 class ExamSessiondAPI(APIView):
@@ -96,3 +96,30 @@ class ExamSessiondAPI(APIView):
             return SuccessResponse(data, status=status.HTTP_201_CREATED)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CommonDropDownAPI(APIView):
+
+    """
+    API for Common Dropdown CMS Pannel
+    Endpoint : api/<int:version>/cms/rp/common-dropdown
+    Params : product_id, type
+    """
+
+    def get(self, request, version, **kwargs):
+        field_name = request.GET.get('field_name')
+        selected_id = request.GET.get('selected_id')
+
+        if not field_name:
+            return CustomErrorResponse({"message": "field_name is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if selected_id:
+            if not str(selected_id).isdigit():
+                return CustomErrorResponse({"message": "selected_id should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                selected_id = int(selected_id)
+    
+        # Fetch common dropdown data from database and return it to client.
+        cms_helper = CommonDropDownHelper()
+        resp = cms_helper._get_dropdown_list(field_name=field_name, selected_id=selected_id)
+        return SuccessResponse(resp, status=status.HTTP_200_OK)
