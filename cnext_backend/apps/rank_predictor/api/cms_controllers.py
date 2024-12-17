@@ -51,3 +51,48 @@ class FlowTypeAPI(APIView):
             return CustomErrorResponse(msg, status=status.HTTP_400_BAD_REQUEST)
         else:
             return SuccessResponse({"message": msg}, status=status.HTTP_201_CREATED)
+
+
+class StudentAppearedAPI(APIView):
+    """
+    API for Student Appeared CMS Pannel
+    Endpoint : api/<int:version>/cms/rp/appeared-student
+    Params : product_id, year
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+        year = request.GET.get('year')
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if year and not str(year).isdigit():
+            return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        product_id = int(product_id)
+        # Fetch appeared student data from database and return it to client.
+        cms_helper = RPCmsHelper()
+        data = cms_helper._get_student_appeared_data(product_id=product_id, year=year)
+        return SuccessResponse(data, status=status.HTTP_200_OK)
+    
+    def post(self, request, version):
+        product_id = request.data.get('product_id')
+        year = request.data.get('year')
+        student_data = request.data.get('student_data')
+
+        if not product_id or not str(product_id).isdigit():
+            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if year and not str(year).isdigit():
+            return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+
+        product_id = int(product_id)
+        # add appeared student data in database.
+        cms_helper = RPCmsHelper()
+        resp, data = cms_helper._add_student_appeared_data(student_data=student_data, product_id=product_id, year=year)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
