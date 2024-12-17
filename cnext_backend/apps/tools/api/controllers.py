@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from tools.helpers.helpers import ToolsHelper
 from tools.models import CPProductCampaign, Domain, Exam, ToolsFAQ
 from utils.helpers.choices import TOOL_TYPE, CONSUMPTION_TYPE, PUBLISHING_TYPE
+from django.db.models import Q,F
 
 
 class HealthCheck(APIView):
@@ -18,68 +19,93 @@ class HealthCheck(APIView):
         return SuccessResponse({"message": "Tools App runnning"}, status=status.HTTP_200_OK)
     
 class CMSToolsFilterAPI(APIView):
-    """
-    Pending
-    """
 
     permission_classes = (ApiKeyPermission,)
 
+    """
+    API to fetch filtered data for exams, tools, and other parameters.
+    """
+
     def get(self, request, version, format=None, **kwargs):
-
         try:
-            result = dict()
-            tools_name = list(CPProductCampaign.objects.values('id', 'name'))
-            domain = list(Domain.objects.filter(is_stream = 1).values('id','name'))
-
-            # Construct the response payload
-            result = {
-                'tool_type': TOOL_TYPE,
-                'consumption_type': CONSUMPTION_TYPE,
-                'published_status_web_wap': PUBLISHING_TYPE,
-                'published_status_app': PUBLISHING_TYPE,
-                'domain': domain,
-                # 'tools_name': tools_name,
-
-            }
-            published_exam_list = Exam.objects.exclude(type_of_exam='counselling').exclude(status='unpublished')
-            exam_list = published_exam_list.filter(instance_id=0).values('id','exam_short_name', 'exam_name','parent_exam_id')
-            exam_mappings = dict()
-            print(exam_mappings , " exam_mappings")
-
-            mapping = {
-                "exam_id" : {
-                    "parent_exams" : {
-
-                    },
-                    "child_exams" : {
-
-                    }
-                }
-            }
-            for exam in exam_list:
-                if exam['parent_exam_id'] not in exam_mappings:
-                    exam_mappings[exam['id']] = {
-                        "parent_exams" :exam,
-                        "child_exams" : []
-                    }
-                else:
-                    exam_mappings[exam['parent_exam_id']]["child_exams"].append(exam)
-
-            # for exam in exam_list:
-            #     if exam['parent_exam_id'] in exam_mappings:
-            #         exam_mappings[exam['parent_exam_id']].append(exam)
-
-            # for exam in exam_mappings:
-            #     if exam['parent_exam_id'] in exam_mappings:
-            #         exam_mappings[exam['parent_exam_id']].append(exam)
-
+            q = request.query_params.get('q', '').strip()
+            filter_type = request.query_params.get('filter_type', '').strip()
+            
+            # Dispatch based on filter_type
+            if filter_type == 'exam':
+                result = self._get_filtered_exams(q)
+            elif filter_type == 'tools_name':
+                result = self._get_filtered_tools(q)
+            else:
+                result = self._get_all_tools_and_domains()
                 
-            result['exam'] = exam_mappings
-
-            return SuccessResponse(result,status=status.HTTP_200_OK)
+            return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return ErrorResponse(f"An unexpected error occurred {e}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return ErrorResponse(f"An unexpected error occurred: {str(e)}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Helper Methods --------------------
+
+    def _get_filtered_exams(self, query):
+        #TODO optimize this and check structure
+        """
+        Fetches and structures exams based on the query.
+        """
+        published_exam_list = Exam.objects.exclude(
+            type_of_exam='counselling'
+        ).exclude(status='unpublished')
+
+        exam_list = (
+            published_exam_list
+            .filter(instance_id=0)
+            .filter(Q(exam_name__icontains=query) | Q(exam_short_name__icontains=query))
+            .values('id', 'exam_name', 'parent_exam_id')
+        )[:50]
+
+        exam_mappings = self._map_exams_by_parent(exam_list)
+        return {'exam': exam_mappings}
+
+    def _map_exams_by_parent(self, exam_list):
+        """
+        Organizes exams into parent and child mappings.
+        """
+        exam_mappings = {}
+        for exam in exam_list:
+            parent_id = exam['parent_exam_id']
+            if parent_id not in exam_mappings:
+                exam_mappings[exam['id']] = {
+                    "parent_exams": exam,
+                    "child_exams": []
+                }
+            else:
+                exam_mappings[parent_id]["child_exams"].append(exam)
+        return exam_mappings
+
+    def _get_filtered_tools(self, query):
+        """
+        Fetches tools filtered by the query.
+        """
+        tools_name = list(
+            CPProductCampaign.objects.filter(name__icontains=query)
+            .values('id', 'name')
+        )
+        return {'tools_name': tools_name}
+
+    def _get_all_tools_and_domains(self):
+        """
+        Fetches all tools and domains without filters.
+        """
+        tools_name = list(CPProductCampaign.objects.values('id', 'name'))
+        domain = list(Domain.objects.filter(is_stream=1).values('id', 'name'))
+
+        return {
+            'tool_type': TOOL_TYPE,
+            'consumption_type': CONSUMPTION_TYPE,
+            'published_status_web_wap': PUBLISHING_TYPE,
+            'published_status_app': PUBLISHING_TYPE,
+            'domain': domain,
+            'tools_name': tools_name,
+        }
 
 class ManagePredictorToolAPI(APIView):
     """
