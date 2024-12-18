@@ -1,6 +1,7 @@
 from django.conf import settings
-from django.db.models import Max
+from django.db.models import Max,F
 from datetime import datetime, timedelta
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, STUDENT_TYPE
 from rank_predictor.models import RPStudentAppeared, RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -514,7 +515,7 @@ class CommonDropDownHelper:
     def __init__(self):
         pass
 
-    def _get_dropdown_list(self, field_name, selected_id=None):
+    def _get_dropdown_list(self, field_name, q, selected_id=None):
         dropdown_data = {
             "field": field_name,
             "message": "",
@@ -525,6 +526,17 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
         elif field_name == "session_shift":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
+        elif field_name == "student_type":
+            dropdown_data["dropdown"] = STUDENT_TYPE
+        elif field_name == "category":
+            dropdown_data["dropdown"] = CASTE_CATEGORY
+        elif field_name == "disability":
+            dropdown_data["dropdown"] = DISABILITY_CATEGORY
+        elif field_name == "year":
+            year_range = list(range(2020, 2031))
+            dropdown_data["dropdown"] = [{"id": year, "value": year} for year in year_range]
+        elif field_name == "tools_name":
+            dropdown_data["dropdown"] = list(CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name")))
         else:
             dropdown_data["message"] = "Invalid field name"
 

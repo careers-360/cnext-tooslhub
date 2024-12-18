@@ -113,6 +113,7 @@ class CommonDropDownAPI(APIView):
     def get(self, request, version, **kwargs):
         field_name = request.GET.get('field_name')
         selected_id = request.GET.get('selected_id')
+        q = request.GET.get('q','')
 
         if not field_name:
             return CustomErrorResponse({"message": "field_name is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -125,7 +126,7 @@ class CommonDropDownAPI(APIView):
     
         # Fetch common dropdown data from database and return it to client.
         cms_helper = CommonDropDownHelper()
-        resp = cms_helper._get_dropdown_list(field_name=field_name, selected_id=selected_id)
+        resp = cms_helper._get_dropdown_list(field_name=field_name, selected_id=selected_id,q=q)
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     
 
