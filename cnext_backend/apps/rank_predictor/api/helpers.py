@@ -301,7 +301,7 @@ class RPCmsHelper:
         final_output = {
             "message": "Successfully created session",
             "error": error,
-            "exam_session_data": session_data,
+            "session_data": session_data,
             "count": len(session_data) - len(error)
         }
         return True, final_output
@@ -343,8 +343,6 @@ class RPCmsHelper:
                 data["student_appeared_data"] = rp_students_appeared  
         return True, data
 
-        
-
     def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
         if not year:
             year = datetime.today().year
@@ -362,7 +360,8 @@ class RPCmsHelper:
 
         # Delete non existing records
         non_common_ids = set(rp_student_appeared) - set(incomming_ids)
-        RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+        if non_common_ids:
+            RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
         fields = ['student_type','category', 'disability', 'min_student', 'max_student'] 
 
@@ -450,7 +449,8 @@ class RPCmsHelper:
 
         # Delete non existing records
         non_common_ids = set(rp_session_ids) - set(incomming_ids)
-        CnextRpVariationFactor.objects.filter(product_id=product_id, id__in=non_common_ids).delete()
+        if non_common_ids:
+            CnextRpVariationFactor.objects.filter(product_id=product_id, id__in=non_common_ids).delete()
 
         # Create new records
         for new_row in var_factor_data:
@@ -541,13 +541,92 @@ class RPCmsHelper:
                 session_data["custom_mean_sd_data"] = rp_mean_sd_data
 
         for item in session_data["custom_mean_sd_data"]:
-            item["input_flow_type_name"] = item["input_flow_type__input_process_type"] if item.get("input_flow_type__input_process_type") else ""
+            item["input_flow_type_name"] = item.pop("input_flow_type__input_process_type", "")
             for key, val in item.items():
                 if key in  ["sheet_mean", "sheet_sd", "admin_mean", "admin_sd"]:
-                    item[key] = str(val)
+                    item[key] = str(val) if val else ""
 
         return True, session_data
 
+    def _add_custom_mean_sd_data(self, uid, custom_mean_sd_data, product_id, year):
+
+        #TODO : Re-Calculating Merit List’s Z-Scores on Editing Sheet Mean and SD
+        
+        if not year:
+            year = datetime.today().year
+        
+        if not product_id or not uid or not year or not isinstance(custom_mean_sd_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_session_ids = list(RpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
+        incomming_ids = [row_["id"] for row_ in custom_mean_sd_data if row_.get("id")]
+        rp_session_mapping = {row_["id"]:row_ for row_ in custom_mean_sd_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = RpMeanSd.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_session_ids) - set(incomming_ids)
+        if non_common_ids:
+            RpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+
+        # Create new records
+        for new_row in custom_mean_sd_data:
+            input_flow_type = new_row.get('input_flow_type')
+            sheet_mean = new_row.get('sheet_mean')
+            sheet_sd = new_row.get('sheet_sd')
+            admin_mean = new_row.get('admin_mean')
+            admin_sd = new_row.get('admin_sd')
+
+            if not input_flow_type or sheet_mean is None or sheet_sd is None:
+                error.append({"row":new_row, "message": "Incorrect data"})
+                continue
+
+            if not new_row.get("id"):
+                if not admin_mean: admin_mean = None
+                if not admin_sd: admin_sd = None
+                to_create.append(RpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
+                                                admin_mean=admin_mean, admin_sd=admin_sd, created_by=uid, updated_by=uid))
+        
+        if to_create:
+            RpMeanSd.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+
+            input_flow_type = rp_session_mapping[row_id].get('input_flow_type')
+            sheet_mean = rp_session_mapping[row_id].get('sheet_mean')
+            sheet_sd = rp_session_mapping[row_id].get('sheet_sd')
+            admin_mean = rp_session_mapping[row_id].get('admin_mean')
+            admin_sd = rp_session_mapping[row_id].get('admin_sd')
+
+            if not input_flow_type or sheet_mean is None or sheet_sd is None:
+                error.append({"id":row_id, "message": "Incorrect data"})
+                continue
+
+            if not admin_mean: admin_mean = None
+            if not admin_sd: admin_sd = None
+
+            row_.input_flow_type_id = input_flow_type
+            row_.sheet_mean = sheet_mean
+            row_.sheet_sd = sheet_sd
+            row_.admin_mean = admin_mean
+            row_.admin_sd = admin_sd
+            row_.updated_by = uid
+
+        if incomming_ids:
+            RpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
+        
+        final_output = {
+            "message": "Successfully created session",
+            "error": error,
+            "custom_mean_sd_data": custom_mean_sd_data,
+            "count": len(custom_mean_sd_data) - len(error)
+        }
+        return True, final_output
+    
 
 class CommonDropDownHelper:
 
