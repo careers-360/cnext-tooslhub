@@ -45,12 +45,12 @@ class RpSmartRegistration(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     field = models.IntegerField(null=True, blank=True)
-    peak_session = models.BooleanField(default=False)
-    non_peak_session = models.BooleanField(default=False)
+    peak_season = models.BooleanField(default=False)
+    non_peak_season = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
