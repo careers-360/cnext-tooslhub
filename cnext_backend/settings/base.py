@@ -80,11 +80,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'cnext_backend.urls'
 
-
-
-# from django_jinja.builtins import DEFAULT_EXTENSIONS
-
-
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -154,9 +149,6 @@ REST_FRAMEWORK = {
 	'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
 }
 
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'Asia/Kolkata'
@@ -171,6 +163,13 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 STATIC_ROOT = root('../static')
 MEDIA_ROOT = root('../media')
+
+SIMPLE_JWT = {
+	"ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+	"REFRESH_TOKEN_LIFETIME": timedelta(days=90),
+}
+
+AUTH_USER_MODEL = 'users.User'
 
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'cnext_backend.services.auth_backend_service.EmailAuthBackend')
 LOGIN_REDIRECT_URL = '/'

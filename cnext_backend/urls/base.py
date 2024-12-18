@@ -21,16 +21,17 @@ from django.contrib import admin
 from django.conf.urls.static import static
 from .cms_api_urls import urlpatterns as cms_api_urls
 from .rp_api_urls import urlpatterns as rp_api_urls
+from .rp_cms_urls import urlpatterns as rp_cms_urls
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 ]
 
-urlpatterns += cms_api_urls
-
 # Static and Media URls
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
+urlpatterns += cms_api_urls
 urlpatterns += rp_api_urls
+urlpatterns += rp_cms_urls
