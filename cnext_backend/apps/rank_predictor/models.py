@@ -194,9 +194,9 @@ class CnextRpVariationFactor(models.Model):
     max_factor = models.FloatField(null=True, blank=True)
     preset_type = models.IntegerField(choices=PRESET_TYPE_ENUM, null=True, blank=True)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
@@ -225,9 +225,9 @@ class CnextRpSession(models.Model):
     session_shift = models.IntegerField(choices=SHIFT_ENUM, null=True, blank=True)
     difficulty = models.IntegerField(choices=DIFFICULTY_ENUM, null=True, blank=True)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
