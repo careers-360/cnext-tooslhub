@@ -854,3 +854,45 @@ class CPFeedback(models.Model):
             self.created = timezone.now()
 
         super(CPFeedback, self).save(*args, **kwargs)
+
+class CasteCategory(models.Model):
+    parent_id = models.PositiveIntegerField(null=True, blank=True)
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(max_length=1023, blank=True)
+    published = models.CharField(max_length=255, null=True, blank=True)
+    created = models.DateTimeField(default=timezone.now, blank=True)
+    created_by = models.IntegerField(default=None, null=False, blank=True)
+    updated = models.DateTimeField(default=timezone.now, blank=True)
+    updated_by = models.IntegerField(default=None, null=False, blank=True)
+
+    class Meta:
+        verbose_name = 'cp_caste'
+        verbose_name_plural = 'cp_caste'
+        db_table = 'cp_caste'
+        indexes = [
+            models.Index(fields=['parent_id', ]),
+            models.Index(fields=['name', ]),
+        ]
+
+    def __str__(self):
+        return self.name
+    
+
+class DisabilityCategory(models.Model):
+    parent_id = models.PositiveIntegerField(null=True, blank=True)
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(max_length=1023, blank=True)
+    published = models.CharField(max_length=255, null=True, blank=True)
+    created = models.DateTimeField(default=timezone.now, blank=True)
+    created_by = models.IntegerField(default=None, null=False, blank=True)
+    updated = models.DateTimeField(default=timezone.now, blank=True)
+    updated_by = models.IntegerField(default=None, null=False, blank=True)
+
+    class Meta:
+        verbose_name = 'cp_disability'
+        verbose_name_plural = 'cp_disability'
+        db_table = 'cp_disability'
+        indexes = [
+            models.Index(fields=['parent_id', ]),
+            models.Index(fields=['name', ]),
+        ]

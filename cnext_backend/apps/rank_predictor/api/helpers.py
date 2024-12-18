@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Max
 from datetime import datetime, timedelta
-from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession
+from rank_predictor.models import RPStudentAppeared, RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
 
@@ -302,3 +302,99 @@ class RPCmsHelper:
             return datetime.strptime(str_to_datetime, '%Y-%m-%d') + timedelta(hours=6, minutes=31)
         except ValueError:
             return None
+        
+    def _get_student_appeared_data_(self,product_id,year): #TODO change function name 
+        if year:
+            year = int(year) 
+    
+        data = {
+            "product_id": int(product_id),
+            "year": year,
+            "count": 0,
+            "student_appeared_data": []
+        }
+         # Filter by product_id and year (if provided)
+        query = RPStudentAppeared.objects.filter(product_id=product_id,status=1).values('id','product_id', 'year', 'student_type', 'min_student', 'max_student', 'status', 'category', 'disability')
+
+        if year:
+            rp_students_appeared = list(query.filter(year=year))
+            if rp_students_appeared:
+                data['year'] = year
+                data["count"] = len(rp_students_appeared) 
+                data["student_appeared_data"] = rp_students_appeared 
+                return True, data
+
+        # If year is not provided, get the latest year dynamically
+        if not data["student_appeared_data"]:
+            latest_year = query.aggregate(latest_year=Max('year'))['latest_year']
+            rp_students_appeared = list(query.filter(year=latest_year))
+            if rp_students_appeared:
+                data["year"] = latest_year 
+                data["count"] = len(rp_students_appeared) 
+                data["student_appeared_data"] = rp_students_appeared  
+        return True, data
+
+        
+
+    def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
+        if not year:
+            year = datetime.today().year
+        
+        if not product_id or not year or not isinstance(student_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_student_appeared = list(RPStudentAppeared.objects.filter(product_id=product_id, year=year).values_list('id', flat=True))
+        incomming_ids = [row_["id"] for row_ in student_data if row_.get("id")]
+        rp_student_appeared_mapping = {row_["id"]:row_ for row_ in student_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = RPStudentAppeared.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_student_appeared) - set(incomming_ids)
+        RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+
+        fields = ['student_type','category', 'disability', 'min_student', 'max_student'] 
+
+        # category and diability are mandatory when student_type =    category_wise
+
+        # Create new records
+        for data in student_data:
+            #TODO
+            # if not session_date or not session_shift or not session_difficulty:
+            #     error.append({"row":new_row, "message": "Incorrect data"})
+            #     continue
+
+            if not data.get("id"):
+                to_create.append(
+                    RPStudentAppeared(product_id=product_id, year=year,created_by=user_id,updated_by=user_id, **data)
+                )
+        
+        if to_create:
+            RPStudentAppeared.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+            row_.student_type = rp_student_appeared_mapping[row_id].get('student_type')
+            row_.category = rp_student_appeared_mapping[row_id].get('category')
+            row_.disability = rp_student_appeared_mapping[row_id].get('disability')
+            row_.min_student = rp_student_appeared_mapping[row_id].get('min_student')
+            row_.max_student = rp_student_appeared_mapping[row_id].get('max_student')
+            row_.updated_by = user_id
+            #TODO
+            # if not all(row_.get(field) for field in required_fields):
+            #     error.append({"id": row_id, "message": "Incorrect data"})
+            #     continue
+
+        if incomming_ids:
+            RPStudentAppeared.objects.bulk_update(to_update, fields)
+        
+        final_output = {
+            "message": "Enteries successfully created",
+            "error": error,
+            "student_appeared_data": student_data,
+            "count": len(student_data) - len(error)
+        }
+        return True, final_output

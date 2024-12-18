@@ -215,3 +215,30 @@ class CnextRpSession(models.Model):
         verbose_name_plural = "Cnext RP Sessions"
 
 
+
+class RPStudentAppeared(models.Model):
+    product_id =  models.IntegerField(null=True, blank=True)
+    product_type = models.IntegerField()
+    year = models.IntegerField()
+    student_type = models.IntegerField(null=False, blank=False)
+    category = models.IntegerField()
+    disability = models.IntegerField()
+    min_student = models.IntegerField()
+    max_student = models.IntegerField()
+    status = models.BooleanField(default=True)
+    updated = models.DateTimeField(auto_now=True)
+    created = models.DateTimeField(default=timezone.now)
+    updated_by =  models.IntegerField(null=False, blank=False)
+    created_by =  models.IntegerField(null=False, blank=False)
+
+    class Meta:
+        db_table = "cnext_rp_student_appeared"
+        verbose_name = "rp_student_appeared"
+        verbose_name_plural = "rp_student_appeared"
+
+    def __str__(self):
+        return f"Student Appeared {self.id} - {self.year}"
+
+
+
+
