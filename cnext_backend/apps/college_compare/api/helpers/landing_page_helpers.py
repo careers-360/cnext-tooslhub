@@ -153,7 +153,7 @@ class UserContextHelper:
             Q(course_1__level=education_level)
         ).values('college_1').annotate(
             total_comparisons=Count('college_1')
-        ).order_by('-total_comparisons')[:10]
+        ).order_by('-total_comparisons')[:5]
         
         college_ids = [entry['college_1'] for entry in compare_data_query]
 
@@ -172,3 +172,54 @@ class UserContextHelper:
 
         cache.set(cache_key, result, timeout=1800)  
         return result
+    
+    @staticmethod
+    def get_top_comparison_on_college(college_ids):
+        cache_key = f"Top___compared__{college_ids}"
+
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return cached_result
+
+        compare_data_query = (
+            CollegeCompareData.objects.filter(
+                Q(college_1__in=college_ids) |
+                Q(college_2__in=college_ids) |
+                Q(college_3__in=college_ids) |
+                Q(college_4__in=college_ids)
+            )
+            .values('college_1', 'college_2', 'college_3', 'college_4')
+        )
+
+        comparison_counts = {}
+        for row in compare_data_query:
+            for field in ['college_1', 'college_2', 'college_3', 'college_4']:
+                college_id = row[field]
+                if college_id not in college_ids:
+                    comparison_counts[college_id] = comparison_counts.get(college_id, 0) + 1
+
+        top_colleges = sorted(
+            comparison_counts.items(), key=lambda x: x[1], reverse=True
+        )[:6]
+        top_college_ids = [college_id for college_id, _ in top_colleges]
+
+        colleges = College.objects.filter(
+            id__in=top_college_ids, published='published'
+        ).only('id', 'name', 'short_name')
+
+        result = [
+            {
+                'id': college.id,
+                'name': college.name,
+                'short_name': college.short_name,
+                'comparison_count': comparison_counts[college.id],
+            }
+            for college in colleges
+            if college.id in comparison_counts
+        ]
+
+        result_sorted = sorted(result, key=lambda x: x['comparison_count'], reverse=True)
+
+        cache.set(cache_key, result_sorted, timeout=1800)
+
+        return result_sorted
