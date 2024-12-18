@@ -1,4 +1,4 @@
-from requests import request
+from rank_predictor.models import RpContentSection
 from tools.api.serializers import ToolBasicDetailSerializer
 from tools.helpers.helpers import ToolsHelper
 from rest_framework.views import APIView
@@ -9,8 +9,9 @@ from rest_framework.response import Response
 import json
 
 from tools.helpers.helpers import ToolsHelper
-from tools.models import CPProductCampaign, Domain, ToolsFAQ
+from tools.models import CPProductCampaign, Domain, Exam, ToolsFAQ
 from utils.helpers.choices import TOOL_TYPE, CONSUMPTION_TYPE, PUBLISHING_TYPE
+from django.db.models import Q,F
 
 
 class HealthCheck(APIView):
@@ -19,32 +20,93 @@ class HealthCheck(APIView):
         return SuccessResponse({"message": "Tools App runnning"}, status=status.HTTP_200_OK)
     
 class CMSToolsFilterAPI(APIView):
-    """
-    Pending
-    """
 
     permission_classes = (ApiKeyPermission,)
 
+    """
+    API to fetch filtered data for exams, tools, and other parameters.
+    """
+
     def get(self, request, version, format=None, **kwargs):
-
         try:
-            result = dict()
-            tools_name = list(CPProductCampaign.objects.values('id', 'name'))
-            domain = list(Domain.objects.filter(is_stream = 1).values('id','name'))
-
-            # Construct the response payload
-            result = {
-                'tool_type': TOOL_TYPE,
-                'consumption_type': CONSUMPTION_TYPE,
-                'published_status_web_wap': PUBLISHING_TYPE,
-                'published_status_app': PUBLISHING_TYPE,
-                'domain': domain,
-                'tools_name': tools_name,
-            }
-            return SuccessResponse(result,status=status.HTTP_200_OK)
+            q = request.query_params.get('q', '').strip()
+            filter_type = request.query_params.get('filter_type', '').strip()
+            
+            # Dispatch based on filter_type
+            if filter_type == 'exam':
+                result = self._get_filtered_exams(q)
+            elif filter_type == 'tools_name':
+                result = self._get_filtered_tools(q)
+            else:
+                result = self._get_all_tools_and_domains()
+                
+            return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return ErrorResponse("An unexpected error occurred.", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return ErrorResponse(f"An unexpected error occurred: {str(e)}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Helper Methods --------------------
+
+    def _get_filtered_exams(self, query):
+        #TODO optimize this and check structure
+        """
+        Fetches and structures exams based on the query.
+        """
+        published_exam_list = Exam.objects.exclude(
+            type_of_exam='counselling'
+        ).exclude(status='unpublished')
+
+        exam_list = (
+            published_exam_list
+            .filter(instance_id=0)
+            .filter(Q(exam_name__icontains=query) | Q(exam_short_name__icontains=query))
+            .values('id', 'exam_name', 'parent_exam_id')
+        )[:50]
+
+        exam_mappings = self._map_exams_by_parent(exam_list)
+        return {'exam': exam_mappings}
+
+    def _map_exams_by_parent(self, exam_list):
+        """
+        Organizes exams into parent and child mappings.
+        """
+        exam_mappings = {}
+        for exam in exam_list:
+            parent_id = exam['parent_exam_id']
+            if parent_id not in exam_mappings:
+                exam_mappings[exam['id']] = {
+                    "parent_exams": exam,
+                    "child_exams": []
+                }
+            else:
+                exam_mappings[parent_id]["child_exams"].append(exam)
+        return exam_mappings
+
+    def _get_filtered_tools(self, query):
+        """
+        Fetches tools filtered by the query.
+        """
+        tools_name = list(
+            CPProductCampaign.objects.filter(name__icontains=query)
+            .values('id', 'name')
+        )
+        return {'tools_name': tools_name}
+
+    def _get_all_tools_and_domains(self):
+        """
+        Fetches all tools and domains without filters.
+        """
+        tools_name = list(CPProductCampaign.objects.values('id', 'name'))
+        domain = list(Domain.objects.filter(is_stream=1).values('id', 'name'))
+
+        return {
+            'tool_type': TOOL_TYPE,
+            'consumption_type': CONSUMPTION_TYPE,
+            'published_status_web_wap': PUBLISHING_TYPE,
+            'published_status_app': PUBLISHING_TYPE,
+            'domain': domain,
+            'tools_name': tools_name,
+        }
 
 class ManagePredictorToolAPI(APIView):
     """
@@ -230,29 +292,18 @@ class CMSToolsResultPageAPI(APIView):
                 return ErrorResponse({'message': 'Product ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
             
             # Fetch the object using .get() to ensure it exists
-            obj = CPProductCampaign.objects.get(id=pk)
+            response = CPProductCampaign.objects.filter(id=pk).values('rp_disclaimer','cp_cta_name', 'cp_destination_url', \
+                                                                    'cp_pitch', 'mapped_product_title', 'mapped_product_cta_label',
+                                                                    'mapped_product_destination_url','mapped_product_pitch',\
+                                                                    'promotion_banner_web','promotion_banner_wap').first()  
+
+            if response is None:
+                return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
             
-            if obj is None:
-                return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-            
-            # Prepare the response data
-            result = {
-                'rp_disclaimer': obj.rp_disclaimer,
-                'cp_cta_name': obj.cp_cta_name,
-                'cp_destination_url': obj.cp_destination_url,
-                'cp_pitch': obj.cp_pitch,
-                'mapped_product_title': obj.mapped_product_title,
-                'mapped_product_cta_label': obj.mapped_product_cta_label,
-                'mapped_product_destination_url': obj.mapped_product_destination_url,
-                'mapped_product_pitch': obj.mapped_product_pitch,
-                # 'promotion_banner_web': obj.promotion_banner_web,
-                # 'promotion_banner_wap': obj.promotion_banner_wap,
-            }
-            
-            return SuccessResponse({"result": result}, status=status.HTTP_200_OK)
+            return SuccessResponse(response, status=status.HTTP_200_OK)
 
         except CPProductCampaign.DoesNotExist:
-            return ErrorResponse({'message': f'Tool with id: {pk} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
@@ -265,14 +316,14 @@ class CMSToolsResultPageAPI(APIView):
                 return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Fetch the object using .get() to ensure it exists
-            obj = CPProductCampaign.objects.get(id=pk)
+            instance = CPProductCampaign.objects.get(id=pk)
             
             # Update fields
             print("this is the data ", request.data)
-            serializer = ToolBasicDetailSerializer(data=request.data, partial=True)
+            serializer = ToolBasicDetailSerializer(instance=instance,data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save(updated_by=request.user.id)
-                return SuccessResponse({"message": "Tool updated successfully", "result": serializer.data}, status=status.HTTP_200_OK)
+                return SuccessResponse({"message": "Tool updated successfully"}, status=status.HTTP_200_OK)
             else:
                 return ErrorResponse({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except CPProductCampaign.DoesNotExist:
@@ -281,3 +332,29 @@ class CMSToolsResultPageAPI(APIView):
             return ErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class CMSToolsContentAPI(APIView):
+
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+
+    def get(self, request, version, format=None, **kwargs):
+
+        pk = request.query_params.get('product_id')
+        # heading = data.get('headings')
+        # heading = data.get('upload_image_web')
+        # heading = data.get('upload_image_wap')
+        # heading = data.get('listing_description')
+        
+        data = list(RpContentSection.objects.filter(product_id = pk).values())
+        return SuccessResponse(data, status = status.HTTP_200_OK)
+    
+    def post(self, request, version, format=None, **kwargs):
+
+        data = request.data 
+
+        for content_dict in data: 
+            RpContentSection.objects.create(**content_dict)
+
+        return SuccessResponse("ContentSection is updated", status=status.HTTP_200_OK)
