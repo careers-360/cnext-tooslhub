@@ -6,6 +6,7 @@ from utils.helpers.response import SuccessResponse,ErrorResponse, CustomErrorRes
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rest_framework.response import Response
+import json
 
 from tools.helpers.helpers import ToolsHelper
 from tools.models import CPProductCampaign, Domain, ToolsFAQ
@@ -196,19 +197,14 @@ class CMSToolsBasicDetailAPI(APIView):
             return SuccessResponse(data, status=status.HTTP_200_OK)
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, version, format=None, **kwargs):
-        product_id = request.query_params.get('product_id')
-        obj = self.get_object(product_id)
-        request_data = request.data.copy()
-        helper = ToolsHelper()
-        data = helper.edit_basic_detail(obj, request_data = request_data)
-        return SuccessResponse(data, status=status.HTTP_200_OK)
     
     def post(self, request, version, format=None, **kwargs):
+        product_id = request.POST.get('product_id')
         request_data = request.data.copy()
+        smart_registration = json.loads(request_data.get('smart_registration_data', []))
+        instance = self.get_object(product_id)
         helper = ToolsHelper()
-        data = helper.add_basic_detail(request_data = request_data)
+        data = helper.add_edit_basic_detail(instance = instance, request_data = request_data, smart_registration = smart_registration)
         return SuccessResponse(data, status=status.HTTP_200_OK)
     
 
