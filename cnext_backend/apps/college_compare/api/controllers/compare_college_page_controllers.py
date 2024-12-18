@@ -21,6 +21,7 @@ class CollegeDropdownView(APIView):
         parameters=[
             OpenApiParameter(name='search_input', type=str, description='Search string to filter colleges', required=False),
             OpenApiParameter(name='uid', type=int, description='User ID to fetch domain-specific college data', required=False),
+            OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved colleges dropdown'),
@@ -30,14 +31,30 @@ class CollegeDropdownView(APIView):
     def get(self, request):
         search_input = request.query_params.get('search_input')
         uid = request.query_params.get('uid')
+        college_ids = request.query_params.get('college_ids')
+
+        uid = int(uid) if uid else None
+
+        
+        college_ids_list = (
+            [int(cid.strip()) for cid in college_ids.split(',') if cid.strip().isdigit()]
+            if college_ids
+            else None
+        )
+
+        print(f"UID: {uid}, Search Input: {search_input}, College IDs: {college_ids_list}")
 
         try:
-            result = DropdownService.get_colleges_dropdown(search_input, uid=uid)
+            result = DropdownService.get_colleges_dropdown(
+                search_input=search_input, 
+                country_id=1, 
+                uid=uid, 
+                college_ids=college_ids_list
+            )
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error fetching colleges dropdown: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class DegreeDropdownView(APIView):
     @extend_schema(

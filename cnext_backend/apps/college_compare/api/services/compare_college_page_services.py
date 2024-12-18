@@ -27,48 +27,74 @@ class CacheHelper:
             cache.set(key, result, timeout)
         return result
 
-
 class DropdownService:
     PUBLISHED_FILTER = Q(published='published', status=True)
 
     @staticmethod
-    def get_colleges_dropdown(search_input: str = None, country_id: int = 1, uid: int = None) -> List[Dict]:
-        """Fetch colleges for dropdown with caching"""
+    def get_colleges_dropdown(search_input: str = None, country_id: int = 1, uid: int = None, college_ids: List[int] = None) -> List[Dict]:
+        print(f"DropdownService Input: search_input={search_input}, country_id={country_id}, uid={uid}, college_ids={college_ids}")
+
+        if college_ids is not None and not isinstance(college_ids, list):
+            raise ValueError("college_ids must be a list of integers.")
+        
         def fetch_data():
             queryset = College.objects.filter(
                 DropdownService.PUBLISHED_FILTER,
                 country_id=country_id
             ).only('id', 'name', 'short_name')
 
-            if search_input:
-                print(search_input)
+            if uid and search_input and college_ids:
+                search_lower = search_input.lower()
+                queryset = queryset.filter(name__icontains=search_lower).exclude(id__in=college_ids).order_by('id')
+                return list(queryset.values('id', 'name', 'short_name')[:10])
+
+            if uid and search_input:
                 search_lower = search_input.lower()
                 queryset = queryset.filter(name__icontains=search_lower)
                 return list(queryset.values('id', 'name', 'short_name')[:10])
 
-            elif uid:
-                print("----------")
+            if uid and college_ids:
+                return UserContextHelper.get_top_comparison_on_college(college_ids)
+
+            if search_input and college_ids:
+                search_lower = search_input.lower()
+                queryset = queryset.filter(name__icontains=search_lower).exclude(id__in=college_ids).order_by('id')
+              
+                return list(queryset.values('id', 'name', 'short_name')[:10])
+
+            if search_input:
+                search_lower = search_input.lower()
+                queryset = queryset.filter(name__icontains=search_lower)
+                return list(queryset.values('id', 'name', 'short_name')[:10])
+
+            if uid:
                 user_context = UserContextHelper.get_user_context(uid)
                 domain_id = user_context.get('domain_id')
                 education_level = user_context.get('education_level')
                 return UserContextHelper.get_top_compared_colleges(domain_id, education_level)
 
+            if college_ids:
+                return UserContextHelper.get_top_comparison_on_college(college_ids)
+
             return UserContextHelper.get_top_compared_colleges(1, 1)
-        
-    
-        if search_input:
-            Prefix = f"DropDown_{search_input}"
+
+       
+        prefix = "DropDown_Default_" 
+        if search_input and uid and college_ids:
+            prefix = f"Dropdown_search_{search_input}_Exclude__{'_'.join(map(str, college_ids))}"
+        elif search_input and uid:
+            prefix = f"DropDown_Search_{search_input}_User_{uid}"
+        elif uid and college_ids:
+            prefix = f"DropDown_User__{uid}_Colleges_{'_'.join(map(str, college_ids))}"
+        elif search_input:
+            prefix = f"DropDown_Search_{search_input}"
         elif uid:
-            user_context = UserContextHelper.get_user_context(uid)
-            domain_id = user_context.get('domain_id')
-            Prefix = f"DropDown_{domain_id}"
-        else:
-            Prefix = "DropDown_default"
-        cache_key = CacheHelper.get_cache_key("Colleges", country_id, prefix=Prefix)
+            prefix = f"DropDown_User_{uid}"
+        elif college_ids:
+            prefix = f"DropDown_Colleges_{'_'.join(map(str, college_ids))}"
 
-    
+        cache_key = CacheHelper.get_cache_key("colleges__v1__", country_id, prefix=prefix)
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
-
    
 
     @staticmethod
@@ -87,16 +113,33 @@ class DropdownService:
 
     @staticmethod
     def get_courses_dropdown(college_id: int, degree_id: int) -> List[Dict]:
+        """
+        Retrieve a dropdown list of courses with relevant details.
+
+        Args:
+            college_id (int): ID of the college.
+            degree_id (int): ID of the degree.
+
+        Returns:
+            List[Dict]: A list of dictionaries containing course details.
+        """
         cache_key = CacheHelper.get_cache_key("courses", college_id, degree_id, prefix="dropdown")
 
         def fetch_data():
+           
             return list(Course.objects.filter(
                 college_id=college_id,
                 degree_id=degree_id,
                 status=True
-            ).only('id', 'course_name', 'branch_id').values('id', 'course_name', 'branch_id'))
+            ).only('id', 'course_name', 'branch_id', 'level', 'degree_domain')
+            .values('id', 'course_name', 'branch_id', 'level', 'degree_domain')
+            )
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+       
+        courses = CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+        for course in courses:
+            course['domain_id'] = course.pop('degree_domain')  
+        return courses
 
 
 class ParallelService:
@@ -116,37 +159,71 @@ class ParallelService:
 
 
 
+
 class SummaryComparisonService:
     @staticmethod
     def get_summary_comparison(college_ids: List[int], course_ids: List[int]) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("Summary", college_ids, course_ids)
+        cache_key = CacheHelper.get_cache_key("Summary_v4", college_ids, course_ids)
 
         def fetch_data():
-            return list(Course.objects.filter(
+            results = list(Course.objects.filter(
                 college_id__in=college_ids,
                 id__in=course_ids,
                 status=True
             ).select_related(
                 'college__data'
             ).values(
+                'id',
                 'course_name',
+                college_name=F('college__name'),
                 rating=F('college__data__rating'),
                 total_reviews=F('college__data__total_review'),
-                college_name=F('college__name')
+                college_id_alias=F('college_id')
             ))
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600)
+            college_data = {
+                college.get('college_id_alias'): {
+                    "course_name": college.get('course_name', 'NA'),
+                    "rating": college.get('rating', 'NA'),
+                    "total_reviews": college.get('total_reviews', 'NA'),
+                    "college_name": college.get('college_name', 'NA'),
+                    "course_id": college.get('id', 'NA'),
+                    "college_id": college.get('college_id_alias', 'NA')
+                }
+                for college in results
+            }
+
+            result_dict = {}
+            for i, college_id in enumerate(college_ids, 1):
+                key = f"college_{i}"
+                if college_id in college_data:
+                    result_dict[key] = college_data[college_id]
+                else:
+                    result_dict[key] = {
+                        "course_name": "NA",
+                        "rating": "NA",
+                        "total_reviews": "NA",
+                        "college_name": "NA",
+                        "course_id": "NA",
+                        "college_id": college_id
+                    }
+
+            return result_dict
+
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+
+
 
 
 
 class QuickFactsService:
     @staticmethod
-    def get_quick_facts(college_ids: List[int], course_ids: List[int]) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("quick_facts", college_ids, course_ids)
+    def get_quick_facts(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
+        cache_key = CacheHelper.get_cache_key("quick_facts_v2", college_ids, course_ids)
 
         def fetch_data():
             try:
-              
+                
                 courses = Course.objects.filter(
                     college_id__in=college_ids,
                     id__in=course_ids,
@@ -170,46 +247,65 @@ class QuickFactsService:
                 counts = Course.objects.filter(
                     college_id__in=college_ids,
                     status=True
-                ).values('college_id', 'degree_id').annotate(
-                    count=Count('id')
-                )
+                ).values('college_id', 'degree_id').annotate(count=Count('id'))
                 for count in counts:
                     key = (count['college_id'], count['degree_id'])
                     course_counts[key] = count['count']
 
                 
-                result = []
-                for course in courses:
-                    college = course.college
-                    count_key = (college.id, course.degree_id)
-                    result.append({
-                        'college_id': college.id,
-                        'college_name': college.name,
-                        'course_name': course.course_name,
-                        'course_id': course.id,
-                        'location': college.location.loc_string if college.location else 'NA',
-                        'ownership': college.ownership_display(),
-                        'parent_institute': college.parent_institute(),
-                        'type_of_institute': college.type_of_institute(),
-                        'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, '-'),
-                        'establishment_year': college.year_of_establishment or '',
-                        'campus_size': college.campus_size_in_acres(),
-                        'total_courses_offered': course_counts.get(count_key, 0)
-                    })
-
-                return result
+                results = {}
+                for idx, college_id in enumerate(college_ids, start=1):
+                
+                    matching_course = next(
+                        (course for course in courses if course.college_id == college_id), None
+                    )
+                    key = f"college_{idx}"
+                    if matching_course:
+                        college = matching_course.college
+                        count_key = (college.id, matching_course.degree_id)
+                        results[key] = {
+                            'college_id': college.id,
+                            'college_name': college.name,
+                            'course_name': matching_course.course_name,
+                            'course_id': matching_course.id,
+                            'location': college.location.loc_string if college.location else 'NA',
+                            'ownership': college.ownership_display(),
+                            'parent_institute': college.parent_institute(),
+                            'type_of_institute': college.type_of_institute(),
+                            'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, '-'),
+                            'establishment_year': college.year_of_establishment or '',
+                            'campus_size': college.campus_size_in_acres(),
+                            'total_courses_offered': course_counts.get(count_key, 0)
+                        }
+                    else:
+                       
+                        results[key] = {
+                            'college_id': college_id,
+                            'college_name': 'NA',
+                            'course_name': 'NA',
+                            'course_id': 'NA',
+                            'location': 'NA',
+                            'ownership': 'NA',
+                            'parent_institute': 'NA',
+                            'type_of_institute': 'NA',
+                            'college_type': 'NA',
+                            'establishment_year': '',
+                            'campus_size': 'NA',
+                            'total_courses_offered': 0
+                        }
+                return results
 
             except Exception as e:
-               
                 print(f"Error in fetching quick facts: {e}")
-                return []
+                return {}
 
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600)
 
+
 class CardDisplayService:
     @staticmethod
-    def get_card_display_details(college_ids: List[int], course_ids: List[int]) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("cards", college_ids, course_ids)
+    def get_card_display_details(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
+        cache_key = CacheHelper.get_cache_key("cards_display_v1", college_ids, course_ids)
 
         def fetch_logo(college_id):
             """Fetch logo for a single college."""
@@ -220,10 +316,12 @@ class CardDisplayService:
             }
 
         def fetch_data():
+            # Fetch logos in parallel
             tasks = [lambda cid=cid: fetch_logo(cid) for cid in college_ids]
             logos = ParallelService.execute_parallel_tasks(tasks)
             logo_dict = {k: v for d in logos for k, v in d.items()}
 
+            # Fetch courses
             courses = Course.objects.filter(
                 college_id__in=college_ids,
                 id__in=course_ids,
@@ -232,12 +330,31 @@ class CardDisplayService:
                 'id', 'course_name', 'college_id', 'college__name'
             )
 
-            return [{
-                'id': course['id'],
-                'course_name': course['course_name'],
-                'college_id': course['college_id'],
-                'college_name': course['college__name'],
-                'logo': f"https://cache.careers360.mobi/media/{logo_dict.get(course['college_id'], '')}"
-            } for course in courses]
+            # Prepare results in the order of college_ids
+            results = {}
+            for idx, college_id in enumerate(college_ids, start=1):
+                key = f"college_{idx}"
+                matching_course = next(
+                    (course for course in courses if course['college_id'] == college_id), None
+                )
+                if matching_course:
+                    logo_url = logo_dict.get(matching_course['college_id'], '')
+                    results[key] = {
+                        'id': matching_course['id'],
+                        'course_name': matching_course['course_name'],
+                        'college_id': matching_course['college_id'],
+                        'college_name': matching_course['college__name'],
+                        'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else ''
+                    }
+                else:
+                    # Default values for missing colleges
+                    results[key] = {
+                        'id': 'NA',
+                        'course_name': 'NA',
+                        'college_id': college_id,
+                        'college_name': 'NA',
+                        'logo': ''
+                    }
+            return results
 
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600)
