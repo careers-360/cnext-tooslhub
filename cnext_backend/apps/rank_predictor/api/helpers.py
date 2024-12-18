@@ -659,16 +659,22 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
         elif field_name == "student_type":
-            dropdown_data["dropdown"] = STUDENT_TYPE
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
+
         elif field_name == "category":
             dropdown_data["dropdown"] = CASTE_CATEGORY
+
         elif field_name == "disability":
             dropdown_data["dropdown"] = DISABILITY_CATEGORY
+
         elif field_name == "year":
             year_range = list(range(2020, 2031))
             dropdown_data["dropdown"] = [{"id": year, "value": year} for year in year_range]
+
         elif field_name == "tools_name":
-            dropdown_data["dropdown"] = list(CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name")))
+            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
+            dropdown_data["dropdown"] = tools
+            dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
         else:
             dropdown_data["message"] = "Invalid field name"
 
