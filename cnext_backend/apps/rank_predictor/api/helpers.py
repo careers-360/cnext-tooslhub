@@ -631,10 +631,15 @@ class RPCmsHelper:
 
 class CommonDropDownHelper:
 
-    def __init__(self):
-        pass
+    def __init__(self, limit, page, offset=None):
+        self.limit = int(limit) if limit else 20
+        self.offset = int(offset) if offset else 0
+        self.page = int(page) if page else 1
+        if not self.offset:
+            self.offset = (self.page - 1) * self.limit
 
     def _get_dropdown_list(self, field_name, q, selected_id=None):
+        internal_limit = None
         dropdown_data = {
             "field": field_name,
             "message": "",
@@ -677,5 +682,8 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
         else:
             dropdown_data["message"] = "Invalid field name"
+
+        if not internal_limit and dropdown_data["dropdown"]:
+            dropdown_data["dropdown"] = dropdown_data["dropdown"][self.offset:self.offset + self.limit]
 
         return dropdown_data
