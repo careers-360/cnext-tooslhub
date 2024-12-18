@@ -10,10 +10,80 @@ CURRENT_YEAR = datetime.today().year
 def upload_to(instance, filename):
     return 'tools/images/{filename}'.format(filename=filename)
 
+
+
+class UrlAlias(models.Model):
+	ACTIVE = 1
+	INACTIVE = 2
+
+	STATUS_CHOICES = [
+		(ACTIVE, 'Active'),
+		(INACTIVE, 'In Active'),
+	]
+
+	id = models.AutoField(primary_key=True)
+	url_meta_pattern_id = models.IntegerField(null=False)
+	source = models.CharField(max_length=255, null=True)
+	alias = models.CharField(max_length=255, null=True)
+	created = models.IntegerField(("Created"), default=0)
+	updated = models.IntegerField(("Updated"), default=0)
+	created_by = models.IntegerField(null=False, blank=False)
+	updated_by = models.IntegerField(null=False, blank=False)
+	status = models.SmallIntegerField(choices=STATUS_CHOICES, null=False, blank=False)
+	facet_flag = models.IntegerField(null=False, blank=False)
+	push_to_sitemap = models.IntegerField(null=True, blank=True, default=1)
+	h1_tag = models.CharField(max_length=255, null=True)
+
+	class Meta:
+		db_table = 'base_url_alias'
+		managed = False
+
+
+class UrlMetaPatterns(models.Model):
+	
+	STATUS_CHOICES = [
+		(1, 'Active'),
+		(2, 'In Active'),
+	]
+	id = models.AutoField(primary_key=True)
+	type = models.CharField(max_length=255, null=False)
+	system_url = models.CharField(max_length=255, null=False, blank=True)
+	alias_pattern = models.CharField(max_length=255, null=False, blank=True)
+	page_title = models.CharField(max_length=255, null=True, blank=True)
+	meta_keywords = models.CharField(max_length=255, null=True, blank=True)
+	meta_desc = models.TextField(max_length=255, null=True, blank=True)
+	meta_abstract = models.TextField(max_length=255, null=True, blank=True)
+	meta_generator = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_title = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_type = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_locale = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_site_name = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_image_width = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_image_height = models.CharField(max_length=255, null=True, blank=True)
+	meta_og_description = models.TextField(max_length=255, null=True, blank=True)
+	meta_og_url = models.CharField(max_length=255, null=True, blank=True)
+	created = models.IntegerField(("Created"), default=0)
+	updated = models.IntegerField(("Updated"), default=0)
+	created_by = models.IntegerField(null=False, blank=False, default=1)
+	updated_by = models.IntegerField(null=False, blank=False, default=1)
+	meta_og_image = models.CharField(max_length=255, null=True, blank=True)
+	twitter_card = models.CharField(max_length=255, null=True, blank=True)
+	twitter_title = models.CharField(max_length=255, null=True, blank=True)
+	twitter_desc = models.TextField(max_length=255, null=True, blank=True)
+	twitter_url = models.CharField(max_length=255, null=True, blank=True)
+	twitter_image = models.CharField(max_length=255, null=True, blank=True)
+	twitter_image_width = models.CharField(max_length=255, null=True, blank=True)
+	twitter_image_height = models.CharField(max_length=255, null=True, blank=True)
+	status = models.SmallIntegerField(choices=STATUS_CHOICES, null=False, blank=False)
+		
+	class Meta:
+		db_table = 'base_url_meta_pattern'
+		managed = False
+
 class CPProductCampaign(models.Model):
     type = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
-    alias = models.CharField(max_length=100)
+    alias = models.CharField(max_length=100, blank=True, null=True, default=None)
     # description = models.TextField(max_length=500, blank=True, null=True, default=None)
     # aakash_input_desc = FroalaField(max_length=10000000, null=True, blank=True,
     #                          options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
@@ -111,6 +181,10 @@ class CPProductCampaign(models.Model):
     def __str__(self):
         return self.name
     
+    def save(self, *args, **kwargs):
+        if self.alias is None:
+            self.alias = ""
+        super().save(*args, **kwargs)
 
 class Domain(models.Model):
     name = models.CharField(max_length=255, unique=True)
