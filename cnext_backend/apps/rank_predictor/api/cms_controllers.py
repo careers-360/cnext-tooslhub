@@ -134,7 +134,7 @@ class VariationFactorAPI(APIView):
     """
     API for variation factor CMS Pannel
     Endpoint : api/<int:version>/cms/rp/exam-session
-    Params : product_id, year
+    Params : product_id
     """
 
     permission_classes = [ApiKeyPermission]
@@ -167,6 +167,57 @@ class VariationFactorAPI(APIView):
         # add variation factor data in database.
         cms_helper = RPCmsHelper()
         resp, data = cms_helper._add_variation_factor_data(uid=uid, var_factor_data=variation_factor_data, product_id=product_id)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class CustomMeanSD(APIView):
+    """
+    API for Custom Mean/SD CMS Pannel
+    Endpoint : api/<int:version>/cms/rp/custom-mean-sd
+    Params : product_id, year
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+        uid = request.GET.get('uid')
+        product_id = request.GET.get('product_id')
+        year = request.GET.get('year')
+
+        if not product_id or not uid or not product_id.isdigit() or not uid.isdigit():
+            return CustomErrorResponse({"message": "product_id, uid are required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if year and not str(year).isdigit():
+            return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        product_id = int(product_id)
+        # Fetch custom mean, SD from database and return it to client.
+        cms_helper = RPCmsHelper()
+        resp, data = cms_helper._get_custom_mean_sd_data(product_id=product_id, year=year)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request, version):
+        uid = request.data.get('uid')
+        product_id = request.data.get('product_id')
+        year = request.data.get('year')
+        custom_mean_sd_data = request.data.get('custom_mean_sd_data')
+
+        if not product_id or not uid or not str(product_id).isdigit() or not str(uid).isdigit():
+            return CustomErrorResponse({"message": "product_id, uid are required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if year and not str(year).isdigit():
+            return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+
+        product_id = int(product_id)
+        # add exam session data in database.
+        cms_helper = RPCmsHelper()
+        resp, data = cms_helper._add_custom_mean_sd_data(uid=uid, custom_mean_sd_data=custom_mean_sd_data, product_id=product_id, year=year)
         if resp:
             return SuccessResponse(data, status=status.HTTP_201_CREATED)
         else:

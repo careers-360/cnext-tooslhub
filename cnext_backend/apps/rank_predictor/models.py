@@ -19,28 +19,6 @@ class RpMeritSheet(models.Model):
         verbose_name_plural = "Merit Sheets"
 
 
-class RpMeanSd(models.Model):
-    product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
-    year = models.IntegerField(null=True, blank=True)
-    input_flow_type = models.IntegerField(null=True, blank=True)
-    sheet_mean = models.FloatField(null=True, blank=True)
-    sheet_sd = models.FloatField(null=True, blank=True)
-    admin_mean = models.FloatField(null=True, blank=True)
-    admin_sd = models.FloatField(null=True, blank=True)
-    status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
-    created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
-    updated_by = models.IntegerField(null=True, blank=True)
-
-    class Meta:
-        db_table = "cnext_rp_mean_sd"
-        verbose_name = "Mean and Standard Deviation"
-        verbose_name_plural = "Means and Standard Deviations"
-
-
-
 class RpSmartRegistration(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
@@ -73,6 +51,29 @@ class RpInputFlowMaster(models.Model):
         db_table = "cnext_rp_input_flow_master"
         verbose_name = "Input Flow Master"
         verbose_name_plural = "Input Flow Masters"
+
+
+class RpMeanSd(models.Model):
+    product_id = models.IntegerField(null=True, blank=True)
+    product_type = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    # input_flow_type = models.IntegerField(null=True, blank=True)
+    input_flow_type = models.ForeignKey(RpInputFlowMaster, on_delete=models.DO_NOTHING, db_column="input_flow_type", null=True, blank=True)
+    sheet_mean = models.FloatField(null=True, blank=True)
+    sheet_sd = models.FloatField(null=True, blank=True)
+    admin_mean = models.FloatField(null=True, blank=True)
+    admin_sd = models.FloatField(null=True, blank=True)
+    status = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    created_by = models.IntegerField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+    updated_by = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "cnext_rp_mean_sd"
+        verbose_name = "Mean and Standard Deviation"
+        verbose_name_plural = "Means and Standard Deviations"
+
 
 
 class RpMeritList(models.Model):

@@ -9,4 +9,5 @@ urlpatterns = [
 
     path("api/<int:version>/cms/rp/common-dropdown", cms_controller.CommonDropDownAPI.as_view(),  name='common_dropdown'),
     path("api/<int:version>/cms/rp/variation-factor", cms_controller.VariationFactorAPI.as_view(),  name='variation_factor'),
+    path("api/<int:version>/cms/rp/custom-mean-sd", cms_controller.CustomMeanSD.as_view(),  name='custom_mean_sd'),
 ]
