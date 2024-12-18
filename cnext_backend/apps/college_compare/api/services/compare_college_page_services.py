@@ -50,7 +50,7 @@ class DropdownService:
 
             if uid and search_input:
                 search_lower = search_input.lower()
-                queryset = queryset.filter(name__icontains=search_lower)
+                queryset = queryset.filter(name__icontains=search_lower).order_by('id')
                 return list(queryset.values('id', 'name', 'short_name')[:10])
 
             if uid and college_ids:
@@ -64,7 +64,7 @@ class DropdownService:
 
             if search_input:
                 search_lower = search_input.lower()
-                queryset = queryset.filter(name__icontains=search_lower)
+                queryset = queryset.filter(name__icontains=search_lower).order_by('id')
                 return list(queryset.values('id', 'name', 'short_name')[:10])
 
             if uid:
