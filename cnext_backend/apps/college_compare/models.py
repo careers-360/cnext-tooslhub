@@ -3,6 +3,38 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import time
 
 
+
+class ApprovalsAccrediations(models.Model):
+    name = models.CharField(max_length=255, db_column='name')
+    short_name = models.CharField(max_length=50, db_column='short_name')
+    status = models.BooleanField(default=True, db_column='status')
+
+    class Meta:
+        db_table = 'approvals_accrediations'
+        verbose_name_plural = 'Approvals and Accrediations'
+        indexes = [
+            models.Index(fields=['short_name']),
+        ]
+
+
+
+class CollegeAccrediationApproval(models.Model):
+    TYPE_CHOICES = [
+        ('college_approvals', 'College Approvals'),
+        ('college_accrediation', 'College Accrediation')
+    ]
+    
+    college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    value = models.ForeignKey('ApprovalsAccrediations', on_delete=models.CASCADE,db_column='value')
+    
+    class Meta:
+        db_table = 'college_accrediation_approvals'
+        indexes = [
+            models.Index(fields=['college', 'type']),
+            models.Index(fields=['value']),
+        ]
+
 class Location(models.Model):
     loc_string = models.TextField(null=True, blank=True)
     country_id = models.IntegerField(default=1)
@@ -30,7 +62,7 @@ class Domain(models.Model):
     class Meta:
         db_table = 'domain'
         indexes = [
-            models.Index(fields=['is_stream', 'old_domain_name']),
+            models.Index(fields=['is_stream', 'old_domain_name','name']),
         ]
         app_label = 'college_compare'
 
@@ -84,6 +116,7 @@ class College(models.Model):
         db_column='entity_reference'
     )
     country_id = models.IntegerField(default=1, db_index=True)
+    total_faculty = models.IntegerField(null=True, blank=True)
 
     class Meta:
         db_table = 'colleges'
@@ -131,7 +164,85 @@ class College(models.Model):
         return 'NA'
     
 
+class CollegeFacility(models.Model):
+    FACILITY_CHOICES = [
+        (1, 'Boys Hostel'),
+        (2, 'Girls Hostel'),
+        (3, 'Classrooms'),
+        (4, 'Wifi'),
+        (5, 'Library'),
+        (6, 'Laboratories'),
+        (7, 'Moot Court'),
+        (8, 'Auditorium'),
+        (9, 'Cafeteria'),
+        (10, 'Medical/Hospital'),
+        (11, 'Convenience Store'),
+        (12, 'I.T Infrastructure'),
+        (13, 'Swimming Pool'),
+        (14, 'Gym'),
+        (15, 'Sports'),
+        (16, 'Alumni Associations'),
+        (17, 'Banks/ATMs'),
+        (18, 'Guest Room/Waiting Room'),
+        (19, 'Parking Facility'),
+        (20, 'Transport Facility'),
+        (21, 'Accommodation'),
+        (22, 'Club'),
+        (23, 'Mess'),
+        (24, 'Workshops'),
+        (25, 'Extra Curricular Activities'),
+        (26, 'Training and Placement Cell'),
+        (27, 'Physical Challenged Student'),
+        (28, 'Smart Classrooms')
+    ]
+    
+    college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
+    facility = models.IntegerField(choices=FACILITY_CHOICES)
 
+    class Meta:
+        db_table = 'college_facilities'
+        indexes = [
+            models.Index(fields=['college', 'facility']),
+        ]
+
+
+
+
+class CollegePlacement(models.Model):
+    college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
+    year = models.IntegerField(db_index=True)
+    intake_year = models.IntegerField(db_index=True)
+    levels = models.IntegerField(db_index=True)
+    total_students = models.IntegerField(null=True, blank=True)
+    total_offers = models.IntegerField(null=True, blank=True)
+    male_students = models.IntegerField(null=True, blank=True)
+    female_students = models.IntegerField(null=True, blank=True)
+    outside_state = models.IntegerField(null=True, blank=True)
+    outside_country = models.IntegerField(null=True, blank=True)
+    no_placed = models.IntegerField(null=True, blank=True)
+    max_salary_dom = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    max_salary_inter = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    inter_offers = models.IntegerField(null=True, blank=True)
+    avg_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    median_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    student_count_hs = models.IntegerField(null=True, blank=True)
+    entity_type = models.IntegerField(null=True, blank=True)
+    programme = models.CharField(max_length=255, null=True, blank=True)
+    graduating_students = models.IntegerField(null=True, blank=True)
+    published = models.CharField(max_length=20, default='published')
+    reimbursement_gov = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reimbursement_institution = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reimbursement_private_bodies = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    stream = models.ForeignKey('Domain', on_delete=models.CASCADE, db_index=True,db_column="stream_id" ,null=True, blank=True)
+
+    class Meta:
+        db_table = 'college_placements'
+        indexes = [
+            models.Index(fields=['college', 'year', 'intake_year', 'levels']),
+            models.Index(fields=['published']),
+            models.Index(fields=['stream']),  
+            
+        ]
 
 class Degree(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -161,32 +272,37 @@ class Branch(models.Model):
         return self.name
 
 
+
 class Course(models.Model):
     LEVEL_CHOICES = [
         (1, 'Undergraduate'),
         (2, 'Postgraduate')
     ]
 
+    STUDY_MODE_CHOICES = [
+        (1, 'online'),
+        (2, 'offline')
+    ]
+
     course_name = models.CharField(max_length=255)
-    college = models.ForeignKey(
-        College, on_delete=models.CASCADE, related_name='courses', db_index=True
-    )
-    degree = models.ForeignKey(
-        Degree, on_delete=models.SET_NULL, null=True, blank=True, related_name='course'
-    )
-    branch = models.ForeignKey(
-        Branch, on_delete=models.CASCADE, null=True, blank=True, related_name='course'
-    )
-    degree_domain = models.ForeignKey(
-        Domain, on_delete=models.SET_NULL, null=True, blank=True, related_name='courses', db_index=True,db_column="degree_domain")
+    college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='courses', db_index=True)
+    degree = models.ForeignKey('Degree', on_delete=models.SET_NULL, null=True, blank=True, related_name='course')
+    branch = models.ForeignKey('Branch', on_delete=models.CASCADE, null=True, blank=True, related_name='course')
+    degree_domain = models.ForeignKey('Domain', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses', db_index=True, db_column="degree_domain")
     level = models.IntegerField(choices=LEVEL_CHOICES)
     status = models.BooleanField(default=True)
+    course_duration = models.IntegerField(null=True, blank=True)  # in months
+    study_mode = models.IntegerField(choices=STUDY_MODE_CHOICES, null=True, blank=True)
+    approved_intake = models.IntegerField(null=True, blank=True)
+    admission_procedure = models.TextField(null=True, blank=True)
+    eligibility_criteria = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'colleges_courses'
         unique_together = ['course_name', 'college', 'level']
         indexes = [
             models.Index(fields=['degree', 'branch', 'college', 'status']),
+             models.Index(fields=['degree_domain']),
         ]
 
     def __str__(self):
@@ -223,21 +339,117 @@ class CollegeDomain(models.Model):
 
 
 
+# class CollegeReviews(models.Model):
+#     college = models.ForeignKey(
+#         College, on_delete=models.CASCADE, related_name='reviews', db_column='college_id', db_index=True
+#     )
+#     overall_rating = models.IntegerField(
+#         validators=[MinValueValidator(0), MaxValueValidator(100)], db_index=True
+#     )
+#     review_text = models.TextField(null=True, blank=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+
+#     class Meta:
+#         db_table = 'college_reviews'
+
+
+
 class CollegeReviews(models.Model):
     college = models.ForeignKey(
-        College, on_delete=models.CASCADE, related_name='reviews', db_column='college_id', db_index=True
+        'College', 
+        on_delete=models.CASCADE, 
+        related_name='reviews',
+        db_index=True
     )
+    user = models.ForeignKey(
+        'User',
+        on_delete=models.CASCADE,
+        related_name='reviews',
+        db_column='uid'
+    )
+    
+    # Rating fields (0-100 scale)
     overall_rating = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)], db_index=True
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        db_index=True
     )
-    review_text = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    infra_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    college_life_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    academics_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    affordability_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    placement_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    faculty_rating = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    
+    # Review content
+    title = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    campus_life = models.TextField(null=True, blank=True)
+    college_infra = models.TextField(null=True, blank=True) 
+    academics = models.TextField(null=True, blank=True)
+    placements = models.TextField(null=True, blank=True)
+    value_for_money = models.TextField(null=True, blank=True)
+    
+    # Metadata
+    graduation_year = models.DateField(db_index=True)
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated = models.DateTimeField(auto_now=True)
+    status = models.BooleanField(default=True, db_index=True)
 
     class Meta:
         db_table = 'college_reviews'
+        indexes = [
+            models.Index(fields=['college', 'graduation_year', 'status']),
+            models.Index(fields=['college', 'created']),
+            models.Index(fields=['user', 'college']),
+        ]
 
     def __str__(self):
-        return f"Review for {self.college.name} - {self.overall_rating}/100"
+        return f"Review for {self.college.name} by {self.user.display_name}"
+
+    @staticmethod
+    def get_rating_display(rating_value):
+        """Convert 100-point scale to 5-point scale"""
+        return round(rating_value / 20, 1)
+
+    # Rating display properties
+    @property
+    def overall_rating_display(self):
+        return self.get_rating_display(self.overall_rating)
+
+    @property
+    def infra_rating_display(self):
+        return self.get_rating_display(self.infra_rating)
+    
+    @property
+    def college_life_rating_display(self):
+        return self.get_rating_display(self.college_life_rating)
+    
+    @property
+    def academics_rating_display(self):
+        return self.get_rating_display(self.academics_rating)
+    
+    @property
+    def affordability_rating_display(self):
+        return self.get_rating_display(self.affordability_rating)
+    
+    @property
+    def placement_rating_display(self):
+        return self.get_rating_display(self.placement_rating)
+    
+    @property
+    def faculty_rating_display(self):
+        return self.get_rating_display(self.faculty_rating)
 
 
 class CollegeData(models.Model):
@@ -330,6 +542,7 @@ class User(models.Model):
     uid = models.IntegerField(unique=True, primary_key=True)
     domain = models.ForeignKey('Domain', on_delete=models.SET_NULL, null=True, related_name='users')
     current_education_level = models.IntegerField(null=True)
+    display_name = models.CharField(max_length=255)
 
     class Meta:
         db_table = 'users'
@@ -366,25 +579,137 @@ class SocialMediaGallery(models.Model):
 
 class Ranking(models.Model):
     ranking_authority = models.CharField(max_length=255)
-    ranking_entity = models.CharField(max_length=255)
+    ranking_stream = models.CharField(max_length=255)
+    nirf_stream = models.CharField(max_length=255, blank=True, null=True)
+    nirf_entity = models.CharField(max_length=255, blank=True, null=True)
+    ranking_entity = models.CharField(max_length=255, blank=True, null=True)
+   
+    status = models.IntegerField(default=1)
 
     class Meta:
         db_table = 'ranking'
-    
-
-    def __str__(self):
-        return f"{self.ranking_authority} - {self.ranking_entity}"
-
 
 class RankingUploadList(models.Model):
-    college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='ranking_uploads', db_index=True)
-    ranking = models.ForeignKey(Ranking, on_delete=models.CASCADE, related_name='ranking_uploads', db_index=True)
-    overall_rank = models.IntegerField()
+    college = models.ForeignKey(
+        'College',
+        on_delete=models.CASCADE,
+        related_name='ranking_uploads',
+        db_index=True,db_column="college_id"
+    )
+    ranking = models.ForeignKey(
+        'Ranking',
+        on_delete=models.CASCADE,
+        related_name='upload_list',
+        db_index=True,
+        db_column='ranking_id'
+    )
+    year = models.IntegerField(db_index=True)
+    published = models.BooleanField(default=True)
+    overall_rank = models.IntegerField(null=True, blank=True)
+    overall_rating = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         db_table = 'ranking_upload_list'
-        
+        indexes = [
+            models.Index(fields=['college', 'ranking', 'year']),
+            models.Index(fields=['year']),
+            models.Index(fields=['published']),
+        ]
 
     def __str__(self):
-        return f"Ranking for {self.college.name} - Rank: {self.overall_rank}"
+        return f"{self.college.name} - {self.ranking.ranking_authority} ({self.year})"
+
+
+class FeeBifurcation(models.Model):
+    college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='fees', db_index=True)
+    category = models.CharField(max_length=50)  
+    total_fees = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        db_table = 'fees_bifurcations'
+        indexes = [
+            models.Index(fields=['college_course', 'category']),
+        ]
+
+
+class Exam(models.Model):
+    exam_name = models.CharField(max_length=255)
+    exam_short_name = models.CharField(max_length=50, null=True, blank=True)
+    super_parent_id = models.IntegerField()
+    instance_year = models.IntegerField()  
+    status = models.CharField(max_length=20)
+
+    class Meta:
+        db_table = 'exams'
+        indexes = [
+            models.Index(fields=['exam_name', 'exam_short_name']),
+            models.Index(fields=['instance_year']), 
+        ]
+
+    def __str__(self):
+        return self.exam_short_name or self.exam_name
+
+
+class CollegeCourseExam(models.Model):
+    college_course = models.ForeignKey(
+        'Course', 
+        on_delete=models.CASCADE, 
+        related_name='exams', 
+        db_column='collegecourse_id',
+        db_index=True
+    )
+    exam = models.ForeignKey(
+        'Exam', 
+        on_delete=models.CASCADE, 
+        related_name='college_courses', 
+        db_column='exam_id',  
+        db_index=True
+    )
+
+    class Meta:
+        db_table = 'colleges_courses_exam'
+        indexes = [
+            models.Index(fields=['college_course', 'exam']),
+        ]
+
+
+class CourseApprovalAccrediation(models.Model):
+    course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='approvals', db_index=True)
+    value = models.ForeignKey('ApprovalsAccrediations', on_delete=models.CASCADE,db_column='value')
+    type = models.CharField(max_length=50)  
+    class Meta:
+        db_table = 'course_approval_accrediations'
+        indexes = [
+            models.Index(fields=['course', 'type']),
+        ]
+
+
+
+class CutoffData(models.Model):
+    college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
+    college_course = models.ForeignKey('Course', on_delete=models.CASCADE, db_index=True)
+    round = models.CharField(max_length=255)
+    opening_rank = models.FloatField()  
+    closing_rank = models.FloatField() 
+    category_of_admission = models.CharField(max_length=10,default=1)  
+    caste_id = models.CharField(max_length=10, null=True, blank=True) 
+    year = models.IntegerField()  
+    exam_sub_exam_id = models.IntegerField()  
+    branch_id = models.IntegerField()  
+
+    class Meta:
+        db_table = 'cutoff_data' 
+        indexes = [
+            models.Index(fields=['college', 'college_course']),
+            models.Index(fields=['category_of_admission']),
+            models.Index(fields=['round']),
+            models.Index(fields=['year']),
+            models.Index(fields=['exam_sub_exam_id']),
+            models.Index(fields=['branch_id']),
+        ]
+
+    def __str__(self):
+        return f"Cutoff Data for {self.college.name} - {self.college_course.course_name} ({self.round})"
+
+
 
