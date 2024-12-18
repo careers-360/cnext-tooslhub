@@ -45,12 +45,12 @@ class RpSmartRegistration(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     field = models.IntegerField(null=True, blank=True)
-    peak_session = models.BooleanField(default=False)
-    non_peak_session = models.BooleanField(default=False)
+    peak_season = models.BooleanField(default=False)
+    non_peak_season = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
@@ -127,7 +127,7 @@ class RpContentSection(models.Model):
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = "cnext_rp_content_section"
+        db_table = "cnext_rp_content_section" #TODO change the table and model name
         verbose_name = "Content Section"
         verbose_name_plural = "Content Sections"
 
@@ -197,12 +197,25 @@ class CnextRpVariationFactor(models.Model):
         verbose_name_plural = "Cnext RP Variation Factors"
 
 class CnextRpSession(models.Model):
+
+    DIFFICULTY_ENUM = (
+        (1, 'Easy'),
+        (2, 'Moderate'),
+        (3, 'Hard'),
+    )
+
+    SHIFT_ENUM = (
+        (1, 'Morning'),
+        (2, 'Afternoon'),
+        (3, 'Evening'),
+    )
+    
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     session_date = models.DateTimeField(null=True, blank=True)
-    session_shift = models.IntegerField(null=True, blank=True)
-    difficulty = models.IntegerField(null=True, blank=True)
+    session_shift = models.IntegerField(choices=SHIFT_ENUM, null=True, blank=True)
+    difficulty = models.IntegerField(choices=DIFFICULTY_ENUM, null=True, blank=True)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(null=True, blank=True)
     created_by = models.IntegerField(null=True, blank=True)
