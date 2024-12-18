@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Max
 from datetime import datetime, timedelta
-from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor
+from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
 
@@ -412,6 +412,47 @@ class RPCmsHelper:
         }
         return True, final_output
 
+    def _get_custom_mean_sd_data(self, product_id, year):
+        if not product_id:
+            return False, "Missing arguments"  
+
+        if year:
+            year = int(year)
+    
+        session_data = {
+            "product_id": product_id,
+            "year": year,
+            "count": 0,
+            "custom_mean_sd_data": []
+        }
+        # Fetch student appeared data from database
+        rp_mean_sd_data = RpMeanSd.objects.filter(product_id=product_id, status=1)
+        if year:
+            rp_mean_sd_year_data = list(rp_mean_sd_data.filter(year=year).values("id", "product_id", "year", "input_flow_type",
+                                                                                  "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "input_flow_type__input_process_type"))
+            if rp_mean_sd_year_data:
+                session_data["year"] = year
+                session_data["count"] = len(rp_mean_sd_year_data) 
+                session_data["custom_mean_sd_data"] = rp_mean_sd_year_data 
+        
+        if not session_data["custom_mean_sd_data"]:
+            rp_max_year = rp_mean_sd_data.aggregate(Max('year'))['year__max']
+            rp_mean_sd_data = list(rp_mean_sd_data.filter(year=rp_max_year).values("id", "product_id", "year", "input_flow_type",
+                                                                                    "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "input_flow_type__input_process_type"))
+            if rp_mean_sd_data:
+                session_data["year"] = rp_max_year 
+                session_data["count"] = len(rp_mean_sd_data) 
+                session_data["custom_mean_sd_data"] = rp_mean_sd_data
+
+        for item in session_data["custom_mean_sd_data"]:
+            item["input_flow_type_name"] = item["input_flow_type__input_process_type"] if item.get("input_flow_type__input_process_type") else ""
+            for key, val in item.items():
+                if key in  ["sheet_mean", "sheet_sd", "admin_mean", "admin_sd"]:
+                    item[key] = str(val)
+
+        return True, session_data
+
+
 
 class CommonDropDownHelper:
 
@@ -427,8 +468,21 @@ class CommonDropDownHelper:
         
         if field_name == "difficulty":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
+
         elif field_name == "session_shift":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
+
+        elif field_name == "preset_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
+
+        elif field_name == "input_flow_type":
+            master_result_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type"))
+            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+
+        elif field_name == "result_flow_type":
+            master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_process_type"))
+            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+
         else:
             dropdown_data["message"] = "Invalid field name"
 
