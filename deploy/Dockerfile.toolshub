@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apt-get update && apt-get install -y locales
+RUN locale-gen en_IN.UTF-8
+
 # Configure project
 WORKDIR /home/ubuntu/main/cnext-toolshub
 COPY requirements.txt /home/ubuntu/main/cnext-toolshub/requirements.txt
