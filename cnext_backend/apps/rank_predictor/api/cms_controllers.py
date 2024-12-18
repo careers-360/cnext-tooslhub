@@ -113,6 +113,9 @@ class CommonDropDownAPI(APIView):
     def get(self, request, version, **kwargs):
         field_name = request.GET.get('field_name')
         selected_id = request.GET.get('selected_id')
+        limit = request.GET.get('limit')
+        offset = request.GET.get('offset')
+        page = request.GET.get('page')
         q = request.GET.get('q','')
 
         if not field_name:
@@ -125,7 +128,7 @@ class CommonDropDownAPI(APIView):
                 selected_id = int(selected_id)
     
         # Fetch common dropdown data from database and return it to client.
-        cms_helper = CommonDropDownHelper()
+        cms_helper = CommonDropDownHelper(offset=offset, page=page, limit=limit)
         resp = cms_helper._get_dropdown_list(field_name=field_name, selected_id=selected_id,q=q)
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     
