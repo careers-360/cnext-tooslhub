@@ -177,14 +177,22 @@ class RpVariationFactor(models.Model):
 
 
 class CnextRpVariationFactor(models.Model):
+
+    PRESET_TYPE_ENUM = (
+        (1, "Excellent"), 
+        (2, "Good"), 
+        (3, "Bad"), 
+        (4, "Very Bad")
+    )
+
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
-    result_flow_type = models.IntegerField(null=True, blank=True)
+    result_flow_type = models.ForeignKey(RpResultFlowMaster, db_column="result_flow_type", on_delete=models.DO_NOTHING, default=None)
     lower_val = models.IntegerField(null=True, blank=True)
     upper_val = models.IntegerField(null=True, blank=True)
     min_factor = models.FloatField(null=True, blank=True)
     max_factor = models.FloatField(null=True, blank=True)
-    preset_type = models.IntegerField(null=True, blank=True)
+    preset_type = models.IntegerField(choices=PRESET_TYPE_ENUM, null=True, blank=True)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(null=True, blank=True)
     created_by = models.IntegerField(null=True, blank=True)

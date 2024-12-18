@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Max
 from datetime import datetime, timedelta
-from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession
+from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
 
@@ -279,7 +279,7 @@ class RPCmsHelper:
         # Update records
         for row_ in to_update:
             row_id = row_.id
-            session_date = rp_session_mapping[row_id].get("session_date") #datetime.strptime(row_["session_date"], '%Y-%m-%d').date()
+            session_date = rp_session_mapping[row_id].get("session_date")
             session_shift = rp_session_mapping[row_id].get("session_shift")
             difficulty = rp_session_mapping[row_id].get("difficulty")
             if not session_date or not session_shift or not difficulty:
@@ -306,6 +306,104 @@ class RPCmsHelper:
             return datetime.strptime(str_to_datetime, '%Y-%m-%d') + timedelta(hours=6, minutes=31)
         except ValueError:
             return None
+        
+    def _get_variation_factor_data(self, product_id):
+        if not product_id:
+            return False, "Missing arguments"   
+            
+        vf_data = {
+            "product_id": product_id,
+            "count": 0,
+            "variation_factor_data": []
+        }
+        # Fetch variation factor data from database
+        rp_var_f_data = list(CnextRpVariationFactor.objects.filter(product_id=product_id, status=1)
+                             .values("id", "product_id", "result_flow_type", "result_flow_type__result_process_type", 
+                                     "lower_val", "upper_val", "min_factor", "max_factor", "preset_type"))
+        if rp_var_f_data:
+            vf_data["count"] = len(rp_var_f_data) 
+            vf_data["variation_factor_data"] = rp_var_f_data 
+
+        preset_type_choices = dict(CnextRpVariationFactor.PRESET_TYPE_ENUM)
+        for item in vf_data["variation_factor_data"]:
+            item["result_flow_type_name"] = item.pop("result_flow_type__result_process_type", "")
+            item["preset_type_name"] = preset_type_choices.get(item["preset_type"]) if item.get("preset_type") else ""
+            for key, val in item.items():
+                if key in  ["lower_val", "upper_val", "min_factor", "max_factor"]:
+                    item[key] = str(val)
+
+        return vf_data
+    
+    def _add_variation_factor_data(self, var_factor_data, product_id):
+        
+        if not product_id or not isinstance(var_factor_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_session_ids = list(CnextRpVariationFactor.objects.filter(product_id=product_id).values_list("id",flat=True))
+        incomming_ids = [row_["id"] for row_ in var_factor_data if row_.get("id")]
+        rp_var_factor_mapping = {row_["id"]:row_ for row_ in var_factor_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = CnextRpVariationFactor.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_session_ids) - set(incomming_ids)
+        CnextRpVariationFactor.objects.filter(product_id=product_id, id__in=non_common_ids).delete()
+
+        # Create new records
+        for new_row in var_factor_data:
+
+            result_flow_type = new_row.get('result_flow_type')
+            lower_val = new_row.get('lower_val')
+            upper_val = new_row.get('upper_val')
+            min_factor = new_row.get('min_factor')
+            max_factor = new_row.get('max_factor')
+            preset_type = new_row.get('preset_type')
+
+            if not result_flow_type or not preset_type or lower_val is None or upper_val is None or min_factor is None or max_factor is None:
+                error.append({"row":new_row, "message": "Incorrect data"})
+                continue
+
+            if not new_row.get("id"):
+                to_create.append(CnextRpVariationFactor(product_id=product_id, result_flow_type_id=result_flow_type, lower_val=lower_val, 
+                                                        upper_val=upper_val, min_factor=min_factor, max_factor=max_factor, preset_type=preset_type))
+        
+        if to_create:
+            CnextRpVariationFactor.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+
+            result_flow_type = rp_var_factor_mapping[row_id].get('result_flow_type')
+            lower_val = rp_var_factor_mapping[row_id].get('lower_val')
+            upper_val = rp_var_factor_mapping[row_id].get('upper_val')
+            min_factor = rp_var_factor_mapping[row_id].get('min_factor')
+            max_factor = rp_var_factor_mapping[row_id].get('max_factor')
+            preset_type = rp_var_factor_mapping[row_id].get('preset_type')
+
+            if not result_flow_type or not preset_type or lower_val is None or upper_val is None or min_factor is None or max_factor is None:
+                error.append({"id":row_id, "message": "Incorrect data"})
+                continue
+
+            row_.result_flow_type_id = result_flow_type
+            row_.lower_val = lower_val
+            row_.upper_val = upper_val
+            row_.min_factor = min_factor
+            row_.max_factor = max_factor
+            row_.preset_type = preset_type
+
+        if incomming_ids:
+            CnextRpVariationFactor.objects.bulk_update(to_update, ["result_flow_type", "lower_val", "upper_val", "min_factor", "max_factor", "preset_type"])
+        
+        final_output = {
+            "message": "Successfully created session",
+            "error": error,
+            "student_appeared_data": var_factor_data,
+            "count": len(var_factor_data) - len(error)
+        }
+        return True, final_output
 
 
 class CommonDropDownHelper:
