@@ -1,5 +1,7 @@
 from django.db import models
 from django.utils import timezone
+def upload_to(instance, filename):
+    return 'tools/images/{filename}'.format(filename=filename)
 
 class RpMeritSheet(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
@@ -118,8 +120,8 @@ class RpContentSection(models.Model):
     product_type = models.IntegerField(null=True, blank=True)
     heading = models.CharField(max_length=255, null=True, blank=True)
     content = models.CharField(max_length=255, null=True, blank=True)
-    image_web = models.CharField(max_length=255, null=True, blank=True)
-    image_wap = models.CharField(max_length=255, null=True, blank=True)
+    image_web = models.ImageField(upload_to = upload_to, blank=True, null=True)
+    image_wap = models.ImageField(upload_to = upload_to, blank=True, null=True)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)

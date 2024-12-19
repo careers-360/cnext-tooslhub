@@ -3,7 +3,7 @@ import re, time, os
 import threading
 from datetime import datetime as t
 from django.db.models import F, Q
-from rank_predictor.models import RpSmartRegistration
+from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
 from tools.models import CPProductCampaign, UrlAlias, UrlMetaPatterns
 from rest_framework.pagination import PageNumberPagination
@@ -11,6 +11,7 @@ from django.utils.text import slugify
 from utils.helpers.response import SuccessResponse,ErrorResponse
 from rest_framework import status
 from utils.helpers.choices import FIELD_TYPE, TOOL_TYPE_INTEGER
+import json
 
 class UrlAliasCreation():
 
@@ -306,3 +307,125 @@ class ToolsHelper():
                 meta_pattern.updated = self.current_timestamp
                 meta_pattern.save()
 
+    def get_input_page_detail_data(self, pk):
+        data = CPProductCampaign.objects.filter(pk=pk).values(
+            'id', 'display_name_type', 'custom_exam_name', 'custom_flow_type', 
+            'custom_year', 'listing_desc','exam_other_content', 'header_section'
+        ).first()
+        
+        if data:
+            header_section = data.get('header_section')
+            if header_section:
+                try:
+                    if isinstance(header_section, str):
+                        header_section = json.loads(header_section)
+                except json.JSONDecodeError:
+                    header_section = []
+                header_section = [item['value'] for item in header_section if isinstance(item, dict) and 'value' in item]
+            data['header_section'] = header_section
+        return data
+    
+    def edit_input_page_detail(self, *args, **kwargs):
+        request_data = kwargs.get('request_data')
+        instance = kwargs.get('instance')
+
+        update_data = {}
+        update_data['listing_desc'] = request_data.get('listing_description')
+        update_data['exam_other_content'] = request_data.get('exam_other_content')
+        if request_data.get('display_name_type') == 1:
+            update_data['alias'] = request_data.get('alias')
+        else:
+            custom_exam_name = request_data.get('custom_exam_name')
+            custom_flow_type = request_data.get('custom_flow_type')
+            custom_year = request_data.get('custom_year')
+            update_data.update({
+                'alias': f"{custom_exam_name} {custom_flow_type} {custom_year}",
+                'custom_exam_name': custom_exam_name,
+                'custom_flow_type': custom_flow_type,
+                'custom_year': custom_year,
+            })
+
+        incoming_header_section = request_data.get('header_section', [])
+        
+        if isinstance(incoming_header_section, str):
+            incoming_header_section = json.loads(incoming_header_section)
+
+        formatted_incoming_header_section = [{"value": item} if isinstance(item, str) else item for item in incoming_header_section]
+        update_data['header_section'] = formatted_incoming_header_section
+        CPProductCampaign.objects.filter(id=instance.id).update(**update_data)
+        return "Ok"
+    
+    def get_tool_content_data(self, pk):
+        image_url = os.getenv('CAREERS_BASE_IMAGES_URL')
+        data = RpContentSection.objects.filter(product_id = pk).values('id','heading','content','image_web','image_wap')
+        return [
+                {
+                    'id': item['id'],
+                    'heading': item['heading'],
+                    'content': item['content'],
+                    'image_web': f"{image_url}{item['image_web']}" if item['image_web'] else None,
+                    'image_wap': f"{image_url}{item['image_wap']}" if item['image_wap'] else None
+                }
+                for item in data
+            ]
+
+    def edit_tool_content(self, *args, **kwargs):
+        request_data = kwargs.get('request_data')
+        instance = kwargs.get('instance')
+        img_data = kwargs.get('img_data')
+        product_id = instance.id
+        try:
+            existing_sections = RpContentSection.objects.filter(product_id=product_id)
+            existing_ids = set(existing_sections.values_list('id', flat=True))
+            incoming_ids = set()
+            updated_sections = []
+
+            for index, item in enumerate(request_data):
+                section_id = item.get('id')
+                incoming_ids.add(section_id)
+
+                image_web = img_data.get(f'image_web_{index}')
+                image_wap = img_data.get(f'image_wap_{index}')
+
+                if isinstance(image_web, list) and image_web:
+                    image_web = image_web[0]
+                if isinstance(image_wap, list) and image_wap:
+                    image_wap = image_wap[0]
+
+                if section_id:
+                    try:
+                        content_section = RpContentSection.objects.get(id=section_id)
+                        content_section.heading = item.get('heading', content_section.heading)
+                        content_section.content = item.get('content', content_section.content)
+                        if image_web:
+                            content_section.image_web = image_web
+                        if image_wap:
+                            content_section.image_wap = image_wap
+                        content_section.save()
+
+                        updated_sections.append({
+                            "id": content_section.id,
+                            "heading": content_section.heading,
+                            "content": content_section.content,
+                            "image_web": content_section.image_web.url if content_section.image_web else None,
+                            "image_wap": content_section.image_wap.url if content_section.image_wap else None
+                        })
+                    except RpContentSection.DoesNotExist:
+                        return {"message": f"Content section with ID {section_id} does not exist"}
+
+                else:
+                    content_section = RpContentSection.objects.create(
+                        product_id=product_id,
+                        heading=item.get('heading'),
+                        content=item.get('content'),
+                        image_web=image_web,
+                        image_wap=image_wap
+                    )
+
+            ids_to_delete = existing_ids - incoming_ids
+            RpContentSection.objects.filter(id__in=ids_to_delete).delete()
+
+            return {"message": "OK"}
+
+        except Exception as e:
+            return {"message": "An error occurred", "error": str(e)}
