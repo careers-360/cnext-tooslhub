@@ -137,8 +137,7 @@ class DropdownService:
 
        
         courses = CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
-        for course in courses:
-            course['domain_id'] = course.pop('degree_domain')  
+        
         return courses
 
 
