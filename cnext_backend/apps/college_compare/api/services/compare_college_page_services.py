@@ -123,7 +123,7 @@ class DropdownService:
         Returns:
             List[Dict]: A list of dictionaries containing course details.
         """
-        cache_key = CacheHelper.get_cache_key("courses", college_id, degree_id, prefix="dropdown")
+        cache_key = CacheHelper.get_cache_key("courses_v2", college_id, degree_id, prefix="dropdown")
 
         def fetch_data():
            
@@ -137,8 +137,9 @@ class DropdownService:
 
        
         courses = CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
-        for course in courses:
-            course['domain_id'] = course.pop('degree_domain')  
+        # for course in courses:
+        #     course['domain_id'] = course.pop('degree_domain')  
+      
         return courses
 
 
