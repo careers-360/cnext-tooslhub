@@ -1,7 +1,8 @@
 from django.conf import settings
-from django.db.models import Max
+from django.db.models import Max,F
 from datetime import datetime, timedelta
-from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, STUDENT_TYPE
+from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
 
@@ -203,54 +204,57 @@ class RPCmsHelper:
 
         return False, "Failed to delete, Incorrect flow type"
 
-    def _get_student_appeared_data(self, product_id, year):
+    def _get_exam_session_data(self, product_id, year):
+        if not product_id:
+            return False, "Missing arguments"  
+
         if year:
-            year = int(year) 
+            year = int(year)
     
-        student_data = {
+        session_data = {
             "product_id": product_id,
             "year": year,
             "count": 0,
-            "student_appeared_data": []
+            "exam_session_data": []
         }
         # Fetch student appeared data from database
         rp_session_data = CnextRpSession.objects.filter(product_id=product_id, status=1)
         if year:
             rp_session_year_data = list(rp_session_data.filter(year=year).values("id", "product_id", "year", "session_date", "session_shift", "difficulty"))
             if rp_session_year_data:
-                student_data["year"] = year
-                student_data["count"] = len(rp_session_year_data) 
-                student_data["student_appeared_data"] = rp_session_year_data 
+                session_data["year"] = year
+                session_data["count"] = len(rp_session_year_data) 
+                session_data["exam_session_data"] = rp_session_year_data 
         
-        if not student_data["student_appeared_data"]:
+        if not session_data["exam_session_data"]:
             rp_max_year = rp_session_data.aggregate(Max('year'))['year__max']
             rp_session_data = list(rp_session_data.filter(year=rp_max_year).values("id", "product_id", "year", "session_date", "session_shift", "difficulty"))
             if rp_session_data:
-                student_data["year"] = rp_max_year 
-                student_data["count"] = len(rp_session_data) 
-                student_data["student_appeared_data"] = rp_session_data
+                session_data["year"] = rp_max_year 
+                session_data["count"] = len(rp_session_data) 
+                session_data["exam_session_data"] = rp_session_data
 
         shift_choices = dict(CnextRpSession.SHIFT_ENUM)
         difficulty_choices = dict(CnextRpSession.DIFFICULTY_ENUM)
 
-        for item in student_data["student_appeared_data"]:
+        for item in session_data["exam_session_data"]:
             item["session_shift_name"] = shift_choices.get(item["session_shift"]) if item.get("session_shift") else ""
             item["difficulty_name"] = difficulty_choices.get(item["difficulty"]) if item.get("difficulty") else ""
             item["session_date"] = item["session_date"].strftime("%Y-%m-%d") if item.get("session_date") else None
 
-        return student_data
+        return True, session_data
     
-    def _add_student_appeared_data(self, student_data, product_id, year):
+    def _add_exam_session_data(self, uid, session_data, product_id, year):
         
         if not year:
             year = datetime.today().year
         
-        if not product_id or not year or not isinstance(student_data, list):
+        if not product_id or not uid or not year or not isinstance(session_data, list):
             return False, "Missing arguments or Incorrect data type"
         
         rp_session_ids = list(CnextRpSession.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
-        incomming_ids = [row_["id"] for row_ in student_data if row_.get("id")]
-        rp_session_mapping = {row_["id"]:row_ for row_ in student_data if row_.get("id")}
+        incomming_ids = [row_["id"] for row_ in session_data if row_.get("id")]
+        rp_session_mapping = {row_["id"]:row_ for row_ in session_data if row_.get("id")}
 
         error = []
         to_create = []
@@ -261,7 +265,7 @@ class RPCmsHelper:
         CnextRpSession.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
         # Create new records
-        for new_row in student_data:
+        for new_row in session_data:
             session_date = self.convert_str_to_datetime(new_row.get('session_date'))
             session_shift = new_row.get('session_shift')
             difficulty = new_row.get('difficulty')
@@ -271,7 +275,8 @@ class RPCmsHelper:
                 continue
 
             if not new_row.get("id"):
-                to_create.append(CnextRpSession(product_id=product_id, year=year, session_date=session_date, session_shift=session_shift, difficulty=difficulty))
+                to_create.append(CnextRpSession(product_id=product_id, year=year, session_date=session_date, session_shift=session_shift, 
+                                                difficulty=difficulty, created_by=uid, updated_by=uid))
         
         if to_create:
             CnextRpSession.objects.bulk_create(to_create)
@@ -279,7 +284,7 @@ class RPCmsHelper:
         # Update records
         for row_ in to_update:
             row_id = row_.id
-            session_date = rp_session_mapping[row_id].get("session_date") #datetime.strptime(row_["session_date"], '%Y-%m-%d').date()
+            session_date = rp_session_mapping[row_id].get("session_date")
             session_shift = rp_session_mapping[row_id].get("session_shift")
             difficulty = rp_session_mapping[row_id].get("difficulty")
             if not session_date or not session_shift or not difficulty:
@@ -289,15 +294,16 @@ class RPCmsHelper:
             row_.session_date = self.convert_str_to_datetime(session_date)
             row_.session_shift = session_shift
             row_.difficulty = difficulty
+            row_.updated_by = uid
 
         if incomming_ids:
-            CnextRpSession.objects.bulk_update(to_update, ["session_date", "session_shift", "difficulty"])
+            CnextRpSession.objects.bulk_update(to_update, ["session_date", "session_shift", "difficulty", "updated_by"])
         
         final_output = {
             "message": "Successfully created session",
             "error": error,
-            "student_appeared_data": student_data,
-            "count": len(student_data) - len(error)
+            "session_data": session_data,
+            "count": len(session_data) - len(error)
         }
         return True, final_output
     
@@ -305,15 +311,335 @@ class RPCmsHelper:
         try:
             return datetime.strptime(str_to_datetime, '%Y-%m-%d') + timedelta(hours=6, minutes=31)
         except ValueError:
-            return None
+            return None        
+        
+    def _get_student_appeared_data_(self,product_id,year): #TODO change function name 
+        if year:
+            year = int(year) 
+    
+        data = {
+            "product_id": int(product_id),
+            "year": year,
+            "count": 0,
+            "student_appeared_data": []
+        }
+         # Filter by product_id and year (if provided)
+        query = RPStudentAppeared.objects.filter(product_id=product_id,status=1).values('id','product_id', 'year', 'student_type', 'min_student', 'max_student', 'status', 'category', 'disability')
 
+        if year:
+            rp_students_appeared = list(query.filter(year=year))
+            if rp_students_appeared:
+                data['year'] = year
+                data["count"] = len(rp_students_appeared) 
+                data["student_appeared_data"] = rp_students_appeared 
+                return True, data
+
+        # If year is not provided, get the latest year dynamically
+        if not data["student_appeared_data"]:
+            latest_year = query.aggregate(latest_year=Max('year'))['latest_year']
+            rp_students_appeared = list(query.filter(year=latest_year))
+            if rp_students_appeared:
+                data["year"] = latest_year 
+                data["count"] = len(rp_students_appeared) 
+                data["student_appeared_data"] = rp_students_appeared  
+        return True, data
+
+    def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
+        if not year:
+            year = datetime.today().year
+        
+        if not product_id or not year or not isinstance(student_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_student_appeared = list(RPStudentAppeared.objects.filter(product_id=product_id, year=year).values_list('id', flat=True))
+        incomming_ids = [row_["id"] for row_ in student_data if row_.get("id")]
+        rp_student_appeared_mapping = {row_["id"]:row_ for row_ in student_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = RPStudentAppeared.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_student_appeared) - set(incomming_ids)
+        if non_common_ids:
+            RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+
+        fields = ['student_type','category', 'disability', 'min_student', 'max_student'] 
+
+        # category and diability are mandatory when student_type =    category_wise
+
+        # Create new records
+        for data in student_data:
+            #TODO
+            # if not session_date or not session_shift or not session_difficulty:
+            #     error.append({"row":new_row, "message": "Incorrect data"})
+            #     continue
+
+            if not data.get("id"):
+                to_create.append(
+                    RPStudentAppeared(product_id=product_id, year=year,created_by=user_id,updated_by=user_id, **data)
+                )
+        
+        if to_create:
+            RPStudentAppeared.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+            row_.student_type = rp_student_appeared_mapping[row_id].get('student_type')
+            row_.category = rp_student_appeared_mapping[row_id].get('category')
+            row_.disability = rp_student_appeared_mapping[row_id].get('disability')
+            row_.min_student = rp_student_appeared_mapping[row_id].get('min_student')
+            row_.max_student = rp_student_appeared_mapping[row_id].get('max_student')
+            row_.updated_by = user_id
+            #TODO
+            # if not all(row_.get(field) for field in required_fields):
+            #     error.append({"id": row_id, "message": "Incorrect data"})
+            #     continue
+
+        if incomming_ids:
+            RPStudentAppeared.objects.bulk_update(to_update, fields)
+        
+        final_output = {
+            "message": "Enteries successfully created",
+            "error": error,
+            "student_appeared_data": student_data,
+            "count": len(student_data) - len(error)
+        }
+        return True, final_output
+
+    def _get_variation_factor_data(self, product_id):
+        if not product_id:
+            return False, "Missing arguments"   
+            
+        vf_data = {
+            "product_id": product_id,
+            "count": 0,
+            "variation_factor_data": []
+        }
+        # Fetch variation factor data from database
+        rp_var_f_data = list(CnextRpVariationFactor.objects.filter(product_id=product_id, status=1)
+                             .values("id", "product_id", "result_flow_type", "result_flow_type__result_process_type", 
+                                     "lower_val", "upper_val", "min_factor", "max_factor", "preset_type"))
+        if rp_var_f_data:
+            vf_data["count"] = len(rp_var_f_data) 
+            vf_data["variation_factor_data"] = rp_var_f_data 
+
+        preset_type_choices = dict(CnextRpVariationFactor.PRESET_TYPE_ENUM)
+        for item in vf_data["variation_factor_data"]:
+            item["result_flow_type_name"] = item.pop("result_flow_type__result_process_type", "")
+            item["preset_type_name"] = preset_type_choices.get(item["preset_type"]) if item.get("preset_type") else ""
+            for key, val in item.items():
+                if key in  ["lower_val", "upper_val", "min_factor", "max_factor"]:
+                    item[key] = str(val)
+
+        return True, vf_data
+    
+    def _add_variation_factor_data(self, uid, var_factor_data, product_id):
+        
+        if not uid or not product_id or not isinstance(var_factor_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_session_ids = list(CnextRpVariationFactor.objects.filter(product_id=product_id).values_list("id",flat=True))
+        incomming_ids = [row_["id"] for row_ in var_factor_data if row_.get("id")]
+        rp_var_factor_mapping = {row_["id"]:row_ for row_ in var_factor_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = CnextRpVariationFactor.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_session_ids) - set(incomming_ids)
+        if non_common_ids:
+            CnextRpVariationFactor.objects.filter(product_id=product_id, id__in=non_common_ids).delete()
+
+        # Create new records
+        for new_row in var_factor_data:
+
+            result_flow_type = new_row.get('result_flow_type')
+            lower_val = new_row.get('lower_val')
+            upper_val = new_row.get('upper_val')
+            min_factor = new_row.get('min_factor')
+            max_factor = new_row.get('max_factor')
+            preset_type = new_row.get('preset_type')
+
+            if not result_flow_type or not preset_type or lower_val is None or upper_val is None or min_factor is None or max_factor is None:
+                error.append({"row":new_row, "message": "Incorrect data"})
+                continue
+
+            if not new_row.get("id"):
+                to_create.append(CnextRpVariationFactor(product_id=product_id, result_flow_type_id=result_flow_type, lower_val=lower_val, 
+                                                        upper_val=upper_val, min_factor=min_factor, max_factor=max_factor, preset_type=preset_type,
+                                                        created_by=uid, updated_by=uid))
+        
+        if to_create:
+            CnextRpVariationFactor.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+
+            result_flow_type = rp_var_factor_mapping[row_id].get('result_flow_type')
+            lower_val = rp_var_factor_mapping[row_id].get('lower_val')
+            upper_val = rp_var_factor_mapping[row_id].get('upper_val')
+            min_factor = rp_var_factor_mapping[row_id].get('min_factor')
+            max_factor = rp_var_factor_mapping[row_id].get('max_factor')
+            preset_type = rp_var_factor_mapping[row_id].get('preset_type')
+
+            if not result_flow_type or not preset_type or lower_val is None or upper_val is None or min_factor is None or max_factor is None:
+                error.append({"id":row_id, "message": "Incorrect data"})
+                continue
+
+            row_.result_flow_type_id = result_flow_type
+            row_.lower_val = lower_val
+            row_.upper_val = upper_val
+            row_.min_factor = min_factor
+            row_.max_factor = max_factor
+            row_.preset_type = preset_type
+            row_.updated_by = uid
+
+        if incomming_ids:
+            CnextRpVariationFactor.objects.bulk_update(to_update, ["result_flow_type", "lower_val", "upper_val", "min_factor", "max_factor", "preset_type", "updated_by"])
+        
+        final_output = {
+            "message": "Successfully created session",
+            "error": error,
+            "variation_factor_data": var_factor_data,
+            "count": len(var_factor_data) - len(error)
+        }
+        return True, final_output
+
+    def _get_custom_mean_sd_data(self, product_id, year):
+        if not product_id:
+            return False, "Missing arguments"  
+
+        if year:
+            year = int(year)
+    
+        session_data = {
+            "product_id": product_id,
+            "year": year,
+            "count": 0,
+            "custom_mean_sd_data": []
+        }
+        # Fetch student appeared data from database
+        rp_mean_sd_data = RpMeanSd.objects.filter(product_id=product_id, status=1)
+        if year:
+            rp_mean_sd_year_data = list(rp_mean_sd_data.filter(year=year).values("id", "product_id", "year", "input_flow_type",
+                                                                                  "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "input_flow_type__input_process_type"))
+            if rp_mean_sd_year_data:
+                session_data["year"] = year
+                session_data["count"] = len(rp_mean_sd_year_data) 
+                session_data["custom_mean_sd_data"] = rp_mean_sd_year_data 
+        
+        if not session_data["custom_mean_sd_data"]:
+            rp_max_year = rp_mean_sd_data.aggregate(Max('year'))['year__max']
+            rp_mean_sd_data = list(rp_mean_sd_data.filter(year=rp_max_year).values("id", "product_id", "year", "input_flow_type",
+                                                                                    "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "input_flow_type__input_process_type"))
+            if rp_mean_sd_data:
+                session_data["year"] = rp_max_year 
+                session_data["count"] = len(rp_mean_sd_data) 
+                session_data["custom_mean_sd_data"] = rp_mean_sd_data
+
+        for item in session_data["custom_mean_sd_data"]:
+            item["input_flow_type_name"] = item.pop("input_flow_type__input_process_type", "")
+            for key, val in item.items():
+                if key in  ["sheet_mean", "sheet_sd", "admin_mean", "admin_sd"]:
+                    item[key] = str(val) if val else ""
+
+        return True, session_data
+
+    def _add_custom_mean_sd_data(self, uid, custom_mean_sd_data, product_id, year):
+
+        #TODO : Re-Calculating Merit List’s Z-Scores on Editing Sheet Mean and SD
+        
+        if not year:
+            year = datetime.today().year
+        
+        if not product_id or not uid or not year or not isinstance(custom_mean_sd_data, list):
+            return False, "Missing arguments or Incorrect data type"
+        
+        rp_session_ids = list(RpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
+        incomming_ids = [row_["id"] for row_ in custom_mean_sd_data if row_.get("id")]
+        rp_session_mapping = {row_["id"]:row_ for row_ in custom_mean_sd_data if row_.get("id")}
+
+        error = []
+        to_create = []
+        to_update = RpMeanSd.objects.filter(id__in=incomming_ids)
+
+        # Delete non existing records
+        non_common_ids = set(rp_session_ids) - set(incomming_ids)
+        if non_common_ids:
+            RpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+
+        # Create new records
+        for new_row in custom_mean_sd_data:
+            input_flow_type = new_row.get('input_flow_type')
+            sheet_mean = new_row.get('sheet_mean')
+            sheet_sd = new_row.get('sheet_sd')
+            admin_mean = new_row.get('admin_mean')
+            admin_sd = new_row.get('admin_sd')
+
+            if not input_flow_type or sheet_mean is None or sheet_sd is None:
+                error.append({"row":new_row, "message": "Incorrect data"})
+                continue
+
+            if not new_row.get("id"):
+                if not admin_mean: admin_mean = None
+                if not admin_sd: admin_sd = None
+                to_create.append(RpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
+                                                admin_mean=admin_mean, admin_sd=admin_sd, created_by=uid, updated_by=uid))
+        
+        if to_create:
+            RpMeanSd.objects.bulk_create(to_create)
+
+        # Update records
+        for row_ in to_update:
+            row_id = row_.id
+
+            input_flow_type = rp_session_mapping[row_id].get('input_flow_type')
+            sheet_mean = rp_session_mapping[row_id].get('sheet_mean')
+            sheet_sd = rp_session_mapping[row_id].get('sheet_sd')
+            admin_mean = rp_session_mapping[row_id].get('admin_mean')
+            admin_sd = rp_session_mapping[row_id].get('admin_sd')
+
+            if not input_flow_type or sheet_mean is None or sheet_sd is None:
+                error.append({"id":row_id, "message": "Incorrect data"})
+                continue
+
+            if not admin_mean: admin_mean = None
+            if not admin_sd: admin_sd = None
+
+            row_.input_flow_type_id = input_flow_type
+            row_.sheet_mean = sheet_mean
+            row_.sheet_sd = sheet_sd
+            row_.admin_mean = admin_mean
+            row_.admin_sd = admin_sd
+            row_.updated_by = uid
+
+        if incomming_ids:
+            RpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
+        
+        final_output = {
+            "message": "Successfully created session",
+            "error": error,
+            "custom_mean_sd_data": custom_mean_sd_data,
+            "count": len(custom_mean_sd_data) - len(error)
+        }
+        return True, final_output
+    
 
 class CommonDropDownHelper:
 
-    def __init__(self):
-        pass
+    def __init__(self, limit, page, offset=None):
+        self.limit = int(limit) if limit else 20
+        self.offset = int(offset) if offset else 0
+        self.page = int(page) if page else 1
+        if not self.offset:
+            self.offset = (self.page - 1) * self.limit
 
-    def _get_dropdown_list(self, field_name, selected_id=None):
+    def _get_dropdown_list(self, field_name, q, selected_id=None):
+        internal_limit = None
         dropdown_data = {
             "field": field_name,
             "message": "",
@@ -322,9 +648,42 @@ class CommonDropDownHelper:
         
         if field_name == "difficulty":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
+
         elif field_name == "session_shift":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
+
+        elif field_name == "preset_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
+
+        elif field_name == "input_flow_type":
+            master_result_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type"))
+            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+
+        elif field_name == "result_flow_type":
+            master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_process_type"))
+            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+
+        elif field_name == "student_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
+
+        elif field_name == "category":
+            dropdown_data["dropdown"] = CASTE_CATEGORY
+
+        elif field_name == "disability":
+            dropdown_data["dropdown"] = DISABILITY_CATEGORY
+
+        elif field_name == "year":
+            year_range = list(range(2020, 2031))
+            dropdown_data["dropdown"] = [{"id": year, "value": year} for year in year_range]
+
+        elif field_name == "tools_name":
+            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
+            dropdown_data["dropdown"] = tools
+            dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
         else:
             dropdown_data["message"] = "Invalid field name"
+
+        if not internal_limit and dropdown_data["dropdown"]:
+            dropdown_data["dropdown"] = dropdown_data["dropdown"][self.offset:self.offset + self.limit]
 
         return dropdown_data
