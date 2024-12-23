@@ -3,7 +3,7 @@ from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
 from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
-from tools.models import CPProductCampaign, CollegeCourse, CPFeedback, Exam
+from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
 
@@ -358,7 +358,20 @@ class RPCmsHelper:
             if rp_students_appeared:
                 data["year"] = latest_year 
                 data["count"] = len(rp_students_appeared) 
-                data["student_appeared_data"] = rp_students_appeared  
+                data["student_appeared_data"] = rp_students_appeared 
+
+
+        cast_category_dict = dict(CasteCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+        disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+
+        for student_data in rp_students_appeared:
+            student_data['student_type'] = STUDENT_TYPE.get(student_data.get('student_type'))
+            student_data['category'] = cast_category_dict.get(student_data.get('category'))
+            student_data['disability'] = disability_category_dict.get(student_data.get('disability'))
+
+        data["student_appeared_data"] = rp_students_appeared 
+
+        
         return True, data
 
     def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
@@ -381,7 +394,7 @@ class RPCmsHelper:
         if non_common_ids:
             RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
-        fields = ['student_type','category', 'disability', 'min_student', 'max_student'] 
+        fields = ['student_type','category', 'disability', 'min_student', 'max_student','updated_by'] 
 
         # category and diability are mandatory when student_type =    category_wise
 

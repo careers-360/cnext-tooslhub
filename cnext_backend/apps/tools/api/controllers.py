@@ -193,6 +193,7 @@ class CMSToolsFaqAPI(APIView):
         faqs = request.data.get('faqs', [])  # List of ToolsFAQ dictionaries
         product_id = request.data.get('product_id')  # List of ToolsFAQ dictionaries
         product_type = request.data.get('product_type')  # List of ToolsFAQ dictionaries
+        user_id = request.data.get('user_id')  # List of ToolsFAQ dictionaries
 
         if not product_id:
             return CustomErrorResponse({"error": 'Product id needed'}, status=status.HTTP_400_BAD_REQUEST)
@@ -202,10 +203,7 @@ class CMSToolsFaqAPI(APIView):
         
         instances = ToolsFAQ.objects.filter(product_id=product_id)
         
-        user_id = request.user.id
         existing_ids = set(instances.values_list('id', flat=True))
-
-        print("this is my existing_ids : ", existing_ids)
 
         for faq in faqs:
             question_data = {
@@ -218,11 +216,11 @@ class CMSToolsFaqAPI(APIView):
             }
             question_id = faq.get('id', None)
             if question_id:
-                instances.filter(id=question_id).update(**question_data)
+                instances.filter(id=question_id).update(**question_data) #TODO bulk update
                 existing_ids.remove(question_id)
             else:
                 question_data['created_by'] = user_id
-                new_question = ToolsFAQ.objects.create(**question_data)
+                new_question = ToolsFAQ.objects.create(**question_data) #TODO bulk create
 
         if len(existing_ids):
             instances.filter(id__in=existing_ids).delete()
