@@ -1,11 +1,29 @@
 from django.conf import settings
-from django.db.models import Max,F
+from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
-from django.db.models import F, Q
+from rest_framework.pagination import PageNumberPagination
+
+
+class CustomPaginator(PageNumberPagination):
+    page_size = 10
+
+    def get_paginated_response(self, data):
+        return {
+            'lastPage': self.page.paginator.num_pages,
+            'itemsOnPage': self.page_size,
+            'current': self.page.number,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'totalRows': self.page.paginator.count,
+            'results': data
+        }
+
+
+
 
 class InputPageStaticHelper:
 
@@ -717,6 +735,26 @@ class RPCmsHelper:
 
         return "Ok"
 
+    def get_input_form_list(self,request):
+
+        items_on_page = request.query_params.get('page_size',10)
+        product_id = request.query_params.get('product_id')
+        queryset = RpFormField.objects.values(
+            'id', 'display_name', 'field_type', 'input_flow_type', 'min_val', 'max_val', 'mapped_process_type', 'mandatory', 'weight', 'status'
+        ).order_by('weight')
+
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+
+        paginator = CustomPaginator()
+        paginator.page_size = items_on_page
+        paginated_results = paginator.paginate_queryset(queryset, request)
+        for item in paginated_results:
+            if item:
+                item['field_name'] = FIELD_TYPE.get(item['field_type'])
+
+        return paginator.get_paginated_response(paginated_results)
+    
 class CommonDropDownHelper:
 
     def __init__(self, limit, page, offset=None):
