@@ -73,8 +73,6 @@ class UrlAliasCreation():
             new_alias.save()
 
     def seo_url_alias_creation(self, url_alias=None, instance=None, **kwargs):
-        print("hereeee")
-        print(instance,"--------------->>>>>>>>>>>")
         if kwargs.get('type'):
             url_meta_type = kwargs.get('type')
 
@@ -238,41 +236,42 @@ class ToolsHelper():
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
             obj = serializer.save()
-            product_id = obj.id
-            created_by = obj.created_by
-            updated_by = obj.updated_by
+            if smart_registration:
+                product_id = obj.id
+                created_by = obj.created_by
+                updated_by = obj.updated_by
 
-            existing_records = RpSmartRegistration.objects.filter(product_id=product_id)
-            existing_lookup = {record.field: record for record in existing_records}
+                existing_records = RpSmartRegistration.objects.filter(product_id=product_id)
+                existing_lookup = {record.field: record for record in existing_records}
 
-            for data in smart_registration:
-                field = data.get('id')
-                peak_season = data.get('peak_season')
-                non_peak_season = data.get('non_peak_season')
+                for data in smart_registration:
+                    field = data.get('id')
+                    peak_season = data.get('peak_season')
+                    non_peak_season = data.get('non_peak_season')
 
-                if field in existing_lookup:
-                    # Prepare for bulk update
-                    existing_record = existing_lookup[field]
-                    existing_record.peak_season = peak_season
-                    existing_record.non_peak_season = non_peak_season
-                    existing_record.updated_by = updated_by
-                    bulk_update_data.append(existing_record)
-                else:
-                    # Prepare for bulk creation
-                    bulk_create_data.append(RpSmartRegistration(
-                        field=field,
-                        peak_season=peak_season,
-                        non_peak_season=non_peak_season,
-                        product_id=product_id,
-                        created_by=created_by,
-                        updated_by=updated_by
-                    ))
+                    if field in existing_lookup:
+                        # Prepare for bulk update
+                        existing_record = existing_lookup[field]
+                        existing_record.peak_season = peak_season
+                        existing_record.non_peak_season = non_peak_season
+                        existing_record.updated_by = updated_by
+                        bulk_update_data.append(existing_record)
+                    else:
+                        # Prepare for bulk creation
+                        bulk_create_data.append(RpSmartRegistration(
+                            field=field,
+                            peak_season=peak_season,
+                            non_peak_season=non_peak_season,
+                            product_id=product_id,
+                            created_by=created_by,
+                            updated_by=updated_by
+                        ))
 
-            if bulk_update_data:
-                RpSmartRegistration.objects.bulk_update(bulk_update_data, ['peak_season', 'non_peak_season', 'updated_by'])
+                if bulk_update_data:
+                    RpSmartRegistration.objects.bulk_update(bulk_update_data, ['peak_season', 'non_peak_season', 'updated_by'])
 
-            if bulk_create_data:
-                RpSmartRegistration.objects.bulk_create(bulk_create_data)
+                if bulk_create_data:
+                    RpSmartRegistration.objects.bulk_create(bulk_create_data)
 
             self.prepare_meta_data(request_data,obj)
             thread = threading.Thread(target=self.prepare_meta_data, args=(request_data, obj))
@@ -283,6 +282,7 @@ class ToolsHelper():
     
     def prepare_meta_data(self, request_data, instance, **kwargs):
         url_alias = request_data.get('url_alias')
+        tool_type = request_data.get('type')
         page_title = request_data.get('page_title')
         meta_keywords = request_data.get('meta_keywords')
         meta_desc = request_data.get('meta_description')
