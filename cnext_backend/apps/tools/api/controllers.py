@@ -153,40 +153,8 @@ class CMSToolsFaqAPI(APIView):
 
         except Exception as e:
             return ErrorResponse({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+
     def post(self, request, version, *args, **kwargs):
-        faqs = request.data.get('faqs', [])  # List of ToolsFAQ dictionaries
-        product_id = request.data.get('product_id')  # List of ToolsFAQ dictionaries
-
-        if not product_id:
-            return CustomErrorResponse({"error": 'Product id needed'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not CPProductCampaign.objects.filter(id=product_id).exists():
-            return CustomErrorResponse({"error": 'Product does not exist'}, status=status.HTTP_404_NOT_FOUND)
-
-        user_id = request.user.id  # Assuming user authentication is enabled
-
-        for faq in faqs:
-            question = faq.get("question")
-            answer = faq.get("answer")
-            status = faq.get("status", True)
-
-            if not question or not answer:
-                return CustomErrorResponse({'error': 'Both question and answer are required'}, status=status.HTTP_400_BAD_REQUEST)
-           
-            else:  # Create new ToolsFAQ
-                ToolsFAQ.objects.create(
-                    product_id=product_id,
-                    question=question,
-                    answer=answer,
-                    status=status,
-                    created_by=user_id,
-                    updated_by=user_id
-                )
-        return SuccessResponse({"message": "FAQs updated successfully"}, status=200)
-
-
-    def put(self, request, version, *args, **kwargs):
         """
         Handles the creation, update, deletion of FAQs.
         """
@@ -306,7 +274,7 @@ class CMSToolsResultPageAPI(APIView):
             return ErrorResponse(e.__str__(), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
-    def put(self, request, version, format=None, **kwargs):
+    def post(self, request, version, format=None, **kwargs):
         try:
             pk = request.data.get('product_id')
             
@@ -317,7 +285,6 @@ class CMSToolsResultPageAPI(APIView):
             instance = CPProductCampaign.objects.get(id=pk)
             
             # Update fields
-            print("this is the data ", request.data)
             serializer = ToolBasicDetailSerializer(instance=instance,data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save(updated_by=request.user.id)
