@@ -84,7 +84,7 @@ class CPProductCampaign(models.Model):
     type = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     alias = models.CharField(max_length=100, blank=True, null=True, default=None)
-    # description = models.TextField(max_length=500, blank=True, null=True, default=None)
+    description = models.TextField(max_length=500, blank=True, null=True, default=None)
     # aakash_input_desc = FroalaField(max_length=10000000, null=True, blank=True,
     #                          options={'toolbarButtons': ['bold', 'insertTable', 'formatUL', 'insertLink', 'html', 'insertImage', 'insertVideo'],
     #                                   'quickInsertButtons': ['table', 'ul'], 'charCounterMax': 10000000})
@@ -184,6 +184,8 @@ class CPProductCampaign(models.Model):
     def save(self, *args, **kwargs):
         if self.alias is None:
             self.alias = ""
+        if self.description is None:
+            self.description = ""
         super().save(*args, **kwargs)
 
 class Domain(models.Model):
