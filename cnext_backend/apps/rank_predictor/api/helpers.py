@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db.models import Max,F
 from datetime import datetime, timedelta
 from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, STUDENT_TYPE
-from rank_predictor.models import RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
+from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
 from .static_mappings import RP_DEFAULT_FEEDBACK
 
@@ -627,7 +627,60 @@ class RPCmsHelper:
             "count": len(custom_mean_sd_data) - len(error)
         }
         return True, final_output
-    
+
+    def get_input_form_data(self, pk):
+        result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name')
+        input_process_type_dict = dict(RpInputFlowMaster.objects.all().values_list('id','input_process_type'))
+        for value in result:
+            if value['input_process_type']:
+                value['input_process_type'] = {'id':value['input_process_type'],
+                                               'label':input_process_type_dict.get(value['input_process_type'])}
+        return result
+
+    def create_input_form(self,*args, **kwargs):
+        bulk_create_data = []
+        bulk_update_data = []
+        delete_ids = []
+        request_data = kwargs.get('request_data')
+        product_id = kwargs.get('product_id')
+        existing_records = {record.id: record for record in kwargs.get('instance', [])}
+
+        for data in request_data:
+            record_id = data.get('id') 
+            submit_cta_name = data['submit_cta_name']
+            input_process_type = data['input_process_type']
+            process_type_toggle_label = data['process_type_toggle_label']
+
+            if record_id and record_id in existing_records:
+                if submit_cta_name is None and input_process_type is None and process_type_toggle_label is None:
+                    delete_ids.append(record_id)
+                else:
+                    record = existing_records[record_id]
+                    record.submit_cta_name = submit_cta_name
+                    record.input_process_type = input_process_type
+                    record.process_type_toggle_label = process_type_toggle_label
+                    bulk_update_data.append(record)
+            else:
+                # Create new record
+                bulk_create_data.append(CnextRpCreateInputForm(
+                    product_id=product_id,
+                    submit_cta_name=submit_cta_name,
+                    input_process_type=input_process_type,
+                    process_type_toggle_label=process_type_toggle_label
+                ))
+
+        if bulk_create_data:
+            CnextRpCreateInputForm.objects.bulk_create(bulk_create_data)
+
+        if bulk_update_data:
+            CnextRpCreateInputForm.objects.bulk_update(
+                bulk_update_data,
+                fields=['submit_cta_name', 'input_process_type', 'process_type_toggle_label']
+            )
+        if delete_ids:
+            CnextRpCreateInputForm.objects.filter(id__in=delete_ids).delete()
+
+        return "Ok"
 
 class CommonDropDownHelper:
 
