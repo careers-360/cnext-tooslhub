@@ -277,7 +277,8 @@ class CMSToolsResultPageAPI(APIView):
     def post(self, request, version, format=None, **kwargs):
         try:
             pk = request.data.get('product_id')
-            
+            user_id = request.data.get('user_id')
+                        
             if not pk:
                 return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -287,7 +288,7 @@ class CMSToolsResultPageAPI(APIView):
             # Update fields
             serializer = ToolBasicDetailSerializer(instance=instance,data=request.data, partial=True)
             if serializer.is_valid():
-                serializer.save(updated_by=request.user.id)
+                serializer.save(updated_by=user_id)
                 return SuccessResponse({"message": "Tool updated successfully"}, status=status.HTTP_200_OK)
             else:
                 return ErrorResponse({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
