@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from rank_predictor.models import RpFormField
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
@@ -272,3 +273,28 @@ class RPAppearedStudentsAPI(APIView):
             return SuccessResponse(data, status=status.HTTP_201_CREATED)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CreateForm(APIView):
+
+    def get(self, request, version, **kwargs):
+
+        id = request.GET.get('id')
+        RpFormField.objects.filter(id = id).values()
+        
+        pass
+
+
+    def post(self, request, version, **kwargs):
+
+        data = request.data
+        id = data.get('id')
+        product_id = data.get('product_id')
+        # TODO get user_id from token ?
+
+        if not product_id :
+            return CustomErrorResponse("Product is mandatory for update/create")
+        
+        cms_helper = RPCmsHelper()
+        resp, data = cms_helper._add_update_rp_form_data(id=id, data=data)
+        return SuccessResponse("Data Sucessfully created buddy !!!! ")

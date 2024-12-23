@@ -33,3 +33,5 @@ DISABILITY_CATEGORY = [
     {"id": disability.get("id"), "value": disability.get("name")}
     for disability in DisabilityCategory.objects.all().values("id", "name") #TODO do it using F in django
 ]
+
+RP_FIELD_TYPE = {1:"User Input", 2: "Application Number", 3 : "Category Dropdown", 4 : "Select List Dropdown" , 5 : "Radio Button" , 6 : "Date of Birth"}
