@@ -1,9 +1,9 @@
 from django.conf import settings
-from django.db.models import Max,F
+from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FIELD_TYPE, STUDENT_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
-from tools.models import CPProductCampaign, CollegeCourse, CPFeedback
+from tools.models import CPProductCampaign, CollegeCourse, CPFeedback, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
 
@@ -21,6 +21,8 @@ class CustomPaginator(PageNumberPagination):
             'totalRows': self.page.paginator.count,
             'results': data
         }
+
+
 
 
 class InputPageStaticHelper:
@@ -348,7 +350,6 @@ class RPCmsHelper:
                 data['year'] = year
                 data["count"] = len(rp_students_appeared) 
                 data["student_appeared_data"] = rp_students_appeared 
-                return True, data
 
         # If year is not provided, get the latest year dynamically
         if not data["student_appeared_data"]:
@@ -644,6 +645,42 @@ class RPCmsHelper:
         }
         return True, final_output
 
+    def check_rp_create_form_fields(self, id, data):
+        field_type = data.get('user_input')
+        if field_type == 1:  # "User Input"
+            mandatory_fields = ["input_flow_type", "display_name", "placeholder", "min_val", "max_val", "weight", "mandatory"]
+            needed_fields= ["error_message", "mapped_process_type", "status"]  
+        elif field_type == 2: # "Application Number"
+            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"]
+            needed_fields = ["mandatory", "status"]
+        elif field_type == 3: # "Category Dropdown"
+            mandatory_fields = ["display_name", "placeholder", "weight"] #TODO - "mapped_category" not in design 
+            needed_fields = ["mandatory", "status", "error_message", "mapped_process_type"]
+        elif field_type == 4: # "Select List Dropdown"
+            mandatory_fields = ["display_name", "placeholder", "weight"] #TODO - "List Option Data" not in design 
+            needed_fields = ["mandatory", "status", "error_message"]
+        elif field_type == 5: # "Radio Button"
+            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"] #TODO - "List Option Data" not in design 
+            needed_fields = ["mandatory", "status", "mapped_process_type"]
+        elif field_type == 6:  # "Date of Birth"
+            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"] #TODO - "List Option Data" not in design 
+            needed_fields = ["mandatory", "status", "mapped_process_type"]
+        
+        pass 
+    
+    def _add_update_rp_form_data(self, id, data):
+
+        if id:
+            RpFormField.objects.filter(id = id).update(**data)
+        else:
+            RpFormField.objects.create(**data)
+        
+        final_output = {
+            "message": "Successfully created session",
+            "error": "",
+            "count": ""
+        }
+        return True, final_output
     def get_input_form_data(self, pk):
         result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name')
         input_process_type_dict = dict(RpInputFlowMaster.objects.all().values_list('id','input_process_type'))
@@ -707,12 +744,11 @@ class RPCmsHelper:
         ).order_by('weight')
 
         if product_id:
-            query_set = query_set.filter(product_id=product_id)
-
+            queryset = queryset.filter(product_id=product_id)
 
         paginator = CustomPaginator()
         paginator.page_size = items_on_page
-        paginated_results = paginator.paginate_queryset(query_set, request)
+        paginated_results = paginator.paginate_queryset(queryset, request)
         for item in paginated_results:
             if item:
                 item['field_name'] = FIELD_TYPE.get(item['field_type'])
@@ -770,8 +806,83 @@ class CommonDropDownHelper:
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
             dropdown_data["dropdown"] = tools
             dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
-        else:
-            dropdown_data["message"] = "Invalid field name"
+
+        elif field_name == "rp_field_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
+
+        elif field_name == "rp_appeared_student_exam":
+            #TODO optimize this and check structure
+            """
+            Fetches and structures exams based on the query.
+            """
+            published_exam_list = Exam.objects.exclude(
+                type_of_exam='counselling'
+            ).exclude(status='unpublished')
+
+            exam_list = (
+                published_exam_list
+                .filter(instance_id=0)
+                .filter(Q(exam_name__icontains=q) | Q(exam_short_name__icontains=q))
+                .values('id', 'exam_name', 'parent_exam_id', 'exam_short_name')
+            )
+            # TODO remove this 
+            # exam_mappings = {}
+            # for exam in exam_list:
+            #     parent_id = exam['parent_exam_id']
+            #     if parent_id not in exam_mappings:
+            #         exam_mappings[exam['id']] = {
+            #             "parent_exams": exam,
+            #             "child_exams": []
+            #         }
+            #     else:
+            #         exam_mappings[parent_id]["child_exams"].append(exam)
+
+            # dropdown = []
+            # for key, value in exam_mappings.items():
+
+            #     parent_exam_dict = {}
+            #     parent_exam_dict['id'] = key
+            #     parent_exam_dict['exam_name'] = value.get('parent_exams').get('exam_name')
+            #     parent_exam_dict['exam_short_name'] = value.get('parent_exams').get('exam_short_name')
+
+            #     dropdown.append(parent_exam_dict)
+
+            #     child_exams = value.get('child_exams')
+            #     for exam in child_exams:
+            #         child_exam_dict = {}
+            #         child_exam_dict['id'] = exam.get('id')
+            #         child_exam_dict['exam_name'] = exam.get('exam_name')
+            #         child_exam_dict['exam_short_name'] = exam.get('exam_shot_name')
+            #         child_exam_dict['parent_exam_name'] = parent_exam_dict['exam_name']
+            #         child_exam_dict['parent_exam_short_name'] = value.get('parent_exams').get('exam_short_name')
+            #         dropdown.append(child_exam_dict)
+
+            # dropdown_data["dropdown"] = dropdown 
+
+            dropdown = []
+            exam_mappings = {exam['id']: exam for exam in exam_list if exam['parent_exam_id'] == 0}
+
+            for exam in exam_list:
+                parent_id = exam['parent_exam_id']
+                if parent_id == 0:  # Parent exam
+                    dropdown.append({
+                        'id': exam['id'],
+                        'exam_name': exam['exam_name'],
+                        'exam_short_name': exam['exam_short_name']
+                    })
+                elif parent_id in exam_mappings:  # Child exam
+                    parent_exam = exam_mappings[parent_id]
+                    dropdown.append({
+                        'id': exam['id'],
+                        'exam_name': exam['exam_name'],
+                        'exam_short_name': exam['exam_short_name'],
+                        'parent_exam_name': parent_exam['exam_name'],
+                        'parent_exam_short_name': parent_exam['exam_short_name']
+                    })           
+                else:
+                    dropdown_data["message"] = "Invalid field name"
+
+            dropdown_data["dropdown"] = dropdown 
 
         if not internal_limit and dropdown_data["dropdown"]:
             dropdown_data["dropdown"] = dropdown_data["dropdown"][self.offset:self.offset + self.limit]
