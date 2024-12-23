@@ -49,6 +49,7 @@ urlpatterns = [
 
         
     
+    
 
     path(f'{compare_prefix}resultPage/fees-comparison/',
         comparison_result_page_controllers.FeesComparisonView.as_view(),
