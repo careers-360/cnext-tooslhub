@@ -577,24 +577,27 @@ class SocialMediaGallery(models.Model):
 
 
 
+
 class Ranking(models.Model):
     ranking_authority = models.CharField(max_length=255)
     ranking_stream = models.CharField(max_length=255)
     nirf_stream = models.CharField(max_length=255, blank=True, null=True)
     nirf_entity = models.CharField(max_length=255, blank=True, null=True)
     ranking_entity = models.CharField(max_length=255, blank=True, null=True)
-   
+    year = models.IntegerField()  
     status = models.IntegerField(default=1)
 
     class Meta:
         db_table = 'ranking'
+
 
 class RankingUploadList(models.Model):
     college = models.ForeignKey(
         'College',
         on_delete=models.CASCADE,
         related_name='ranking_uploads',
-        db_index=True,db_column="college_id"
+        db_index=True,
+        db_column="college_id"
     )
     ranking = models.ForeignKey(
         'Ranking',
@@ -603,16 +606,16 @@ class RankingUploadList(models.Model):
         db_index=True,
         db_column='ranking_id'
     )
-    year = models.IntegerField(db_index=True)
     published = models.BooleanField(default=True)
     overall_rank = models.IntegerField(null=True, blank=True)
     overall_rating = models.CharField(max_length=50, null=True, blank=True)
+    overall_score = models.FloatField(null=True, blank=True)  
 
     class Meta:
         db_table = 'ranking_upload_list'
         indexes = [
-            models.Index(fields=['college', 'ranking', 'year']),
-            models.Index(fields=['year']),
+            models.Index(fields=['college', 'ranking']),
+           
             models.Index(fields=['published']),
         ]
 
@@ -630,25 +633,6 @@ class FeeBifurcation(models.Model):
         indexes = [
             models.Index(fields=['college_course', 'category']),
         ]
-
-
-class Exam(models.Model):
-    exam_name = models.CharField(max_length=255)
-    exam_short_name = models.CharField(max_length=50, null=True, blank=True)
-    super_parent_id = models.IntegerField()
-    instance_year = models.IntegerField()  
-    status = models.CharField(max_length=20)
-
-    class Meta:
-        db_table = 'exams'
-        indexes = [
-            models.Index(fields=['exam_name', 'exam_short_name']),
-            models.Index(fields=['instance_year']), 
-        ]
-
-    def __str__(self):
-        return self.exam_short_name or self.exam_name
-
 
 class CollegeCourseExam(models.Model):
     college_course = models.ForeignKey(
@@ -685,20 +669,41 @@ class CourseApprovalAccrediation(models.Model):
 
 
 
+
+class Exam(models.Model):
+    exam_name = models.CharField(max_length=255)
+    exam_short_name = models.CharField(max_length=50, null=True, blank=True)
+    super_parent_id = models.IntegerField()
+    instance_year = models.IntegerField()  
+    status = models.CharField(max_length=20)
+
+    class Meta:
+        db_table = 'exams'
+        indexes = [
+            models.Index(fields=['exam_name', 'exam_short_name']),
+            models.Index(fields=['instance_year']), 
+        ]
+
+    def __str__(self):
+        return self.exam_short_name or self.exam_name
+
+
+
+
 class CutoffData(models.Model):
     college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, db_index=True)
     round = models.CharField(max_length=255)
-    opening_rank = models.FloatField()  
-    closing_rank = models.FloatField() 
-    category_of_admission = models.CharField(max_length=10,default=1)  
-    caste_id = models.CharField(max_length=10, null=True, blank=True) 
-    year = models.IntegerField()  
-    exam_sub_exam_id = models.IntegerField()  
-    branch_id = models.IntegerField()  
+    round_wise_opening_cutoff = models.CharField(max_length=255, null=True, blank=True)
+    round_wise_closing_cutoff = models.CharField(max_length=255, null=True, blank=True)
+    category_of_admission = models.ForeignKey('AdmissionCategory', on_delete=models.SET_DEFAULT, default=1)
+    caste_id = models.CharField(max_length=10, null=True, blank=True)
+    year = models.IntegerField()
+    exam_sub_exam_id = models.ForeignKey('Exam', on_delete=models.SET_NULL, null=True, blank=True, db_column='exam_sub_exam_id')
+    branch_id = models.IntegerField()
 
     class Meta:
-        db_table = 'cutoff_data' 
+        db_table = 'cp_cutoff_final'
         indexes = [
             models.Index(fields=['college', 'college_course']),
             models.Index(fields=['category_of_admission']),
@@ -711,5 +716,63 @@ class CutoffData(models.Model):
     def __str__(self):
         return f"Cutoff Data for {self.college.name} - {self.college_course.course_name} ({self.round})"
 
+    @classmethod
+    def update_category_of_admission(cls):
+       
+        cls.objects.filter(models.Q(category_of_admission__isnull=True) | models.Q(category_of_admission='none')).update(category_of_admission=1)
+
+class AdmissionCategory(models.Model):
+    description = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'cp_admission_category'
+
+    def __str__(self):
+        return self.description
 
 
+class CollegeCourseComparisonFeedback(models.Model):
+    id = models.AutoField(primary_key=True)
+    uid = models.IntegerField(db_index=True)
+    voted_college = models.ForeignKey(
+        'College', on_delete=models.CASCADE, related_name='voted_comparisons'
+    )
+    voted_course = models.ForeignKey(
+        'Course', on_delete=models.CASCADE, related_name='voted_course_comparisons'
+    )
+    college_1 = models.ForeignKey(
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_1'
+    )
+    course_1 = models.ForeignKey(
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_1'
+    )
+    college_2 = models.ForeignKey(
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_2'
+    )
+    course_2 = models.ForeignKey(
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_2'
+    )
+    college_3 = models.ForeignKey(
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_3',
+        null=True, blank=True
+    )
+    course_3 = models.ForeignKey(
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_3',
+        null=True, blank=True
+    )
+    createdAt = models.DateTimeField(auto_now_add=True)
+    createdBy = models.CharField(max_length=255, null=True, blank=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+    updatedBy = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'college_course_comparison_feedback'
+        indexes = [
+            models.Index(fields=['uid', 'voted_college', 'voted_course', 'createdAt']),
+            models.Index(fields=['voted_college', 'voted_course'])
+        ]
+        verbose_name = 'College Course Comparison Feedback'
+        verbose_name_plural = 'College Course Comparison Feedback'
+
+    def __str__(self):
+        return f"Feedback by User {self.uid}: Voted [{self.voted_college}, {self.voted_course}]"

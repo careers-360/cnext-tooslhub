@@ -2,11 +2,11 @@ from django.db.models import Avg, Count, F, Q,Max,Min
 from django.db.models.functions import Round, ExtractYear, TruncDate, Concat
 from django.core.cache import cache
 from functools import lru_cache
-from typing import Dict,List
+from typing import Dict,List,Optional,Any
 import hashlib
 from hashlib import md5
-from django.db.models import Subquery, ExpressionWrapper, Func, OuterRef, Sum, Case, When,Value, CharField,IntegerField,DecimalField,Prefetch,FloatField,ExpressionWrapper
-from django.db.models.functions import Coalesce,Cast,Concat
+from django.db.models import Subquery, ExpressionWrapper,Window, Func, OuterRef, Sum, Case, When,Value, CharField,IntegerField,DecimalField,Prefetch,FloatField,ExpressionWrapper
+from django.db.models.functions import Coalesce,Cast,Concat,RowNumber
 from decimal import Decimal
 from college_compare.models import (
     College, CollegeReviews,Domain,CollegeFacility,CollegePlacement,RankingUploadList,Course,FeeBifurcation,Exam,Ranking,CollegeAccrediationApproval,ApprovalsAccrediations,CourseApprovalAccrediation
@@ -79,7 +79,6 @@ class CacheHelper:
         return result
 
 
-
 class RankingAccreditationHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -90,9 +89,9 @@ class RankingAccreditationHelper:
         return md5(key.encode()).hexdigest()
 
     @staticmethod
-    def fetch_ranking_data(college_ids: List[int], selected_domain: str) -> Dict:
+    def fetch_ranking_data(college_ids: List[int], selected_domain: str, year: Optional[int] = None) -> Dict:
         """
-        Fetch ranking and accreditation details for a list of colleges.
+        Fetch ranking and accreditation details for a list of colleges, optionally filtered by year.
         """
         try:
             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
@@ -100,49 +99,47 @@ class RankingAccreditationHelper:
             logger.error("Invalid college_ids provided: %s", college_ids)
             raise ValueError("college_ids must be a list of integers or strings.")
 
-        logger.debug(f"Fetching ranking data with college_ids: {college_ids}, selected_domain: {selected_domain}")
+        logger.debug(f"Fetching ranking data with college_ids: {college_ids}, selected_domain: {selected_domain}, year: {year}")
 
-        cache_key = RankingAccreditationHelper.get_cache_key('Ranking_Data_v6', selected_domain, '-'.join(map(str, college_ids)))
+        cache_key = RankingAccreditationHelper.get_cache_key('Ranking_Data_v8', selected_domain, year, '-'.join(map(str, college_ids)))
 
         def fetch_data():
             try:
                
+                year_filter = Q(ranking__year=year) if year else Q()
 
+             
                 other_ranked_domain_subquery = (
                     RankingUploadList.objects
                     .filter(college_id=OuterRef('college_id'))
                     .exclude(ranking__nirf_stream='')
                     .exclude(ranking__ranking_stream=selected_domain)
                     .annotate(
-                        overall_rank_str=Cast(F('overall_rank'), CharField()), 
+                        overall_rank_str=Cast(F('overall_rank'), CharField()),
                         other_ranked_domain=Concat(
                             F('ranking__nirf_stream'),
                             Value(' (NIRF '),
-                            F('overall_rank_str'), 
+                            F('overall_rank_str'),
                             Value(')')
                         )
                     )
-                    .values('overall_rank', 'other_ranked_domain')  
-                    .distinct()  
-                    .order_by('overall_rank')  
-                 )
-                            
-
-               
+                    .values('overall_rank', 'other_ranked_domain')
+                    .distinct()
+                    .order_by('overall_rank')
+                )
                 min_other_ranked_domain = other_ranked_domain_subquery.values('other_ranked_domain')[2:3]
-                                                
 
-                
                 rankings = (
                     RankingUploadList.objects
                     .filter(college_id__in=college_ids)
+                    .filter(year_filter)
                     .values('college_id')
                     .annotate(
                         careers360_overall_rank=Max(
                             Case(
                                 When(
                                     Q(ranking__ranking_authority='Careers360') &
-                                    ~Q(ranking__ranking_stream=selected_domain) & 
+                                    ~Q(ranking__ranking_stream=selected_domain) &
                                     Q(Q(ranking__status=1) | Q(ranking__status__isnull=True)),
                                     then=F('overall_rating')
                                 ),
@@ -153,8 +150,7 @@ class RankingAccreditationHelper:
                             Case(
                                 When(
                                     Q(ranking__ranking_authority='Careers360') &
-                                    Q(ranking__ranking_stream=selected_domain) & 
-                                    ~Q(ranking__nirf_stream='') &
+                                    Q(ranking__ranking_stream=selected_domain) &
                                     Q(Q(ranking__status=1) | Q(ranking__status__isnull=True)),
                                     then=F('overall_rating')
                                 ),
@@ -177,7 +173,7 @@ class RankingAccreditationHelper:
                                 When(
                                     Q(ranking__ranking_authority='NIRF') &
                                     Q(ranking__ranking_entity='Stream Wise Colleges') &
-                                    Q(ranking__ranking_stream=selected_domain) & 
+                                    Q(ranking__ranking_stream=selected_domain) &
                                     Q(Q(ranking__status=1) | Q(ranking__status__isnull=True)),
                                     then=F('overall_rank')
                                 ),
@@ -188,7 +184,7 @@ class RankingAccreditationHelper:
                         domain_name=Max(
                             Case(
                                 When(
-                                    Q(ranking__ranking_stream=selected_domain), 
+                                    Q(ranking__ranking_stream=selected_domain),
                                     then=F('ranking__nirf_stream')
                                 ),
                                 default=None
@@ -199,29 +195,26 @@ class RankingAccreditationHelper:
 
                
                 all_accreditations = (
-
                     CollegeAccrediationApproval.objects
                     .filter(college_id__in=college_ids)
                     .select_related('value')
                     .only('college_id', 'type', 'value__short_name')
                 )
 
-               
                 approvals_dict = {}
                 accreditations_dict = {}
-                
+
                 for acc in all_accreditations:
                     if acc.college_id not in approvals_dict:
                         approvals_dict[acc.college_id] = set()
                     if acc.college_id not in accreditations_dict:
                         accreditations_dict[acc.college_id] = set()
-                        
+
                     if acc.type == 'college_approvals' and acc.value and acc.value.short_name:
                         approvals_dict[acc.college_id].add(acc.value.short_name)
                     elif acc.type == 'college_accrediation' and acc.value and acc.value.short_name:
                         accreditations_dict[acc.college_id].add(acc.value.short_name)
 
-               
                 approvals_dict = {
                     k: ', '.join(sorted(v)) if v else 'NA'
                     for k, v in approvals_dict.items()
@@ -231,13 +224,19 @@ class RankingAccreditationHelper:
                     for k, v in accreditations_dict.items()
                 }
 
+               
+                college_names = dict(
+                    College.objects.filter(id__in=college_ids).values_list('id', 'name')
+                )
+
                 
                 result_dict = {}
                 for idx, ranking in enumerate(rankings, start=1):
                     college_id = ranking['college_id']
-                    
+
                     result_dict[f"college_{idx}"] = {
                         "college_id": college_id,
+                        "college_name": college_names.get(college_id, 'NA'),
                         "careers360_overall_rank": ranking.get('careers360_overall_rank') or 'NA',
                         "careers360_domain_rank": ranking.get('careers360_domain_rank') or 'NA',
                         "nirf_overall_rank": ranking.get('nirf_overall_rank') or 'NA',
@@ -245,7 +244,7 @@ class RankingAccreditationHelper:
                         "other_ranked_domain": ranking.get('other_ranked_domain') or 'NA',
                         "domain_name": ranking.get('domain_name') or 'NA',
                         "approvals": approvals_dict.get(college_id, 'NA'),
-                        "accreditations": accreditations_dict.get(college_id, 'NA')
+                        "accreditations": accreditations_dict.get(college_id, 'NA'),
                     }
 
                 return result_dict
@@ -254,9 +253,127 @@ class RankingAccreditationHelper:
                 logger.error("Error fetching ranking and accreditation data: %s", traceback.format_exc())
                 raise
 
-        return cache.get_or_set(cache_key, fetch_data, 3600)
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 31)
    
 
+
+
+class RankingGraphHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        """
+        Generate a unique cache key by hashing the combined arguments.
+        """
+        key = '_'.join(map(str, args))
+        return hashlib.md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def fetch_ranking_data(
+        college_ids: List[int],
+        start_year: int,
+        end_year: int,
+        domain_id: int = None,
+        ranking_entity: str = None,
+    ) -> Dict:
+        """
+        Fetch ranking data for given colleges and year range, optionally filtered by domain and ranking entity.
+        """
+        try:
+            college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+        except (ValueError, TypeError):
+            raise ValueError("college_ids must be a flat list of integers or strings.")
+
+        cache_key = RankingGraphHelper.get_cache_key(
+            'ranking_graph_insight_v2', '-'.join(map(str, college_ids)), start_year, end_year, domain_id, ranking_entity
+        )
+
+        def fetch_data():
+            year_range = list(range(start_year, end_year + 1))
+
+            # Create filters for the query
+            filters = Q(ranking__status=1, ranking__year__in=year_range)
+            if domain_id:
+                filters &= Q(ranking__ranking_stream=domain_id)
+            if ranking_entity:
+                filters &= Q(ranking__ranking_entity=ranking_entity)
+
+           
+            rankings = (
+                RankingUploadList.objects.filter(filters, college_id__in=college_ids)
+                .select_related('ranking')  
+                .values(
+                    "college_id",
+                    "ranking__year",
+                    "ranking__ranking_stream",
+                    "ranking__ranking_entity",
+                    "overall_score"
+                )
+            )
+
+           
+            college_order = {college_id: idx for idx, college_id in enumerate(college_ids)}
+            result_dict = {
+                f"college_{i + 1}": {"college_id": college_id, "data": {year: "NA" for year in year_range}} \
+                for i, college_id in enumerate(college_ids)
+            }
+
+          
+            for ranking in rankings:
+                college_key = f"college_{college_order[ranking['college_id']] + 1}"
+                result_dict[college_key]["data"][ranking["ranking__year"]] = ranking["overall_score"] or "NA"
+
+            return result_dict
+
+       
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
+
+    @staticmethod
+    def prepare_graph_insights(
+        college_ids: List[int], start_year: int, end_year: int, domain_id: int
+    ) -> Dict:
+        """
+        Prepare data for the ranking insights graph, including overall and domain-specific data.
+
+        Args:
+            college_ids (List[int]): List of college IDs.
+            start_year (int): Start year for the rankings.
+            end_year (int): End year for the rankings.
+            domain_id (int): Domain ID for fetching domain-specific data.
+
+        Returns:
+            Dict: A dictionary containing insights for the rankings graph.
+        """
+        years = list(range(start_year, end_year + 1))
+
+        overall_data = RankingGraphHelper.fetch_ranking_data(
+            college_ids, start_year, end_year, ranking_entity='Overall'
+        )
+
+      
+        domain_data = RankingGraphHelper.fetch_ranking_data(
+            college_ids, start_year, end_year, domain_id=domain_id, ranking_entity='Stream Wise Colleges'
+        )
+
+       
+        college_names = list(
+            College.objects.filter(id__in=college_ids).values_list('name', flat=True)
+        )
+
+        return {
+            "years": years,
+            "overall": {
+                "type": "wave",
+                "colleges": overall_data
+            },
+            "domain": {
+                "type": "wave",
+                "colleges": domain_data
+            },
+            "college_names": college_names
+        }
+
+
+    
 class PlacementStatsComparisonHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -271,7 +388,7 @@ class PlacementStatsComparisonHelper:
             logger.error("Invalid college_ids provided: college_ids=%s", college_ids)
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
-        cache_key = PlacementStatsComparisonHelper.get_cache_key('placement__stats___comparisons', '-'.join(map(str, college_ids)), year,domain_id)
+        cache_key = PlacementStatsComparisonHelper.get_cache_key('placement__stats_____comparisons', '-'.join(map(str, college_ids)), year,domain_id)
 
         def fetch_data():
             try:
@@ -324,7 +441,7 @@ class PlacementStatsComparisonHelper:
                 logger.error("Error fetching placement stats comparison data: %s", str(e))
                 raise
 
-        return cache.get_or_set(cache_key, fetch_data, 3600)
+        return cache.get_or_set(cache_key, fetch_data, 3600*24*365)
 
     @staticmethod
     def compare_placement_stats(stats_data: Dict) -> Dict:
@@ -476,7 +593,7 @@ class CourseFeeComparisonHelper:
                     logger.error("Error fetching course comparison data: %s", traceback.format_exc())
                     raise
 
-            return cache.get_or_set(cache_key, fetch_data, 3600)
+            return cache.get_or_set(cache_key, fetch_data, 3600*24*365)
 
         except Exception as e:
             logger.error("Error in fetch_comparison_data: %s", traceback.format_exc())
@@ -594,7 +711,7 @@ class FeesHelper:
                 logger.error("Error fetching fee details: %s", traceback.format_exc())
                 raise
 
-        return cache.get_or_set(cache_key, fetch_data, 3600)
+        return cache.get_or_set(cache_key, fetch_data, 3600*24*365)
 
     @staticmethod
     def get_high_scholarship_authority(total_gov, total_institution, total_private) -> str:
@@ -609,6 +726,88 @@ class FeesHelper:
         max_authority = max(authority_map, key=authority_map.get)
         return max_authority if authority_map[max_authority] > 0 else 'NA'
     
+
+
+class FeesGraphHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        key = '_'.join(map(str, args))
+        return hashlib.md5(key.encode()).hexdigest()
+    
+    @staticmethod
+    def fetch_fee_data(course_ids: List[int]) -> Dict:
+        try:
+            course_ids = [int(course_id) for course_id in course_ids if isinstance(course_id, (int, str))]
+        except (ValueError, TypeError):
+            raise ValueError("course_ids must be a flat list of integers or strings.")
+        
+        cache_key = FeesGraphHelper.get_cache_key('fees_graph__data_v3', '-'.join(map(str, course_ids)))
+        
+        def fetch_data():
+            static_categories = ['gn', 'obc', 'sc']
+            
+            courses = (
+                Course.objects.filter(id__in=course_ids)
+                .select_related('college')
+                .values(
+                    'id',
+                    'college__name'
+                )
+            )
+            
+            result_dict = {
+                "categories": static_categories,
+                "data": {category: {"type": "vertical bar", "values": {}} for category in static_categories},
+                "college_names": []
+            }
+            
+            college_names = []
+            course_id_to_name = {}
+            ordered_course_ids = []
+            for course in courses:
+                college_names.append(course['college__name'])
+                course_id_to_name[course['id']] = course['college__name']
+                ordered_course_ids.append(course['id'])
+            
+            fees_data = (
+                FeeBifurcation.objects.filter(college_course__in=course_ids)
+                .values(
+                    "college_course_id",
+                    "category",
+                    "total_fees"
+                )
+            )
+            
+            fee_mapping = {}
+            for fee in fees_data:
+                course_id = fee["college_course_id"]
+                category = fee["category"]
+                total_fees = fee["total_fees"]
+                if course_id not in fee_mapping:
+                    fee_mapping[course_id] = {}
+                fee_mapping[course_id][category] = total_fees
+            
+            for idx, course_id in enumerate(ordered_course_ids, 1):
+                college_name = course_id_to_name.get(course_id)
+                if college_name:
+                    for category in static_categories:
+                        college_key = f"college_{idx}"
+                        total_fees = fee_mapping.get(course_id, {}).get(category)
+                        
+                        result_dict["data"][category]["values"][college_key] = {
+                            "course_id": course_id,
+                            "fee": f"₹ {total_fees:,.0f}" if total_fees is not None else "NA"
+                        }
+            
+            result_dict["college_names"] = college_names
+            return result_dict
+        
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
+    
+    @staticmethod
+    def prepare_fees_insights(course_ids: List[int]) -> Dict:
+        return FeesGraphHelper.fetch_fee_data(course_ids)
+
 
 
 
@@ -702,7 +901,233 @@ class ClassProfileHelper:
                 logger.error(f"Error fetching class profiles: {e}")
                 raise
 
-        return cache.get_or_set(cache_key, fetch_data, 3600)
+        return cache.get_or_set(cache_key, fetch_data, 3600*24*365)
+
+
+class ProfileInsightsHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        """
+        Generate a unique cache key by hashing the combined arguments.
+        """
+        key = '_'.join(map(str, args))
+        return hashlib.md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def fetch_student_faculty_ratio(
+        college_ids: List[int],
+        year: int,
+        intake_year: int,
+        level: int = 1
+    ) -> Dict[str, Dict]:
+        """
+        Fetch student to faculty ratio data for given colleges as a percentage.
+        """
+        cache_key = ProfileInsightsHelper.get_cache_key(
+            'student_faculty_ratio', '-'.join(map(str, college_ids)), year, intake_year, level
+        )
+
+        def fetch_data():
+            query_result = (
+                College.objects.filter(id__in=college_ids)
+                .annotate(
+                    students=Coalesce(
+                        Sum(
+                            Case(
+                                When(
+                                    collegeplacement__year=year,
+                                    collegeplacement__intake_year=intake_year,
+                                    collegeplacement__levels=level,
+                                    then='collegeplacement__total_students'
+                                ),
+                                default=Value(0, output_field=IntegerField())
+                            )
+                        ),
+                        Value(0, output_field=IntegerField())
+                    ),
+                    faculty=Coalesce(
+                        F('total_faculty'),
+                        Value(0, output_field=IntegerField())
+                    ),
+                    ratio=Case(
+                        When(
+                            total_faculty__gt=0,
+                            then=Cast(F('students'), FloatField()) / Cast(F('faculty'), FloatField())
+                        ),
+                        default=Value(None, output_field=FloatField()),
+                        output_field=FloatField()
+                    )
+                )
+                .values('id', 'students', 'faculty', 'ratio')
+            )
+
+            result = {"type": "vertical bar"}
+            for idx, data in enumerate(query_result, 1):
+                student_faculty_ratio = data['ratio'] * 100 if data['ratio'] is not None else None
+                result[f"college_{idx}"] = {
+                    "college_id": str(data['id']),
+                    "total_students": data['students'],
+                    "total_faculty": data['faculty'],
+                    "student_faculty_ratio_percentage": round(student_faculty_ratio, 2) if student_faculty_ratio is not None else None
+                }
+            return result
+
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
+
+    @staticmethod
+    def fetch_student_demographics(
+        college_ids: List[int],
+        year: int,
+        intake_year: int,
+        level: int = 1
+    ) -> Dict[str, Dict]:
+        """
+        Fetch student demographics including outside state percentage.
+        """
+        cache_key = ProfileInsightsHelper.get_cache_key(
+            'student_demographics', '-'.join(map(str, college_ids)), year, intake_year, level
+        )
+
+        def fetch_data():
+            query_result = (
+                CollegePlacement.objects.filter(
+                    college_id__in=college_ids,
+                    year=year,
+                    intake_year=intake_year,
+                    levels=level
+                )
+                .values('college_id')
+                .annotate(
+                    total_students=Coalesce(Sum('total_students'), Value(0, output_field=IntegerField())),
+                    outside_state=Coalesce(Sum('outside_state'), Value(0, output_field=IntegerField()))
+                )
+                .annotate(
+                    outside_state_percentage=Case(
+                        When(
+                            total_students__gt=0,
+                            then=Cast(F('outside_state'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
+                        ),
+                        default=Value(None, output_field=FloatField())
+                    )
+                )
+            )
+
+            result = {"type": "vertical bar"}
+            for idx, data in enumerate(query_result, 1):
+                result[f"college_{idx}"] = {
+                    "college_id": str(data['college_id']),
+                    "total_students": data['total_students'],
+                    "students_outside_state": data['outside_state'],
+                    "percentage_outside_state": round(data['outside_state_percentage'], 2) if data['outside_state_percentage'] is not None else None
+                }
+            return result
+
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
+
+    @staticmethod
+    def fetch_gender_diversity(
+        college_ids: List[int],
+        year: int,
+        intake_year: int,
+        level: int = 1
+    ) -> Dict[str, Dict]:
+        """
+        Fetch gender diversity statistics.
+        """
+        cache_key = ProfileInsightsHelper.get_cache_key(
+            'gender_diversity', '-'.join(map(str, college_ids)), year, intake_year, level
+        )
+
+        def fetch_data():
+            query_result = (
+                CollegePlacement.objects.filter(
+                    college_id__in=college_ids,
+                    year=year,
+                    intake_year=intake_year,
+                    levels=level
+                )
+                .values('college_id')
+                .annotate(
+                    male_students=Coalesce(Sum('male_students'), Value(0, output_field=IntegerField())),
+                    female_students=Coalesce(Sum('female_students'), Value(0, output_field=IntegerField()))
+                )
+                .annotate(
+                    total_students=F('male_students') + F('female_students'),
+                    male_percentage=Case(
+                        When(
+                            total_students__gt=0,
+                            then=Cast(F('male_students'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
+                        ),
+                        default=Value(None, output_field=FloatField())
+                    ),
+                    female_percentage=Case(
+                        When(
+                            total_students__gt=0,
+                            then=Cast(F('female_students'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
+                        ),
+                        default=Value(None, output_field=FloatField())
+                    )
+                )
+            )
+
+            result = {"type": "vertical bar"}
+            for idx, data in enumerate(query_result, 1):
+                result[f"college_{idx}"] = {
+                    "college_id": str(data['college_id']),
+                    "male_students": data['male_students'],
+                    "female_students": data['female_students'],
+                    "percentage_male": round(data['male_percentage'], 2) if data['male_percentage'] is not None else None,
+                    "percentage_female": round(data['female_percentage'], 2) if data['female_percentage'] is not None else None
+                }
+            return result
+
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
+
+    @staticmethod
+    def prepare_profile_insights(
+        college_ids: List[int],
+        year: int,
+        intake_year: int,
+        level: int = 1
+    ) -> Dict:
+        """
+        Prepare comprehensive profile insights including all metrics.
+
+        Args:
+            college_ids (List[int]): List of college IDs to analyze
+            year (int): Academic year
+            intake_year (int): Year of student intake
+            level (int): Academic level (defaults to 1)
+
+        Returns:
+            Dict: Combined profile insights in the specified format
+        """
+        college_names = list(
+            College.objects.filter(id__in=college_ids)
+            .order_by('id')
+            .values_list('name', flat=True)
+        )
+
+        student_faculty_metrics = ProfileInsightsHelper.fetch_student_faculty_ratio(
+            college_ids, year, intake_year, level
+        )
+        demographic_metrics = ProfileInsightsHelper.fetch_student_demographics(
+            college_ids, year, intake_year, level
+        )
+        gender_metrics = ProfileInsightsHelper.fetch_gender_diversity(
+            college_ids, year, intake_year, level
+        )
+
+        return {
+            "year": year,
+            "intake_year": intake_year,
+            "level": level,
+            "student_faculty_metrics": student_faculty_metrics,
+            "student_outside_student_metrics": demographic_metrics,
+            "gender_metrics": gender_metrics,
+            "college_names": college_names
+        }
+
 
 
 
@@ -782,7 +1207,7 @@ class CollegeFacilitiesHelper:
                 logger.error(f"Error fetching college facilities: {e}", exc_info=True)
                 raise
 
-        return cache.get_or_set(cache_key, fetch_facilities, 3600)
+        return cache.get_or_set(cache_key, fetch_facilities, 3600*24*31)
     
 
 
@@ -984,4 +1409,185 @@ class CollegeReviewsHelper:
                 logger.error(f"Error fetching recent reviews: {e}")
                 raise
 
-        return cache.get_or_set(cache_key, fetch_recent, 1800) 
+        return cache.get_or_set(cache_key, fetch_recent, 1800*48) 
+    
+
+    
+
+
+class ExamCutoffHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        key = '_'.join(str(arg) for arg in args)
+        return md5(key.encode()).hexdigest()
+    
+    @staticmethod
+    def fetch_cutoff_data(
+        college_ids: List[int],
+        year: int,
+        exam_id: Optional[int] = None,
+        category_of_admission_id: Optional[int] = None
+    ) -> Dict:
+        """
+        Fetches exam cutoff comparison data dynamically based on the given filters.
+        """
+        try:
+           
+            college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+        except (ValueError, TypeError):
+            logger.error("Invalid college_ids provided: college_ids=%s", college_ids)
+            raise ValueError("college_ids must be a list of integers or strings.")
+
+      
+        cache_key = ExamCutoffHelper.get_cache_key(
+            'exam______cutoff__comparisons',
+            '-'.join(map(str, college_ids)),
+            year,
+            exam_id or 'NULL',
+            category_of_admission_id or 'NULL'
+        )
+
+        def fetch_data():
+            try:
+               
+                filters = {
+                    'college__in': college_ids,
+                    'year': year
+                }
+                if exam_id is not None:
+                    filters['exam_sub_exam_id'] = exam_id
+                if category_of_admission_id:
+                    filters['category_of_admission_id'] = category_of_admission_id
+
+              
+                cutoff_data = CutoffData.objects.filter(**filters).annotate(
+                    category_of_admission_id_annotated=Coalesce('category_of_admission_id', Value(1), output_field=IntegerField()),
+                    category_name=Coalesce('category_of_admission__description', Value('All India'), output_field=CharField()),
+                    exam_sub_exam_id_annotated=Coalesce('exam_sub_exam_id', Value('NA'), output_field=CharField()),
+                    exam_name=Coalesce(
+                        Case(
+                            When(
+                                Q(exam_sub_exam_id__exam_short_name__isnull=False) & ~Q(exam_sub_exam_id__exam_short_name=''),
+                                then=F('exam_sub_exam_id__exam_short_name')
+                            ),
+                            default=F('exam_sub_exam_id__exam_name')
+                        ),
+                        Value('NA', output_field=CharField())
+                    )
+                )
+
+               
+                exams_data = Exam.objects.filter(
+                    id__in=cutoff_data.values_list('exam_sub_exam_id', flat=True).distinct()
+                ).values('id', 'exam_short_name', 'exam_name')
+
+                categories_data = AdmissionCategory.objects.filter(
+                    id__in=cutoff_data.values_list('category_of_admission_id', flat=True).distinct()
+                ).values('id', 'description')
+
+             
+                exams_list = [
+                    {'exam_id': exam['id'], 'exam_name': exam['exam_short_name'] or exam['exam_name']}
+                    for exam in exams_data
+                ]
+                categories_list = [
+                    {'category_id': category['id'], 'category_name': category['description']}
+                    for category in categories_data
+                ]
+
+               
+                seen_combinations = set()
+                comparison_data = []
+                
+               
+                unique_combinations = cutoff_data.values(
+                    'category_of_admission_id',
+                    'category_name',
+                    'exam_sub_exam_id',
+                    'exam_name'
+                ).distinct()
+
+                for combination in unique_combinations:
+                  
+                    unique_key = f"{combination['category_of_admission_id']}_{combination['exam_sub_exam_id']}"
+                    
+                    if unique_key in seen_combinations:
+                        continue
+                        
+                    seen_combinations.add(unique_key)
+                    
+                    college_data = {}
+                    for idx, college_id in enumerate(college_ids, 1):
+                        college_cutoff_data = cutoff_data.filter(
+                            college_id=college_id,
+                            category_of_admission_id=combination['category_of_admission_id'],
+                            exam_sub_exam_id=combination['exam_sub_exam_id']
+                        )
+
+                        
+                        if college_cutoff_data.exists():
+                            college_stats = {
+                                'college_id': college_id,
+                                'college_course_id': college_cutoff_data.first().college_course_id,
+                                'round_wise_opening_cutoff': (
+                                    int(college_cutoff_data.aggregate(Min('round_wise_opening_cutoff'))['round_wise_opening_cutoff__min'])
+                                    if college_cutoff_data.aggregate(Min('round_wise_opening_cutoff'))['round_wise_opening_cutoff__min'] is not None
+                                    else 'NA'
+                                ),
+                                'round_wise_closing_cutoff': (
+                                    int(college_cutoff_data.aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'])
+                                    if college_cutoff_data.aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'] is not None
+                                    else 'NA'
+                                ),
+                                'total_counselling_rounds': college_cutoff_data.values('round').distinct().count(),
+                                'lowest_closing_rank_sc_st': (
+                                    int(college_cutoff_data.filter(caste_id='3').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'])
+                                    if college_cutoff_data.filter(caste_id='3').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'] is not None
+                                    else 'NA'
+                                ),
+                                'lowest_closing_rank_obc': (
+                                    int(college_cutoff_data.filter(caste_id='2').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'])
+                                    if college_cutoff_data.filter(caste_id='2').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'] is not None
+                                    else 'NA'
+                                ),
+                                'lowest_closing_rank_gn': (
+                                    int(college_cutoff_data.filter(caste_id='1').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'])
+                                    if college_cutoff_data.filter(caste_id='1').aggregate(Max('round_wise_closing_cutoff'))['round_wise_closing_cutoff__max'] is not None
+                                    else 'NA'
+                                ),
+                            }
+                        else:
+                            college_stats = {
+                                'college_id': college_id,
+                                'college_course_id': 'NA',
+                                'round_wise_opening_cutoff': 'NA',
+                                'round_wise_closing_cutoff': 'NA',
+                                'total_counselling_rounds': 'NA',
+                                'lowest_closing_rank_sc_st': 'NA',
+                                'lowest_closing_rank_obc': 'NA',
+                                'lowest_closing_rank_gn': 'NA',
+                            }
+
+                        college_data[f'college_{idx}'] = college_stats
+
+                    if college_data:
+                        comparison_entry = {
+                            'category_id': combination['category_of_admission_id'],
+                            'category_name': combination['category_name'],
+                            'exam_id': combination['exam_sub_exam_id'],
+                            'exam_name': combination['exam_name'],
+                            **college_data
+                        }
+                        comparison_data.append(comparison_entry)
+
+                return {
+                    'exam_data': exams_list,
+                    'category_data': categories_list,
+                    'comparison_data': comparison_data,
+                }
+
+            except Exception as e:
+                logger.error("Error fetching exam cutoff comparison data: %s", str(e))
+                raise
+
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
