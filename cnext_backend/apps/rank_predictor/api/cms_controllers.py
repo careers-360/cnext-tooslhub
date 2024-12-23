@@ -307,3 +307,17 @@ class CreateInputForm(APIView):
         helper = RPCmsHelper()
         data = helper.create_input_form(product_id = product_id,instance = instance, request_data = request_data)
         return SuccessResponse(data, status=status.HTTP_200_OK)
+    
+class InputFormList(APIView):
+    permission_classes = (
+        ApiKeyPermission,
+    )
+    
+    def get(self, request, version, format=None, **kwargs):
+        try:
+            helper = RPCmsHelper()
+            data = helper.get_input_form_list(request)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
