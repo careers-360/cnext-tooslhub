@@ -261,7 +261,7 @@ class CMSToolsBasicDetailAPI(APIView):
     def post(self, request, version, format=None, **kwargs):
         product_id = request.POST.get('product_id')
         request_data = request.data.copy()
-        smart_registration = json.loads(request_data.get('smart_registration_data', []))
+        smart_registration = json.loads(request_data.get('smart_registration_data', [])) if request_data.get('smart_registration_data') else None
         instance = self.get_object(product_id)
         helper = ToolsHelper()
         data = helper.add_edit_basic_detail(instance = instance, request_data = request_data, smart_registration = smart_registration)
