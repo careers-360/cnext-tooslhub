@@ -247,7 +247,7 @@ class RPAppearedStudentsAPI(APIView):
         cms_helper = RPCmsHelper()
         resp, data = cms_helper._get_student_appeared_data_(product_id=product_id, year=year)
         if resp:
-            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
         
