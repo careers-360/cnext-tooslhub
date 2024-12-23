@@ -1,9 +1,12 @@
+from rank_predictor.models import CnextRpCreateInputForm
 from rest_framework.views import APIView
 from rank_predictor.models import RpFormField
-from utils.helpers.response import SuccessResponse, CustomErrorResponse
+from utils.helpers.response import SuccessResponse, CustomErrorResponse, ErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from .helpers import RPCmsHelper, CommonDropDownHelper
+from rest_framework.response import Response
+import json
 
 
 class FlowTypeAPI(APIView):
@@ -298,3 +301,34 @@ class CreateForm(APIView):
         cms_helper = RPCmsHelper()
         resp, data = cms_helper._add_update_rp_form_data(id=id, data=data)
         return SuccessResponse("Data Sucessfully created buddy !!!! ")
+
+class CreateInputForm(APIView):
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+    def get_object(self, pk):
+        try:
+            return CnextRpCreateInputForm.objects.filter(product_id=pk)
+        except CnextRpCreateInputForm.DoesNotExist:
+            return None
+
+    def get(self, request, version, format=None, **kwargs):
+        try:
+            product_id = request.query_params.get('product_id')
+            obj = self.get_object(product_id)
+            if obj is None:
+                return Response({'message': f'Tool with id: {product_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            helper = RPCmsHelper()
+            data = helper.get_input_form_data(product_id)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request, version, format=None, **kwargs):
+        product_id = request.data.get('product_id')
+        request_data = request.data.get('data')
+        instance = self.get_object(product_id)
+        helper = RPCmsHelper()
+        data = helper.create_input_form(product_id = product_id,instance = instance, request_data = request_data)
+        return SuccessResponse(data, status=status.HTTP_200_OK)

@@ -1,5 +1,7 @@
 from django.db import models
 from django.utils import timezone
+def upload_to(instance, filename):
+    return 'tools/images/{filename}'.format(filename=filename)
 
 class RpMeritSheet(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
@@ -119,8 +121,8 @@ class RpContentSection(models.Model):
     product_type = models.IntegerField(null=True, blank=True)
     heading = models.CharField(max_length=255, null=True, blank=True)
     content = models.CharField(max_length=255, null=True, blank=True)
-    image_web = models.CharField(max_length=255, null=True, blank=True)
-    image_wap = models.CharField(max_length=255, null=True, blank=True)
+    image_web = models.ImageField(upload_to = upload_to, blank=True, null=True)
+    image_wap = models.ImageField(upload_to = upload_to, blank=True, null=True)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
@@ -262,5 +264,23 @@ class RPStudentAppeared(models.Model):
         return f"Student Appeared {self.id} - {self.year}"
 
 
+class CnextRpCreateInputForm(models.Model):
+    product_id = models.IntegerField(null=True, blank=True)
+    input_process_type = models.IntegerField(null=True, blank=True)
+    process_type_toggle_label = models.CharField(max_length=255, null=True, blank=True)
+    submit_cta_name = models.CharField(max_length=255, null=True, blank=True)
+    created = models.DateTimeField(null=True, blank=True)
+    created_by = models.IntegerField(null=True, blank=True)
+    updated = models.DateTimeField(null=True, blank=True)
+    updated_by = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'cnext_rp_create_input_form'
+        verbose_name = 'Cnext RP Create Input Form'
+        verbose_name_plural = 'Cnext RP Create Input Forms'
+        ordering = ['-created']
+
+    def __str__(self):
+        return f"Input Form {self.id}"
 
 

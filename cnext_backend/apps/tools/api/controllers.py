@@ -7,7 +7,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rest_framework.response import Response
 import json
-
+from django.http import JsonResponse
 from tools.helpers.helpers import ToolsHelper
 from tools.models import CPProductCampaign, Domain, Exam, ToolsFAQ
 from utils.helpers.choices import TOOL_TYPE, CONSUMPTION_TYPE, PUBLISHING_TYPE
@@ -358,3 +358,70 @@ class CMSToolsContentAPI(APIView):
             RpContentSection.objects.create(**content_dict)
 
         return SuccessResponse("ContentSection is updated", status=status.HTTP_200_OK)
+
+class CMSToolsInputPageDetailAPI(APIView):
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+    def get_object(self, pk):
+        try:
+            return CPProductCampaign.objects.get(pk=pk)
+        except CPProductCampaign.DoesNotExist:
+            return None
+
+    def get(self, request, version, format=None, **kwargs):
+        try:
+            product_id = request.query_params.get('product_id')
+            obj = self.get_object(product_id)
+            if obj is None:
+                return Response({'message': f'Tool with id: {product_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            helper = ToolsHelper(request=request)
+            data = helper.get_input_page_detail_data(product_id)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request, version, format=None, **kwargs):
+        product_id = request.POST.get('product_id')
+        request_data = request.data.copy()
+        instance = self.get_object(product_id)
+        helper = ToolsHelper()
+        data = helper.edit_input_page_detail(product_id,instance = instance, request_data = request_data)
+        return SuccessResponse(data, status=status.HTTP_200_OK)
+
+class CMSToolContentAPI(APIView):
+    permission_classes = (
+        ApiKeyPermission,
+    )
+
+    def get_object(self, pk):
+        try:
+            return CPProductCampaign.objects.get(pk=pk)
+        except CPProductCampaign.DoesNotExist:
+            return None
+
+    def get(self, request, version, format=None, **kwargs):
+        try:
+            product_id = request.query_params.get('product_id')
+            obj = self.get_object(product_id)
+            if obj is None:
+                return Response({'message': f'Tool with id: {product_id} does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+            helper = ToolsHelper(request=request)
+            data = helper.get_tool_content_data(product_id)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
+
+    def post(self, request, version, format=None, **kwargs):
+        product_id = request.POST.get('product_id')
+        data = request.POST.get('data')
+        img_data = dict(request.FILES)
+        try:
+            data = json.loads(data)
+        except:
+            return ErrorResponse("Data not found", status=400)
+        instance = self.get_object(product_id)
+        helper = ToolsHelper()
+        data = helper.edit_tool_content(img_data = img_data, instance = instance, request_data = data)
+        return SuccessResponse(data, status=status.HTTP_200_OK)
