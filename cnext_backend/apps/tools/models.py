@@ -4,6 +4,8 @@ from django.db import models
 from users.models import User
 from django.core.validators import RegexValidator, ValidationError, MinValueValidator, FileExtensionValidator, MaxValueValidator
 from datetime import datetime, date
+
+
 CURRENT_YEAR = datetime.today().year
 
 
@@ -972,3 +974,23 @@ class DisabilityCategory(models.Model):
             models.Index(fields=['parent_id', ]),
             models.Index(fields=['name', ]),
         ]
+
+
+class CPTopCollege(models.Model):
+    exam_id = models.IntegerField(null=True, blank=True)
+    college_id = models.IntegerField(null=True, blank=True)
+    college_name = models.CharField(max_length=255, null=True, blank=True)
+    college_short_name = models.CharField(max_length=255, null=True, blank=True)
+    college_url = models.CharField(max_length=255, null=True, blank=True)
+    review_count = models.IntegerField(null=True, blank=True)
+    aggregate_rating = models.FloatField(null=True, blank=True)
+    course_id = models.IntegerField(null=True, blank=True)
+    course_name = models.CharField(max_length=255, null=True, blank=True)
+    course_url = models.CharField(max_length=255, null=True, blank=True)
+    final_cutoff = models.FloatField(null=True, blank=True)
+    rank_type = models.CharField(max_length=255, null=True, blank=True)
+    process_type = models.CharField(max_length=255, null=True, blank=True)
+    status = models.IntegerField(null=True, blank=True)
+    submenu_data = models.TextField(null=True, blank=True)
+    class Meta:
+        db_table = 'cp_top_college'
