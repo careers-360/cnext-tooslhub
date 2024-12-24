@@ -1,3 +1,5 @@
+from tools.models import CPProductCampaign
+from rank_predictor.models import RpFormField
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege
 
@@ -12,7 +14,12 @@ class RPHelper:
 
         return header_data
     
+    def _get_form_section(self, product_id=None):
 
+        form_data = RpFormField.objects.filter(product_id=product_id).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status")
+
+        return form_data
+    
     def _get_top_colleges(self, exam_id=None):
         """
         Fetch top colleges related to a specific exam ID.
