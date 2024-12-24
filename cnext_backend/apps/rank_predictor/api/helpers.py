@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -820,10 +820,12 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = tools
             dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
 
+        elif field_name == "tools_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key,val in TOOL_TYPE.items()]
         elif field_name == "rp_field_type":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
 
-        elif field_name == "rp_appeared_student_exam":
+        elif field_name == "exam":
             #TODO optimize this and check structure
             """
             Fetches and structures exams based on the query.
