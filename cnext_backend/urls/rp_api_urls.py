@@ -11,4 +11,10 @@ urlpatterns = [
     path("api/<int:version>/rank-predictor/top-college", rp_controller.TopCollegesSectionAPI.as_view(), name='top_college'),
     path("api/<int:version>/rank-predictor/header-section", rp_controller.HeaderSectionAPI.as_view(), name='header_section'),
     path("api/<int:version>/rank-predictor/form-section", rp_controller.FormSectionAPI.as_view(), name='form_section'),
+    path("api/<int:version>/rank-predictor/top-colleges", rp_controller.TopCollegesAPI.as_view(), name='top_colleges_api'),
+    # path(
+    #     "api/<int:version>/rank-predictor/rank-calculation",
+    #     rp_controller.RankCalculatorAPI.as_view(),
+    #     name="rank_calculation",
+    # ),
 ]
