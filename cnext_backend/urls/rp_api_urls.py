@@ -9,7 +9,7 @@ urlpatterns = [
     path("api/<int:version>/rank-predictor/faq-section", rp_controller.FAQSectionAPI.as_view(), name='faq_section'),
     path("api/<int:version>/rank-predictor/feedback-section", rp_controller.ReviewSectionAPI.as_view(), name='feedback_section'),
     path("api/<int:version>/rank-predictor/top-college", rp_controller.TopCollegesSectionAPI.as_view(), name='top_college'),
-    path("api/<int:version>/rank-predictor/header-section", rp_controller.HeaderSectionAPI.as_view(), name='header_section'),
+    path("api/<int:version>/rank-predictor/landing-data", rp_controller.LandingDataAPI.as_view(), name='landing page data'),
     path("api/<int:version>/rank-predictor/form-section", rp_controller.FormSectionAPI.as_view(), name='form_section'),
     path("api/<int:version>/rank-predictor/top-colleges", rp_controller.TopCollegesAPI.as_view(), name='top_colleges_api'),
     # path(

@@ -139,16 +139,18 @@ class TopCollegesSectionAPI(APIView):
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     
 
-class HeaderSectionAPI(APIView):
+class LandingDataAPI(APIView):
     """
     API for Content Section on Result Page
-    Endpoint : api/<int:version>/rank-predictor/header-section
+    Endpoint : api/<int:version>/rank-predictor/landing-data
     Params : product_id
     """
 
     permission_classes = [ApiKeyPermission]
 
     def get(self, request, version, **kwargs):
+
+        resp = {}
 
         product_id = request.GET.get('product_id')
         if not product_id or not product_id.isdigit():
@@ -158,17 +160,23 @@ class HeaderSectionAPI(APIView):
 
         # Fetch content from database and return it to client.
         rp_helper = RPHelper()
-        content = rp_helper._get_header_section(product_id=product_id)
+        header_content = rp_helper._get_header_section(product_id=product_id)
+        content_section = rp_helper._get_content_section(product_id=product_id)
 
-        if content:
+        if header_content:
+
             resp = {
-                "product_id" : product_id,
-                "content" : content,
+            "product_id" : product_id,
+            "header_content" : header_content,
+            "cotent_section": content_section
             }
             return SuccessResponse(resp, status=status.HTTP_200_OK)
         
-        no_such_product = f"product with id {product_id} doesnot exist"
+        no_such_product = f"product with id = {product_id} did not exist"
         return SuccessResponse(no_such_product, status=status.HTTP_404_NOT_FOUND)
+        
+        
+        
 
 class FormSectionAPI(APIView):
     """

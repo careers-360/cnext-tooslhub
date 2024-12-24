@@ -1,5 +1,5 @@
 from tools.models import CPProductCampaign
-from rank_predictor.models import RpFormField
+from rank_predictor.models import RpFormField, RpContentSection
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege
 
@@ -41,6 +41,15 @@ class RPHelper:
             "process_type",
             "submenu_data"
         )
+    
+    def _get_content_section(self, product_id=None):
+
+        """
+        Fetch content for the product
+        """
+
+        return RpContentSection.objects.filter(product_id=product_id).values("heading", "content", "image_web", "image_wap")
+
         
         
     # def calculate_percentile(self, score, max_score):
