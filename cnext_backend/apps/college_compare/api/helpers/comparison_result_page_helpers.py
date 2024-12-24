@@ -9,7 +9,7 @@ from django.db.models import Subquery, ExpressionWrapper,Window, Func, OuterRef,
 from django.db.models.functions import Coalesce,Cast,Concat,RowNumber
 from decimal import Decimal
 from college_compare.models import (
-    College, CollegeReviews,Domain,CollegeFacility,CollegePlacement,RankingUploadList,Course,FeeBifurcation,Exam,Ranking,CollegeAccrediationApproval,ApprovalsAccrediations,CourseApprovalAccrediation
+    College, CollegeReviews,Domain,CollegeFacility,CollegePlacement,CollegePlacementCompany,Company,RankingUploadList,Course,FeeBifurcation,Exam,Ranking,CollegeAccrediationApproval,ApprovalsAccrediations,CourseApprovalAccrediation
 )
 
 from college_compare.models import *
@@ -464,6 +464,263 @@ class PlacementStatsComparisonHelper:
             logger.error("Error in comparing placement stats: %s", str(e))
             raise
 
+
+
+# class PlacementGraphInsightsHelper:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         key = '_'.join(map(str, args))
+#         return md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def fetch_placement_insights(
+#         college_ids: List[int],
+#         domain_id: int,
+#         year: int
+#     ) -> Dict:
+#         cache_key = PlacementGraphInsightsHelper.get_cache_key(
+#             'placement_____Insights', '-'.join(map(str, college_ids)), domain_id, year
+#         )
+
+#         def fetch_data():
+#             filters = Q(year=year, published='published')
+#             if domain_id:
+#                 filters &= Q(stream_id=domain_id)
+
+#             # Get placement records for each college
+#             placements = {}
+#             placement_records = (
+#                 CollegePlacement.objects.filter(
+#                     filters,
+#                     college_id__in=college_ids
+#                 )
+#                 .select_related('college')
+#                 .values(
+#                     'college_id',
+#                     'total_students',
+#                     'no_placed',
+#                     'median_salary',
+#                     'max_salary_dom',
+#                     'max_salary_inter'
+#                 )
+#             )
+
+#             # Keep only the first placement record for each college
+#             for placement in placement_records:
+#                 if placement['college_id'] not in placements:
+#                     placements[placement['college_id']] = placement
+
+#             # Fetch recruiter data for each college
+#             recruiter_data = {}
+#             for college_id in college_ids:
+#                 recruiters = (
+#                     Company.objects.filter(
+#                         collegeplacementcompany__collegeplacement__college_id=college_id,
+#                         collegeplacementcompany__collegeplacement__year=year,
+#                         published='published'
+#                     )
+#                     .values('popular_name', 'logo', 'name')
+#                     .distinct()[:5]
+#                 )
+#                 recruiter_data[college_id] = [
+#                     {
+#                         "name": recruiter.get('popular_name') or recruiter.get('name'),
+#                         "logo": recruiter.get('logo'),
+#                     }
+#                     for recruiter in recruiters
+#                 ]
+
+#             # Get college names in order
+#             colleges = {
+#                 college['id']: college['name']
+#                 for college in College.objects.filter(id__in=college_ids).values('id', 'name')
+#             }
+
+#             # Prepare the result dictionary
+#             result_dict = {
+#                 "placement_data": {"type": "vertical bar", "colleges": {}},
+#                 "salary_data": {"type": "vertical bar", "colleges": {}},
+#                 "recruiter_data": {"type": "vertical bar", "colleges": {}},
+#                 "college_names": [colleges[college_id] for college_id in college_ids],
+#             }
+
+#             # Process each college in the order of college_ids
+#             for idx, college_id in enumerate(college_ids, 1):
+#                 college_key = f"college_{idx}"
+#                 placement = placements.get(college_id, {})
+#                 logger.info(f"Processing placement data for college_id {college_id}: {placement}")
+
+#                 total_students = placement.get('total_students') or 0
+#                 placed_students = placement.get('no_placed') or 0
+#                 logger.info(f"Total students: {total_students}, Placed students: {placed_students}")
+
+#                 placement_percentage = (
+#                     round((placed_students / total_students) * 100, 2)
+#                     if total_students > 0 else 0
+#                 )
+#                 logger.info(f"Placement percentage for college {college_id}: {placement_percentage}")
+
+#                 max_salary_dom = placement.get('max_salary_dom') or 0
+#                 max_salary_inter = placement.get('max_salary_inter') or 0
+#                 logger.info(f"Max salaries for college {college_id}: Domestic={max_salary_dom}, International={max_salary_inter}")
+
+#                 max_salary = max(max_salary_dom, max_salary_inter)
+#                 logger.info(f"Final max salary for college {college_id}: {max_salary}")
+
+#                 result_dict["placement_data"]["colleges"][college_key] = {
+#                     "value": placement_percentage,
+#                     "college_id": college_id
+#                 }
+#                 result_dict["salary_data"]["colleges"][college_key] = {
+#                     "max_value": float(max_salary),
+#                     "college_id": college_id
+#                 }
+#                 result_dict["recruiter_data"]["colleges"][college_key] = {
+#                     "companies": recruiter_data.get(college_id, []),
+#                     "college_id": college_id
+#                 }
+
+#             return result_dict
+#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
+
+
+
+
+class PlacementGraphInsightsHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        key = '_'.join(map(str, args))
+        return md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def fetch_placement_insights(
+        college_ids: List[int],
+        domain_id: int,
+        year: int
+    ) -> Dict:
+        cache_key = PlacementGraphInsightsHelper.get_cache_key(
+            'placement_____Insights_v3', '-'.join(map(str, college_ids)), domain_id, year
+        )
+
+        def fetch_data():
+            filters = Q(year=year, published='published')
+            if domain_id:
+                filters &= Q(stream_id=domain_id)
+
+            # Get placement records for each college
+            placements = {}
+            placement_records = (
+                CollegePlacement.objects.filter(
+                    filters,
+                    college_id__in=college_ids
+                )
+                .select_related('college')
+                .values(
+                    'college_id',
+                    'total_students',
+                    'no_placed',
+                    'median_salary',
+                    'max_salary_dom',
+                    'max_salary_inter'
+                )
+            )
+
+            # Aggregate placement records for each college
+            for placement in placement_records:
+                college_id = placement['college_id']
+                if college_id not in placements:
+                    placements[college_id] = {
+                        'total_students': 0,
+                        'no_placed': 0,
+                        'max_salary_dom': 0,
+                        'max_salary_inter': 0
+                    }
+                
+                # Summing up the values for each college, handling None values
+                placements[college_id]['total_students'] += placement.get('total_students', 0) or 0
+                placements[college_id]['no_placed'] += placement.get('no_placed', 0) or 0
+                placements[college_id]['max_salary_dom'] = max(
+                    placements[college_id]['max_salary_dom'], 
+                    placement.get('max_salary_dom', 0) or 0
+                )
+                placements[college_id]['max_salary_inter'] = max(
+                    placements[college_id]['max_salary_inter'], 
+                    placement.get('max_salary_inter', 0) or 0
+                )
+
+            # Fetch recruiter data for each college
+            recruiter_data = {}
+            for college_id in college_ids:
+                recruiters = (
+                    Company.objects.filter(
+                        collegeplacementcompany__collegeplacement__college_id=college_id,
+                        collegeplacementcompany__collegeplacement__year=year,
+                        published='published'
+                    )
+                    .values('popular_name', 'logo', 'name')
+                    .distinct()[:5]
+                )
+                recruiter_data[college_id] = [
+                    {
+                        "name": recruiter.get('popular_name') or recruiter.get('name'),
+                        "logo": recruiter.get('logo'),
+                    }
+                    for recruiter in recruiters
+                ]
+
+            # Get college names in order
+            colleges = {
+                college['id']: college['name']
+                for college in College.objects.filter(id__in=college_ids).values('id', 'name')
+            }
+
+            # Prepare the result dictionary
+            result_dict = {
+                "placement_data": {"type": "vertical bar", "colleges": {}},
+                "salary_data": {"type": "vertical bar", "colleges": {}},
+                "recruiter_data": {"type": "vertical bar", "colleges": {}},
+                "college_names": [colleges[college_id] for college_id in college_ids],
+            }
+
+            # Process each college in the order of college_ids
+            for idx, college_id in enumerate(college_ids, 1):
+                college_key = f"college_{idx}"
+                placement = placements.get(college_id, {})
+                logger.info(f"Processing placement data for college_id {college_id}: {placement}")
+
+                total_students = placement.get('total_students', 0)
+                placed_students = placement.get('no_placed', 0)
+                logger.info(f"Total students: {total_students}, Placed students: {placed_students}")
+
+                # Handle None or 0 for placement percentage calculation
+                placement_percentage = (
+                    round((placed_students / total_students) * 100, 2)
+                    if total_students > 0 else 0
+                )
+                logger.info(f"Placement percentage for college {college_id}: {placement_percentage}")
+
+                max_salary_dom = placement.get('max_salary_dom', 0)
+                max_salary_inter = placement.get('max_salary_inter', 0)
+                logger.info(f"Max salaries for college {college_id}: Domestic={max_salary_dom}, International={max_salary_inter}")
+
+                max_salary = max(max_salary_dom, max_salary_inter)
+                logger.info(f"Final max salary for college {college_id}: {max_salary}")
+
+                result_dict["placement_data"]["colleges"][college_key] = {
+                    "value": placement_percentage,
+                    "college_id": college_id
+                }
+                result_dict["salary_data"]["colleges"][college_key] = {
+                    "max_value": format_fee(max_salary),
+                    "college_id": college_id
+                }
+                result_dict["recruiter_data"]["colleges"][college_key] = {
+                    "companies": recruiter_data.get(college_id, []),
+                    "college_id": college_id
+                }
+
+            return result_dict
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
 
 class CourseFeeComparisonHelper:
     @staticmethod

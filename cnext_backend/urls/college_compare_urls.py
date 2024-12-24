@@ -42,6 +42,11 @@ urlpatterns = [
     comparison_result_page_controllers.PlacementStatsComparisonView.as_view(),
     name='placement-stats-comparison'),
 
+
+    path(f'{compare_prefix}resultPage/placement-graph-insights/',
+    comparison_result_page_controllers.PlacementGraphInsightsView.as_view(),
+    name='placement-graph-insights'),
+
     path(f'{compare_prefix}resultPage/course-fee-comparison/',
         comparison_result_page_controllers.CourseFeeComparisonView.as_view(),
         name='course-fee-comparison'),

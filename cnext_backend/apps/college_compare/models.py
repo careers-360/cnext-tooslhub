@@ -244,6 +244,38 @@ class CollegePlacement(models.Model):
             
         ]
 
+
+
+class CollegePlacementCompany(models.Model):
+    collegeplacement = models.ForeignKey(
+        'CollegePlacement', on_delete=models.CASCADE, db_index=True
+    )
+    company = models.ForeignKey(
+        'Company', on_delete=models.CASCADE, db_index=True
+    )
+
+    class Meta:
+        db_table = 'college_placements_companies'
+        indexes = [
+            models.Index(fields=['collegeplacement', 'company']),
+        ]
+
+class Company(models.Model):
+    name = models.CharField(max_length=255)
+    popular_name = models.CharField(max_length=255, null=True, blank=True)
+    logo = models.CharField(max_length=100, null=True, blank=True)
+    remark = models.TextField(null=True, blank=True)
+    published = models.CharField(max_length=255, default='draft')
+
+    class Meta:
+        db_table = 'companies'
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['popular_name']),
+            models.Index(fields=['published']),
+        ]
+
+
 class Degree(models.Model):
     name = models.CharField(max_length=255, unique=True)
     published = models.CharField(max_length=20, default='published')

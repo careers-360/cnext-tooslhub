@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -219,6 +219,79 @@ class PlacementStatsComparisonView(APIView):
             logger.error(f"Error fetching placement stats comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class PlacementGraphInsightsView(APIView):
+    @extend_schema(
+        summary="Get Placement Graph Insights",
+        description="Retrieve placement insights including placement percentages, salary data, and recruiter information for given colleges.",
+        parameters=[
+            OpenApiParameter(
+                name='college_ids', 
+                type=str, 
+                description='Comma-separated list of college IDs', 
+                required=True
+            ),
+            OpenApiParameter(
+                name='domain_id', 
+                type=int, 
+                description='Domain/Stream ID', 
+                required=True
+            ),
+            OpenApiParameter(
+                name='year', 
+                type=int, 
+                description='Academic year', 
+                required=True
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved placement insights'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        college_ids = request.query_params.get('college_ids')
+        domain_id = request.query_params.get('domain_id')
+        year = request.query_params.get('year')
+
+        try:
+            # Validate required parameters
+            if not college_ids or not year or domain_id is None:
+                raise ValidationError("college_ids, domain_id, and year are required parameters")
+
+            # Convert parameters to appropriate types
+            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+            domain_id = int(domain_id) if domain_id else 0
+            year = int(year)
+
+            # Fetch insights using the helper
+            result = PlacementGraphInsightsHelper.fetch_placement_insights(
+                college_ids=college_ids_list,
+                domain_id=domain_id,
+                year=year
+            )
+
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+
+        except ValueError as ve:
+            logger.error(f"Value error in parameters: {ve}")
+            return CustomErrorResponse(
+                {"error": "Invalid parameter values. Please check the input format."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse(
+                {"error": str(ve)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error fetching placement insights: {e}")
+            return CustomErrorResponse(
+                {"error": "An error occurred while fetching placement insights"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class CourseFeeComparisonView(APIView):
     @extend_schema(
