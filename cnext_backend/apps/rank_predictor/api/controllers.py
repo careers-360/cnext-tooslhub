@@ -169,17 +169,45 @@ class HeaderSectionAPI(APIView):
         
         no_such_product = f"product with id {product_id} doesnot exist"
         return SuccessResponse(no_such_product, status=status.HTTP_404_NOT_FOUND)
-    
-    
+
+class FormSectionAPI(APIView):
+    """
+    API for Content Section on Result Page
+    Endpoint : api/<int:version>/rank-predictor/form-section
+    Params : product_id
+    """
+
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+
+        product_id = request.GET.get('product_id')
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        product_id = int(product_id)
+
+        # Fetch content from database and return it to client.
+        rp_helper = RPHelper()
+        form_fields = rp_helper._get_form_section(product_id=product_id)
+
+        if form_fields:
+            resp = {
+                "fields_list" : form_fields
+            }
+            return SuccessResponse(resp, status=status.HTTP_200_OK)
+        
+        no_such_product = f"product with id {product_id} doesnot exist"
+        return SuccessResponse(no_such_product, status=status.HTTP_404_NOT_FOUND)
+
 class TopCollegesAPI(APIView):
     """
     API for fetching top colleges related to an exam.
     Endpoint: api/<int:version>/rank-predictor/top-colleges
     Params: exam_id
     """
-
     permission_classes = [ApiKeyPermission]
-
     def get(self, request, version, **kwargs):
         exam_id = request.GET.get('exam_id')
         if not exam_id or not exam_id.isdigit():
@@ -187,24 +215,19 @@ class TopCollegesAPI(APIView):
                 {"message": "exam_id is required and should be an integer value"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         exam_id = int(exam_id)
-
         # Fetch colleges from the database
         rp_helper = RPHelper()
         colleges = rp_helper._get_top_colleges(exam_id=exam_id)
-
         if colleges:
             resp = {
                 "exam_id": exam_id,
                 "colleges": colleges,
             }
             return SuccessResponse(resp, status=status.HTTP_200_OK)
-
         no_colleges_found = f"No colleges found for exam_id {exam_id}"
         return SuccessResponse({"message": no_colleges_found}, status=status.HTTP_404_NOT_FOUND)
-
-
+    
 # class RankCalculatorAPI(APIView):
 #     """
 #     API for Rank and Percentile Calculation
