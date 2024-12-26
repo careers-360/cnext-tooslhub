@@ -149,9 +149,9 @@ class RpFormField(models.Model):
     mapped_process_type = models.IntegerField(null=True, blank=True)
     mandatory = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
-    created = models.DateTimeField(null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField(null=True, blank=True)
 
     class Meta:
