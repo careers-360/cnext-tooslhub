@@ -711,9 +711,9 @@ class RPCmsHelper:
             field for field in mandatory_fields if field not in data or data[field] is None
         ]
 
-        missing_fields.extend(
-            field for field in non_mandatory_fields if field not in data
-        )
+        # missing_fields.extend(
+        #     field for field in non_mandatory_fields if field not in data
+        # )
 
         if missing_fields:
             return False, missing_fields 
