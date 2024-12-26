@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
-from tools.models import CPProductCampaign, CollegeCourse, CPFeedback, Exam
+from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
 
@@ -358,7 +358,20 @@ class RPCmsHelper:
             if rp_students_appeared:
                 data["year"] = latest_year 
                 data["count"] = len(rp_students_appeared) 
-                data["student_appeared_data"] = rp_students_appeared  
+                data["student_appeared_data"] = rp_students_appeared 
+
+
+        cast_category_dict = dict(CasteCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+        disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+
+        for student_data in rp_students_appeared:
+            student_data['student_type'] = STUDENT_TYPE.get(student_data.get('student_type'))
+            student_data['category'] = cast_category_dict.get(student_data.get('category'))
+            student_data['disability'] = disability_category_dict.get(student_data.get('disability'))
+
+        data["student_appeared_data"] = rp_students_appeared 
+
+        
         return True, data
 
     def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
@@ -381,7 +394,7 @@ class RPCmsHelper:
         if non_common_ids:
             RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
-        fields = ['student_type','category', 'disability', 'min_student', 'max_student'] 
+        fields = ['student_type','category', 'disability', 'min_student', 'max_student','updated_by'] 
 
         # category and diability are mandatory when student_type =    category_wise
 
@@ -645,41 +658,135 @@ class RPCmsHelper:
         }
         return True, final_output
 
-    def check_rp_create_form_fields(self, id, data):
-        field_type = data.get('user_input')
-        if field_type == 1:  # "User Input"
-            mandatory_fields = ["input_flow_type", "display_name", "placeholder", "min_val", "max_val", "weight", "mandatory"]
-            needed_fields= ["error_message", "mapped_process_type", "status"]  
-        elif field_type == 2: # "Application Number"
-            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"]
-            needed_fields = ["mandatory", "status"]
-        elif field_type == 3: # "Category Dropdown"
-            mandatory_fields = ["display_name", "placeholder", "weight"] #TODO - "mapped_category" not in design 
-            needed_fields = ["mandatory", "status", "error_message", "mapped_process_type"]
-        elif field_type == 4: # "Select List Dropdown"
-            mandatory_fields = ["display_name", "placeholder", "weight"] #TODO - "List Option Data" not in design 
-            needed_fields = ["mandatory", "status", "error_message"]
-        elif field_type == 5: # "Radio Button"
-            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"] #TODO - "List Option Data" not in design 
-            needed_fields = ["mandatory", "status", "mapped_process_type"]
-        elif field_type == 6:  # "Date of Birth"
-            mandatory_fields = ["display_name", "placeholder", "error_message", "weight"] #TODO - "List Option Data" not in design 
-            needed_fields = ["mandatory", "status", "mapped_process_type"]
+    def _get_input_form_field_data(seld, id):
+        resp = RpFormField.objects.filter(id = id).values()
+        return True, resp
+
+    
+    def validate_rp_form_fields(self,data):
+        """
+        Validates the incoming data for RP create form fields based on field type.
+
+        Args:
+            data (dict): The input data containing field details.
+
+        Returns:
+            dict: A validation result with `is_valid` status and missing fields, if any.
+        """
+        id = data.get('id')
+        field_type = data.get('field_type')
+        product_id = data.get('product_id')
+        input_flow_type = data.get('input_flow_type')
+        mapped_category = data.get('mapped_category')
+        field_mapping = {
+            1: {
+                "mandatory_fields": ["input_flow_type", "display_name", "place_holder_text", "min_val", "max_val", "weight", "mandatory"],
+                "non_mandatory_fields": ["error_message", "mapped_process_type","status"]
+            },
+            2: {
+                "mandatory_fields": ["display_name", "place_holder_text", "weight"],
+                "non_mandatory_fields": ["mandatory","error_message","status"]
+            },
+            3: {
+                "mandatory_fields": ["display_name", "place_holder_text", "mapped_category", "weight"],
+                "non_mandatory_fields": ["mandatory", "error_message", "mapped_process_type","status"]
+            },
+            4: {
+                "mandatory_fields": ["display_name", "place_holder_text", "weight", "list_option_data"],
+                "non_mandatory_fields": ["mandatory", "error_message","status"]
+            },
+            5: {
+                "mandatory_fields": ["display_name", "list_option_data", "weight"],
+                "non_mandatory_fields": ["mandatory", "mapped_process_type","status"]
+            },
+            6: {
+                "mandatory_fields": ["display_name", "place_holder_text", "weight"],
+                "non_mandatory_fields": ["error_message", "mandatory","status"]
+            },
+        }
+
+        mandatory_fields = field_mapping[field_type]["mandatory_fields"]
+        non_mandatory_fields = field_mapping[field_type]["non_mandatory_fields"]
+        missing_fields = [
+            field for field in mandatory_fields if field not in data or data[field] is None
+        ]
+
+        missing_fields.extend(
+            field for field in non_mandatory_fields if field not in data
+        )
+
+        if missing_fields:
+            return False, missing_fields 
         
-        pass 
+
+        if field_type == 1: #User Input 
+            query = RpFormField.objects.filter(input_flow_type=input_flow_type,product_id = product_id,field_type=1,status=1)
+            
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, "Combination of these (Input Flow Type, Field Type) already exists. It must be unique."
+            
+        elif field_type == 2: # Application Number 
+            query = RpFormField.objects.filter(product_id = product_id,field_type=2,status=1)
+            
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, f"Can map only 1 application number field."
+            
+        elif field_type == 3: # Category Dropdown 
+            query = RpFormField.objects.filter(product_id = product_id,field_type=3,mapped_category=mapped_category,status=1)
+            
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, f"Can map only 1 <selected mapped category option> id : {mapped_category} field"
+            
+        elif field_type == 4: # Select List Dropdown
+            query = RpFormField.objects.filter(product_id = product_id,field_type=5,status=1)
+
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, f"Can map only 1 list options field."
+            
+        elif field_type == 5: # Radio Button
+            query = RpFormField.objects.filter(product_id=product_id,field_type=4,status=1)
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, f"Can map only 1 list options field."
+            
+        elif field_type == 6: # Date of Birth
+            query = RpFormField.objects.filter(product_id=product_id,field_type=6,status=1)
+            if id: # update case 
+                query = query.exclude(id=id)
+            if query.exists():
+                return False, f"Can map only 1 DOB field."
+
+        return True, []
+    
+
     
     def _add_update_rp_form_data(self, id, data):
 
+        final_output = {
+            "message": "Successfully add/updated form fields.",
+            "error": "",
+        }
+
+        is_valid, validation_response = self.validate_rp_form_fields(data)
+        if not is_valid:
+            final_output["message"] = "Missing Fields"
+            final_output['error'] = validation_response
+            return False , final_output
+        
         if id:
             RpFormField.objects.filter(id = id).update(**data)
         else:
             RpFormField.objects.create(**data)
-        
-        final_output = {
-            "message": "Successfully created session",
-            "error": "",
-            "count": ""
-        }
+
         return True, final_output
     def get_input_form_data(self, pk):
         result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name','created_by','updated_by')
@@ -769,14 +876,19 @@ class CommonDropDownHelper:
         if not self.offset:
             self.offset = (self.page - 1) * self.limit
 
-    def _get_dropdown_list(self, field_name, q, selected_id=None):
+    def _get_dropdown_list(self, *args, **kwargs):
+        q = kwargs.get('q','')
+        field_name = kwargs.get('field_name')
+        selected_id = kwargs.get('selected_id')
+        product_id = kwargs.get('product_id')
+
+        
         internal_limit = None
         dropdown_data = {
             "field": field_name,
             "message": "",
             "dropdown": []
         }
-        
         if field_name == "difficulty":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
 
@@ -787,6 +899,9 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
 
         elif field_name == "input_flow_type":
+            #TODO better way -             
+            # dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RpInputFlowMaster.objects.filter(status=1).annotate(key=F('id'), value=F('input_flow_type')).values_list('key', 'value')]
+
             master_result_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type"))
             dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
@@ -812,10 +927,16 @@ class CommonDropDownHelper:
             dropdown_data["dropdown"] = tools
             dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
 
+        elif field_name == "tools_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key,val in TOOL_TYPE.items()]
+
+        elif field_name == "mapped_process_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id).annotate(key=F('id'), value=F('input_process_type')).values_list('key', 'value')]
+
         elif field_name == "rp_field_type":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
 
-        elif field_name == "rp_appeared_student_exam":
+        elif field_name == "exam":
             #TODO optimize this and check structure
             """
             Fetches and structures exams based on the query.
@@ -830,39 +951,6 @@ class CommonDropDownHelper:
                 .filter(Q(exam_name__icontains=q) | Q(exam_short_name__icontains=q))
                 .values('id', 'exam_name', 'parent_exam_id', 'exam_short_name')
             )
-            # TODO remove this 
-            # exam_mappings = {}
-            # for exam in exam_list:
-            #     parent_id = exam['parent_exam_id']
-            #     if parent_id not in exam_mappings:
-            #         exam_mappings[exam['id']] = {
-            #             "parent_exams": exam,
-            #             "child_exams": []
-            #         }
-            #     else:
-            #         exam_mappings[parent_id]["child_exams"].append(exam)
-
-            # dropdown = []
-            # for key, value in exam_mappings.items():
-
-            #     parent_exam_dict = {}
-            #     parent_exam_dict['id'] = key
-            #     parent_exam_dict['exam_name'] = value.get('parent_exams').get('exam_name')
-            #     parent_exam_dict['exam_short_name'] = value.get('parent_exams').get('exam_short_name')
-
-            #     dropdown.append(parent_exam_dict)
-
-            #     child_exams = value.get('child_exams')
-            #     for exam in child_exams:
-            #         child_exam_dict = {}
-            #         child_exam_dict['id'] = exam.get('id')
-            #         child_exam_dict['exam_name'] = exam.get('exam_name')
-            #         child_exam_dict['exam_short_name'] = exam.get('exam_shot_name')
-            #         child_exam_dict['parent_exam_name'] = parent_exam_dict['exam_name']
-            #         child_exam_dict['parent_exam_short_name'] = value.get('parent_exams').get('exam_short_name')
-            #         dropdown.append(child_exam_dict)
-
-            # dropdown_data["dropdown"] = dropdown 
 
             dropdown = []
             exam_mappings = {exam['id']: exam for exam in exam_list if exam['parent_exam_id'] == 0}

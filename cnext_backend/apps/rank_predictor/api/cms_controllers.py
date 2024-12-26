@@ -133,7 +133,7 @@ class CommonDropDownAPI(APIView):
     
         # Fetch common dropdown data from database and return it to client.
         cms_helper = CommonDropDownHelper(offset=offset, page=page, limit=limit)
-        resp = cms_helper._get_dropdown_list(field_name=field_name, selected_id=selected_id,q=q)
+        resp = cms_helper._get_dropdown_list(**request.GET.dict())
         return SuccessResponse(resp, status=status.HTTP_200_OK)
     
 
@@ -247,7 +247,7 @@ class RPAppearedStudentsAPI(APIView):
         cms_helper = RPCmsHelper()
         resp, data = cms_helper._get_student_appeared_data_(product_id=product_id, year=year)
         if resp:
-            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+            return SuccessResponse(data, status=status.HTTP_200_OK)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
         
@@ -282,9 +282,19 @@ class CreateForm(APIView):
 
     def get(self, request, version, **kwargs):
 
-        id = request.GET.get('id')
-        RpFormField.objects.filter(id = id).values()
         
+        resp = {}
+        id = request.GET.get('id')
+
+        if not id or not id.isdigit():
+            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+
+        cms_helper = RPCmsHelper()
+        resp, data = cms_helper._get_input_form_field_data(id=id)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
         pass
 
 
@@ -300,7 +310,12 @@ class CreateForm(APIView):
         
         cms_helper = RPCmsHelper()
         resp, data = cms_helper._add_update_rp_form_data(id=id, data=data)
-        return SuccessResponse("Data Sucessfully created buddy !!!! ")
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+    
+    
 
 class CreateInputForm(APIView):
     permission_classes = (

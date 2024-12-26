@@ -273,7 +273,6 @@ class ToolsHelper():
                 if bulk_create_data:
                     RpSmartRegistration.objects.bulk_create(bulk_create_data)
 
-            self.prepare_meta_data(request_data,obj)
             thread = threading.Thread(target=self.prepare_meta_data, args=(request_data, obj))
             thread.start()
             return "Ok"
