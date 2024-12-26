@@ -337,11 +337,13 @@ class ToolsHelper():
             custom_exam_name = request_data.get('custom_exam_name')
             custom_flow_type = request_data.get('custom_flow_type')
             custom_year = request_data.get('custom_year')
+            update_by = request_data.get('updated_by')
             update_data.update({
                 'alias': f"{custom_exam_name} {custom_flow_type} {custom_year}",
                 'custom_exam_name': custom_exam_name,
                 'custom_flow_type': custom_flow_type,
                 'custom_year': custom_year,
+                'updated_by': update_by
             })
 
         incoming_header_section = request_data.get('header_section', [])
@@ -396,6 +398,7 @@ class ToolsHelper():
                         content_section = RpContentSection.objects.get(id=section_id)
                         content_section.heading = item.get('heading', content_section.heading)
                         content_section.content = item.get('content', content_section.content)
+                        content_section.updated_by = item.get('updated_by', content_section.updated_by)
                         if image_web:
                             content_section.image_web = image_web
                         if image_wap:
@@ -418,7 +421,10 @@ class ToolsHelper():
                         heading=item.get('heading'),
                         content=item.get('content'),
                         image_web=image_web,
-                        image_wap=image_wap
+                        image_wap=image_wap,
+                        created_by= item.get('created_by'),
+                        updated_by= item.get('updated_by'),
+
                     )
 
             ids_to_delete = existing_ids - incoming_ids

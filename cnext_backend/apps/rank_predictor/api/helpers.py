@@ -789,7 +789,7 @@ class RPCmsHelper:
 
         return True, final_output
     def get_input_form_data(self, pk):
-        result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name')
+        result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name','created_by','updated_by')
         input_process_type_dict = dict(RpInputFlowMaster.objects.all().values_list('id','input_process_type'))
         for value in result:
             if value['input_process_type']:
@@ -806,7 +806,9 @@ class RPCmsHelper:
         existing_records = {record.id: record for record in kwargs.get('instance', [])}
 
         for data in request_data:
-            record_id = data.get('id') 
+            record_id = data.get('id')
+            created_by = data.get('created_by')
+            updated_by = data.get('updated_by')
             submit_cta_name = data['submit_cta_name']
             input_process_type = data['input_process_type']
             process_type_toggle_label = data['process_type_toggle_label']
@@ -817,6 +819,7 @@ class RPCmsHelper:
                 else:
                     record = existing_records[record_id]
                     record.submit_cta_name = submit_cta_name
+                    record.updated_by = updated_by
                     record.input_process_type = input_process_type
                     record.process_type_toggle_label = process_type_toggle_label
                     bulk_update_data.append(record)
@@ -824,6 +827,8 @@ class RPCmsHelper:
                 # Create new record
                 bulk_create_data.append(CnextRpCreateInputForm(
                     product_id=product_id,
+                    created_by=created_by,
+                    updated_by=updated_by,
                     submit_cta_name=submit_cta_name,
                     input_process_type=input_process_type,
                     process_type_toggle_label=process_type_toggle_label
