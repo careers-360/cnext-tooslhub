@@ -195,14 +195,14 @@ class PeerComparisonService:
 class TopCollegesCoursesService:
     BATCH_SIZE = 10000
     CACHE_TIMEOUT = 3600 * 168
-    MAX_WORKERS = 8
+    MAX_WORKERS = 10
 
     @classmethod
     def get_top_colleges_courses(cls, uid: int = None) -> Dict:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v5_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v6_{user_context.get('domain_id')}"
 
             if cached := cache.get(cache_key):
                 return cached
