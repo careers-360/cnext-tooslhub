@@ -32,6 +32,11 @@ urlpatterns = [
     comparison_result_page_controllers.RankingAccreditationComparisonView.as_view(),
     name='ranking-accreditation-comparison'),
 
+
+    path(f'{compare_prefix}resultPage/ranking-accreditation-combined-comparison/',
+    comparison_result_page_controllers.RankingAccreditationCombinedComparisonView.as_view(),
+    name='ranking-accreditation-combined-comparison'),
+
     path(f'{compare_prefix}resultPage/ranking-insights-graph/',
     comparison_result_page_controllers.RankingGraphInsightsView.as_view(),
     name='ranking-insights-graph'),

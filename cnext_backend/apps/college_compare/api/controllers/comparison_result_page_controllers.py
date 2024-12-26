@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -56,6 +56,64 @@ class RankingAccreditationComparisonView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
+class RankingAccreditationCombinedComparisonView(APIView):
+    @extend_schema(
+        summary="Get Ranking and Accreditation Comparison",
+        description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year, and includes combined and multi-year data.",
+        parameters=[
+            OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
+            OpenApiParameter(name='selected_domain', type=str, description='Domain for ranking', required=True),
+            OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=True),
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved ranking and accreditation comparison'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        college_ids = request.query_params.get('college_ids')
+        selected_domain = request.query_params.get('selected_domain')
+        year = request.query_params.get('year')
+
+        try:
+            if not college_ids or not selected_domain:
+                raise ValidationError("Both college_ids and selected_domain are required")
+
+            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+            year = int(year) if year else None
+
+           
+            ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domain, year)
+            ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domain, year - 1)
+
+         
+            combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domain, year)
+            combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domain, year - 1)
+
+            years = [year - i for i in range(5)] if year else None
+            multi_year_ranking_data = (
+                MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domain, years)
+                if years else {}
+            )
+
+            result = {
+                "current_year_data": ranking_data_current_year,
+                "previous_year_data": ranking_data_previous_year,
+                "current_combined_ranking_data": combined_ranking_data_current_year,
+                "previous_combined_ranking_data": combined_ranking_data_previous_year,
+                "multi_year_ranking_data": multi_year_ranking_data,
+            }
+
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error fetching ranking and accreditation comparison: {e}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RankingGraphInsightsView(APIView):
     @extend_schema(
