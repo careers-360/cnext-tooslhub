@@ -1,4 +1,4 @@
-from rank_predictor.models import CnextRpCreateInputForm
+from rank_predictor.models import CnextRpCreateInputForm, RpMeritList
 from rest_framework.views import APIView
 from rank_predictor.models import RpFormField
 from utils.helpers.response import SuccessResponse, CustomErrorResponse, ErrorResponse
@@ -7,6 +7,7 @@ from rest_framework import status
 from .helpers import RPCmsHelper, CommonDropDownHelper
 from rest_framework.response import Response
 import json
+import pandas as pd
 
 
 class FlowTypeAPI(APIView):
@@ -361,3 +362,84 @@ class InputFormList(APIView):
 
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
+
+class UploadMeritList(APIView):
+    permission_classes = [ApiKeyPermission]
+
+    def post(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        selected_year = request.POST.get('year')
+        product_id = request.POST.get('product_id')
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        file_extension = file.name.split('.')[-1].lower()
+        if file_extension not in ['csv', 'xlsx']:
+            return Response({"error": "Unsupported file format. Only .csv and .xlsx are allowed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if file_extension == 'csv':
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+
+            # Clean column names to remove any leading/trailing spaces
+            df.columns = df.columns.str.strip()
+
+            # Validate 'year' column against selected_year
+            if 'year' not in df.columns:
+                return Response({"error": "'year' column not found in the file."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if all rows in the 'year' column match the selected_year
+            if not df['year'].astype(str).eq(str(selected_year)).all():
+                return Response({"error": "Sheet Year does not match with the selected one."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if 'input_flow_type' exists in the columns
+            if 'input_flow_type' not in df.columns:
+                return Response({"error": "'input_flow_type' column not found in the file."}, status=status.HTTP_400_BAD_REQUEST)
+
+            #DELETE SAME DATA CASE
+            RpMeritList.objects.filter(product_id = product_id,year = selected_year).delete()
+            # Group by 'input_flow_type' and calculate mean and standard deviation for each group
+            grouped = df.groupby('input_flow_type').agg(
+                sheet_mean=('input', 'mean'),
+                sheet_sd=('input', 'std')
+            ).reset_index()
+
+            # Process rows to calculate zscore
+            processed_rows = []
+            for _, row in df.iterrows():
+                input_flow_type = row.get('input_flow_type')
+
+                # Get the mean and sd for the current input_flow_type
+                group_stats = grouped[grouped['input_flow_type'] == input_flow_type]
+                if not group_stats.empty:
+                    sheet_mean = group_stats['sheet_mean'].values[0]
+                    sheet_sd = group_stats['sheet_sd'].values[0]
+                else:
+                    sheet_mean = None
+                    sheet_sd = None
+
+                # Add results to the row dictionary
+                row_data = row.to_dict()
+                row_data['sheet_mean'] = sheet_mean
+                row_data['sheet_sd'] = sheet_sd
+
+                # Calculate zscore if sheet_mean and sheet_sd are not None
+                if sheet_mean is not None and sheet_sd is not None and sheet_sd != 0:
+                    input_value = row.get('input')
+                    if pd.notnull(input_value) and isinstance(input_value, (int, float)):
+                        zscore = (input_value - sheet_mean) / sheet_sd
+                        row_data['zscore'] = zscore
+                    else:
+                        row_data['zscore'] = None
+                else:
+                    row_data['zscore'] = None
+
+                processed_rows.append(row_data)
+
+            return Response({"message": "File processed successfully.", "data": processed_rows[:20]}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
