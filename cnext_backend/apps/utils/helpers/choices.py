@@ -33,3 +33,5 @@ DISABILITY_CATEGORY = [
     {"id": disability.get("id"), "value": disability.get("name")}
     for disability in DisabilityCategory.objects.all().values("id", "name") #TODO do it using F in django
 ]
+
+HEADER_DISPLAY_PREFERANCE = {1: 'gif', 2: 'video', 3: 'image', 4: 'secondary_image'}

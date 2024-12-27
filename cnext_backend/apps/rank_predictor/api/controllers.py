@@ -153,14 +153,14 @@ class LandingDataAPI(APIView):
         resp = {}
 
         product_id = request.GET.get('product_id')
-        if not product_id or not product_id.isdigit():
-            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        alias = request.GET.get('alias')
         
-        product_id = int(product_id)
+        if product_id != None:
+            product_id = int(product_id)
 
         # Fetch content from database and return it to client.
         rp_helper = RPHelper()
-        header_content = rp_helper._get_header_section(product_id=product_id)
+        header_content = rp_helper._get_header_section(product_id=product_id, alias=alias)
         content_section = rp_helper._get_content_section(product_id=product_id)
 
         if header_content:
