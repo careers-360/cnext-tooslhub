@@ -134,24 +134,36 @@ class College(models.Model):
     def ownership_display(self):
         return dict(self.OWNERSHIP_CHOICES).get(self.ownership, '-')
 
-    def type_of_institute(self):
+   
+
+    @staticmethod
+    def type_of_institute(institute_type_1, institute_type_2):
         type_mapping = {
-            (1, 1): 'Central University',
-            (2, 2): 'State University',
-            (3, 3): 'Deemed to be University',
-            (4, 4): 'Institute of National Importance',
-            (5, 5): 'Institute of Eminence',
+            1: 'Central University',
+            2: 'State University',
+            3: 'Deemed to be University',
+            4: 'Institute of National Importance',
+            5: 'Institute of Eminence',
         }
-        type_combination = type_mapping.get((self.institute_type_1, self.institute_type_2), None)
 
-        if type_combination:
-            return type_combination
+        # Handle individual types
+        type1_label = type_mapping.get(institute_type_1, None)
+        type2_label = type_mapping.get(institute_type_2, None)
 
-        if self.institute_type_1:
-            return dict(self.INSTITUTE_TYPE_CHOICES).get(self.institute_type_1, '-')
-        if self.institute_type_2:
-            return dict(self.INSTITUTE_TYPE_CHOICES).get(self.institute_type_2, '-')
+        if institute_type_1 and institute_type_2:
+            # Create a combined label
+            combined_types = ', '.join(sorted(filter(None, [type1_label, type2_label])))
+            return combined_types if combined_types else '-'
+        
+        # Handle single institute type
+        if type1_label:
+            return type1_label
+        if type2_label:
+            return type2_label
+
         return '-'
+
+    
 
     def parent_institute(self):
         if self.entity_reference:
@@ -243,6 +255,38 @@ class CollegePlacement(models.Model):
             models.Index(fields=['stream']),  
             
         ]
+
+
+
+class CollegePlacementCompany(models.Model):
+    collegeplacement = models.ForeignKey(
+        'CollegePlacement', on_delete=models.CASCADE, db_index=True
+    )
+    company = models.ForeignKey(
+        'Company', on_delete=models.CASCADE, db_index=True
+    )
+
+    class Meta:
+        db_table = 'college_placements_companies'
+        indexes = [
+            models.Index(fields=['collegeplacement', 'company']),
+        ]
+
+class Company(models.Model):
+    name = models.CharField(max_length=255)
+    popular_name = models.CharField(max_length=255, null=True, blank=True)
+    logo = models.CharField(max_length=100, null=True, blank=True)
+    remark = models.TextField(null=True, blank=True)
+    published = models.CharField(max_length=255, default='draft')
+
+    class Meta:
+        db_table = 'companies'
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['popular_name']),
+            models.Index(fields=['published']),
+        ]
+
 
 class Degree(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -606,7 +650,7 @@ class RankingUploadList(models.Model):
         db_index=True,
         db_column='ranking_id'
     )
-    published = models.BooleanField(default=True)
+
     overall_rank = models.IntegerField(null=True, blank=True)
     overall_rating = models.CharField(max_length=50, null=True, blank=True)
     overall_score = models.FloatField(null=True, blank=True)  
@@ -616,12 +660,34 @@ class RankingUploadList(models.Model):
         indexes = [
             models.Index(fields=['college', 'ranking']),
            
-            models.Index(fields=['published']),
         ]
 
     def __str__(self):
         return f"{self.college.name} - {self.ranking.ranking_authority} ({self.year})"
 
+
+
+class RankingParameters(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    score = models.FloatField()
+    total = models.IntegerField()
+    ranking_upload = models.ForeignKey(
+        'RankingUploadList',
+        on_delete=models.CASCADE,
+        related_name='parameters',
+        db_index=True,
+        db_column="ranking_upload_id"
+    )
+
+    class Meta:
+        db_table = 'ranking_parameters'
+        indexes = [
+            models.Index(fields=['ranking_upload']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (Score: {self.score}/{self.total})"
 
 class FeeBifurcation(models.Model):
     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='fees', db_index=True)
@@ -633,6 +699,52 @@ class FeeBifurcation(models.Model):
         indexes = [
             models.Index(fields=['college_course', 'category']),
         ]
+
+
+
+
+class CourseFeesDuration(models.Model):
+    type = models.CharField(max_length=255)
+    count = models.IntegerField()
+    college_course = models.ForeignKey(
+        'Course', 
+        on_delete=models.CASCADE,
+        related_name='fee_durations',
+        db_index=True
+    )
+
+    class Meta:
+        db_table = 'course_fees_durations'
+        indexes = [
+            models.Index(fields=['college_course', 'type']),
+        ]
+        
+    def __str__(self):
+        return f"{self.type} - {self.count} ({self.college_course})"
+
+class CourseFeeAmountType(models.Model):
+    fees_type = models.CharField(max_length=255)
+    amount = models.PositiveIntegerField()
+    course_fee_duration = models.ForeignKey(
+        CourseFeesDuration,
+        on_delete=models.CASCADE,
+        related_name='fee_amounts',
+        db_index=True
+    )
+
+    class Meta:
+        db_table = 'course_fees_amount_types'
+        indexes = [
+            models.Index(fields=['course_fee_duration', 'fees_type']),
+        ]
+        
+    def __str__(self):
+        return f"{self.fees_type} - {self.amount} ({self.course_fee_duration})"
+        
+    @property
+    def total_amount(self):
+        """Calculate total amount for the full duration"""
+        return self.amount * self.course_fee_duration.count
 
 class CollegeCourseExam(models.Model):
     college_course = models.ForeignKey(

@@ -32,6 +32,11 @@ urlpatterns = [
     comparison_result_page_controllers.RankingAccreditationComparisonView.as_view(),
     name='ranking-accreditation-comparison'),
 
+
+    path(f'{compare_prefix}resultPage/ranking-accreditation-combined-comparison/',
+    comparison_result_page_controllers.RankingAccreditationCombinedComparisonView.as_view(),
+    name='ranking-accreditation-combined-comparison'),
+
     path(f'{compare_prefix}resultPage/ranking-insights-graph/',
     comparison_result_page_controllers.RankingGraphInsightsView.as_view(),
     name='ranking-insights-graph'),
@@ -41,6 +46,11 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/placement-stats-comparison/',
     comparison_result_page_controllers.PlacementStatsComparisonView.as_view(),
     name='placement-stats-comparison'),
+
+
+    path(f'{compare_prefix}resultPage/placement-graph-insights/',
+    comparison_result_page_controllers.PlacementGraphInsightsView.as_view(),
+    name='placement-graph-insights'),
 
     path(f'{compare_prefix}resultPage/course-fee-comparison/',
         comparison_result_page_controllers.CourseFeeComparisonView.as_view(),
@@ -79,6 +89,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/college-reviews-comparison/',
         comparison_result_page_controllers.CollegeReviewsComparisonView.as_view(),
         name='college-reviews-comparison'),
+    
+    path(f'{compare_prefix}resultPage/college-recent-reviews/',
+        comparison_result_page_controllers.SingleCollegeReviewsView.as_view(),
+        name='college-recent-reviews'),
 
     
     path(f'{compare_prefix}resultPage/exam-cutoff-comparison/',
