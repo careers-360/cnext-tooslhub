@@ -89,6 +89,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/college-reviews-comparison/',
         comparison_result_page_controllers.CollegeReviewsComparisonView.as_view(),
         name='college-reviews-comparison'),
+    
+    path(f'{compare_prefix}resultPage/college-recent-reviews/',
+        comparison_result_page_controllers.SingleCollegeReviewsView.as_view(),
+        name='college-recent-reviews'),
 
     
     path(f'{compare_prefix}resultPage/exam-cutoff-comparison/',

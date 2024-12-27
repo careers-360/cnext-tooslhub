@@ -230,12 +230,12 @@ class RankingGraphInsightsView(APIView):
                 raise ValidationError("start_year must be less than or equal to end_year")
 
             result = RankingGraphHelper.prepare_graph_insights(college_ids_list, start_year, end_year,domain_id)
-            return Response(result, status=status.HTTP_200_OK)
+            return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
-            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error fetching ranking graph insights: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
 
@@ -493,12 +493,12 @@ class FeesGraphInsightsView(APIView):
             course_ids_list = [int(cid) for cid in course_ids.split(",")]
 
             result = FeesGraphHelper.prepare_fees_insights(course_ids_list)
-            return Response(result, status=status.HTTP_200_OK)
+            return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
-            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error fetching fee graph insights: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ClassProfileComparisonView(APIView):
@@ -676,21 +676,21 @@ class ProfileInsightsView(APIView):
                 level=level
             )
 
-            return Response(result, status=status.HTTP_200_OK)
+            return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
-            return Response(
+            return CustomErrorResponse(
                 {"error": str(ve)}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         except ValueError as ve:
-            return Response(
+            return CustomErrorResponse(
                 {"error": "Invalid parameter values. Please check the input types."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             logger.error(f"Error fetching profile insights: {e}")
-            return Response(
+            return CustomErrorResponse(
                 {"error": "Internal server error"}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -727,9 +727,19 @@ class CollegeFacilitiesComparisonView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 class CollegeReviewsComparisonView(APIView):
+    """
+    API view for comparing reviews across multiple colleges.
+    Provides both detailed review summaries and recent reviews.
+    """
+    
+    def __init__(self, **kwargs):
+        """
+        Initialize the view with a CollegeReviewsHelper instance.
+        """
+        super().__init__(**kwargs)
+        self.reviews_helper = CollegeReviewsHelper()
+
     @extend_schema(
         summary="Get College Reviews Comparison",
         description="Retrieve reviews summary and recent reviews for multiple colleges",
@@ -754,27 +764,40 @@ class CollegeReviewsComparisonView(APIView):
         },
     )
     def get(self, request):
-        college_ids = request.query_params.get('college_ids')
-        grad_year = request.query_params.get('grad_year')
-
+        """
+        Handle GET requests for college reviews comparison.
+        
+        Args:
+            request: HTTP request object with query parameters
+                - college_ids: Comma-separated list of college IDs
+                - grad_year: Graduation year for filtering reviews
+                
+        Returns:
+            Response: JSON response containing reviews summary and recent reviews
+        """
         try:
+            # Extract and validate required parameters
+            college_ids = request.query_params.get('college_ids')
+            grad_year = request.query_params.get('grad_year')
+
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required")
 
+            # Convert college IDs to list of integers
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
             
-            
-            reviews_summary = CollegeReviewsHelper.get_college_reviews_summary(
-                college_ids_list,
-                int(grad_year)
+            # Fetch reviews summary and recent reviews
+            reviews_summary = self.reviews_helper.get_college_reviews_summary(
+                college_ids=college_ids_list,
+                grad_year=int(grad_year)
             )
-            
             
             recent_reviews = CollegeReviewsHelper.get_recent_reviews(
                 college_ids_list,
                 limit=3
             )
             
+            # Combine results and return success response
             result = {
                 'reviews_summary': reviews_summary,
                 'recent_reviews': recent_reviews
@@ -788,8 +811,14 @@ class CollegeReviewsComparisonView(APIView):
                 {"error": str(ve)}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
+        except ValueError as ve:
+            logger.error(f"Value error: {ve}")
+            return CustomErrorResponse(
+                {"error": "Invalid college ID format"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
-            logger.error(f"Error fetching reviews comparison: {e}")
+            logger.error(f"Error fetching college reviews: {e}")
             return CustomErrorResponse(
                 {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

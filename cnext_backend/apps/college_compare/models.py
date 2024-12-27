@@ -134,24 +134,7 @@ class College(models.Model):
     def ownership_display(self):
         return dict(self.OWNERSHIP_CHOICES).get(self.ownership, '-')
 
-    # def type_of_institute(self):
-    #     type_mapping = {
-    #         (1, 1): 'Central University',
-    #         (2, 2): 'State University',
-    #         (3, 3): 'Deemed to be University',
-    #         (4, 4): 'Institute of National Importance',
-    #         (5, 5): 'Institute of Eminence',
-    #     }
-    #     type_combination = type_mapping.get((self.institute_type_1, self.institute_type_2), None)
-
-    #     if type_combination:
-    #         return type_combination
-
-    #     if self.institute_type_1:
-    #         return dict(self.INSTITUTE_TYPE_CHOICES).get(self.institute_type_1, '-')
-    #     if self.institute_type_2:
-    #         return dict(self.INSTITUTE_TYPE_CHOICES).get(self.institute_type_2, '-')
-    #     return '-'
+   
 
     @staticmethod
     def type_of_institute(institute_type_1, institute_type_2):

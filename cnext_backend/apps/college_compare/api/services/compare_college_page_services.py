@@ -216,6 +216,7 @@ class SummaryComparisonService:
 
 
 
+
 class QuickFactsService:
     @staticmethod
     def get_quick_facts(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
@@ -223,7 +224,6 @@ class QuickFactsService:
 
         def fetch_data():
             try:
-                
                 courses = Course.objects.filter(
                     college_id__in=college_ids,
                     id__in=course_ids,
@@ -236,13 +236,12 @@ class QuickFactsService:
                 ).only(
                     'id', 'course_name', 'college_id', 'degree_id',
                     'college__name', 'college__ownership',
-                    'college__institute_type_1', 'college__type_of_entity',
+                    'college__institute_type_1', 'college__institute_type_2', 'college__type_of_entity',
                     'college__year_of_establishment', 'college__campus_size',
                     'college__location__loc_string',
                     'college__entity_reference__short_name'
                 )
 
-                
                 course_counts = {}
                 counts = Course.objects.filter(
                     college_id__in=college_ids,
@@ -252,10 +251,8 @@ class QuickFactsService:
                     key = (count['college_id'], count['degree_id'])
                     course_counts[key] = count['count']
 
-                
                 results = {}
                 for idx, college_id in enumerate(college_ids, start=1):
-                
                     matching_course = next(
                         (course for course in courses if course.college_id == college_id), None
                     )
@@ -271,14 +268,15 @@ class QuickFactsService:
                             'location': college.location.loc_string if college.location else 'NA',
                             'ownership': college.ownership_display(),
                             'parent_institute': college.parent_institute(),
-                            'type_of_institute': college.type_of_institute(),
+                            'type_of_institute': College.type_of_institute(
+                                college.institute_type_1, college.institute_type_2
+                            ),
                             'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, '-'),
                             'establishment_year': college.year_of_establishment or '',
                             'campus_size': college.campus_size_in_acres(),
                             'total_courses_offered': course_counts.get(count_key, 0)
                         }
                     else:
-                       
                         results[key] = {
                             'college_id': college_id,
                             'college_name': 'NA',

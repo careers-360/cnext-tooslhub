@@ -18,6 +18,10 @@ from django.db.models.expressions import RawSQL
 from collections import defaultdict
 
 from .landing_page_helpers import DomainHelper,CollegeDataHelper
+import boto3
+import os
+import json
+import re
 
 
 
@@ -592,11 +596,11 @@ class RankingGraphHelper:
         return {
             "years": years,
             "overall": {
-                "type": "wave",
+                "type": "line",
                 "colleges": overall_data
             },
             "domain": {
-                "type": "wave",
+                "type": "line",
                 "colleges": domain_data
             },
             "college_names": college_names
@@ -1647,126 +1651,226 @@ class CollegeFacilitiesHelper:
     
 
 
-
+from concurrent.futures import ThreadPoolExecutor
+from botocore.config import Config
 
 
 class CollegeReviewsHelper:
+    """
+    A comprehensive helper class for analyzing college reviews using AWS Bedrock and caching.
+    This class combines numerical ratings with AI-generated insights from review text.
+    """
+    
+    def __init__(self, bedrock_config: Optional[Dict] = None):
+        """
+        Initialize the AWS Bedrock client with secure configuration.
+        
+        Args:
+            bedrock_config (Optional[Dict]): Custom AWS configuration. If None, uses environment variables.
+        """
+        # Use provided config or fall back to environment variables without defaults
+        config = bedrock_config or {
+            'region_name': os.getenv('AWS_REGION','ap-south-1'),
+            'aws_access_key_id': os.getenv('AWS_ACCESS_KEY_ID'),
+            'aws_secret_access_key': os.getenv('AWS_SECRET_ACCESS_KEY')
+        }
+        
+        # Initialize AWS Bedrock client with configuration
+        self.bedrock_client = boto3.client("bedrock-runtime", **config)
+        
     @staticmethod
     def get_cache_key(*args) -> str:
+        """
+        Generate a consistent cache key from variable arguments.
+        
+        Args:
+            *args: Variable arguments to include in the cache key
+            
+        Returns:
+            str: MD5 hash of the concatenated arguments
+        """
         key = '_'.join(str(arg) for arg in args)
         return md5(key.encode()).hexdigest()
 
-    @staticmethod
-    def get_college_reviews_summary(college_ids: List[int], grad_year: int) -> Dict:
+    def _create_summary(self, review_text: str, college_name: str) -> Optional[Dict]:
         """
-        Get aggregated reviews summary for colleges with caching.
-
+        Generate AI-powered summary and insights from review text using AWS Bedrock.
+        
         Args:
-            college_ids (List[int]): List of college IDs to filter.
-            grad_year (int): Graduation year to filter reviews.
-
+            review_text (str): Combined review text to analyze
+            college_name (str): Name of the college for summary personalization
+            
         Returns:
-            Dict: Reviews summary data for each college.
+            Optional[Dict]: Dictionary containing attributes and summary, or None if processing fails
         """
+        if not review_text.strip():
+            return None
+            
+        # Construct a detailed prompt for the AI model
+        prompt = f"""
+        Analyze the college review text inside the <review></review> XML tags below and provide three distinct sections:
+
+        1. Most Discussed Attributes
+       Extract 5-10 most frequently discussed aspects of the college.
+       Requirements:
+       - Use clear 2-3 word phrases
+       - Focus on specific, measurable aspects
+       - Choose only attributes directly mentioned in the text
+       - Use proper noun capitalization
        
+        2. Quick Summary
+           Write exactly 100-200 words focusing on key aspects.
+           Requirements:
+           - Start directly with "{college_name} has..."
+           - Include only information present in the review
+           - Use specific numbers, percentages, and facts
+           - Focus on distinctive features and quantifiable aspects
+
+        Return the response in this exact JSON format:
+        {{
+            "most_discussed_attributes": [],
+            "short_summary": ""
+        }}
+
+        <review>
+        {review_text.strip()}
+        </review>
+        """
+
+        try:
+            # Prepare the model request with appropriate parameters
+            model_request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.0,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}]
+                    }
+                ]
+            }
+
+            # Call the Bedrock API and process the response
+            response = self.bedrock_client.invoke_model(
+                modelId=os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-sonnet-20240229-v1:0"),
+                body=json.dumps(model_request)
+            )
+            
+            response_text = json.loads(response["body"].read())["content"][0]["text"]
+            json_match = re.search(r"{.*}", response_text, re.DOTALL)
+            
+            if json_match:
+                return json.loads(json_match.group())
+                
+        except Exception as e:
+            logger.error(f"Error generating summary: {e}")
+            return None
+
+    def get_college_reviews_summary(self, college_ids: List[int], grad_year: int) -> Dict:
+        """
+        Get comprehensive review summary including ratings and AI-generated insights.
+        
+        Args:
+            college_ids (List[int]): List of college IDs to analyze
+            grad_year (int): Graduation year to filter reviews
+            
+        Returns:
+            Dict: Combined ratings and insights for each college
+        """
+      
         college_ids = [item for sublist in college_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
         
       
-        logger.debug(f"Fetching review summaries for college_ids: {college_ids}")
-
-        cache_key = CollegeReviewsHelper.get_cache_key(
-            'College_Reviews_Summary_V1',
+        cache_key = self.get_cache_key(
+            'College_Reviews_Summary__V3',
             '-'.join(map(str, sorted(college_ids))),
             grad_year
         )
 
         def fetch_summary():
             try:
-               
-                results = (
+                # Fetch aggregate ratings for each college
+                ratings = (
                     CollegeReviews.objects.filter(
                         college_id__in=college_ids,
                         graduation_year__year=grad_year,
                         status=True
                     )
-                    .distinct()
-                    .values('college_id')
+                    .select_related('college')
+                    .values('college_id', 'college__name')
                     .annotate(
                         grad_year=ExtractYear('graduation_year'),
-                      
-                        infra_rating=Coalesce(Round(Avg(F('infra_rating') / 20), 1), Value(0.0, output_field=FloatField())),
-                        campus_life_ratings=Coalesce(Round(Avg(F('college_life_rating') / 20), 1), Value(0.0, output_field=FloatField())),
-                        academics_ratings=Coalesce(Round(Avg(F('overall_rating') / 20), 1), Value(0.0, output_field=FloatField())),
-                        value_for_money_ratings=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0, output_field=FloatField())),
-                        placement_rating=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0, output_field=FloatField())),
-                        faculty_rating=Coalesce(Round(Avg(F('faculty_rating') / 20), 1), Value(0.0, output_field=FloatField())),
+                        infra_rating=Coalesce(Round(Avg(F('infra_rating') / 20), 1), Value(0.0)),
+                        campus_life_ratings=Coalesce(Round(Avg(F('college_life_rating') / 20), 1), Value(0.0)),
+                        academics_ratings=Coalesce(Round(Avg(F('overall_rating') / 20), 1), Value(0.0)),
+                        value_for_money_ratings=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0)),
+                        placement_rating=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0)),
+                        faculty_rating=Coalesce(Round(Avg(F('faculty_rating') / 20), 1), Value(0.0)),
                         review_count=Count('id')
                     )
                 )
 
-              
-                reviews_text = (
+                # Fetch detailed reviews for text analysis
+                reviews = (
                     CollegeReviews.objects.filter(
                         college_id__in=college_ids,
                         graduation_year__year=grad_year,
                         status=True
                     )
                     .values('college_id', 'title', 'campus_life', 'college_infra', 
-                           'academics', 'placements', 'value_for_money')
+                            'academics', 'placements', 'value_for_money')
                 )
 
-               
-                text_data = {}
-                for review in reviews_text:
-                    college_id = review['college_id']
-                    if college_id not in text_data:
-                        text_data[college_id] = {
-                            'keywords': [],
-                            'reviews': []
-                        }
-                    
-                    if review['title']:
-                        text_data[college_id]['keywords'].append(review['title'])
-                    
-                    review_text = ' '.join(filter(None, [
-                        review['campus_life'],
-                        review['college_infra'],
-                        review['academics'],
-                        review['placements'],
-                        review['value_for_money']
-                    ]))
-                    if review_text:
-                        text_data[college_id]['reviews'].append(review_text)
-
-                reviews_data = {}
-                for result in results:
-                    college_id = result['college_id']
-                    college_text = text_data.get(college_id, {'keywords': [], 'reviews': []})
-                    
-                    reviews_data[college_id] = {
-                        **result,
-                        'all_keywords': ' '.join(college_text['keywords']) or 'NA',
-                        'all_reviews': ' '.join(college_text['reviews']) or 'NA',
-                        'college_id': college_id
-                    }
-
-             
+                # Process each college's data
                 result_dict = {}
-                for i, college_id in enumerate(college_ids, 1):
-                    key = f"college_{i}"
-                    result_dict[key] = reviews_data.get(college_id, {
-                        'grad_year': grad_year,
-                        'infra_rating': 0.0,
-                        'campus_life_ratings': 0.0,
-                        'academics_ratings': 0.0,
-                        'value_for_money_ratings': 0.0,
-                        'placement_rating': 0.0,
-                        'faculty_rating': 0.0,
-                        'review_count': 0,
-                        'all_keywords': 'NA',
-                        'all_reviews': 'NA',
-                        'college_id': college_id
-                    })
+                for college_id in college_ids:
+                    college_reviews = [r for r in reviews if r['college_id'] == college_id]
+                    college_name = next((r['college__name'] for r in ratings if r['college_id'] == college_id), "The college")
+                    
+                    # Combine all review texts for analysis
+                    review_texts = [
+                        ' '.join(filter(None, [
+                            review['title'],
+                            review['campus_life'],
+                            review['college_infra'],
+                            review['academics'],
+                            review['placements'],
+                            review['value_for_money']
+                        ]))
+                        for review in college_reviews
+                    ]
+                    
+                    # Generate AI insights if reviews exist
+                    if review_texts:
+                        full_text = ' '.join(review_texts)
+                        insights = self._create_summary(full_text, college_name) or {
+                            'most_discussed_attributes': [],
+                            'short_summary': ''
+                        }
+                    else:
+                        insights = {
+                            'most_discussed_attributes': [],
+                            'short_summary': '',
+                            'status': 'No review text available'
+                        }
+
+                    # Combine ratings and insights
+                    college_ratings = next((r for r in ratings if r['college_id'] == college_id), None)
+                    result_dict[f"college_{college_id}"] = {
+                        **(college_ratings or {
+                            'grad_year': grad_year,
+                            'infra_rating': 0.0,
+                            'campus_life_ratings': 0.0,
+                            'academics_ratings': 0.0,
+                            'value_for_money_ratings': 0.0,
+                            'placement_rating': 0.0,
+                            'faculty_rating': 0.0,
+                            'review_count': 0
+                        }),
+                        'most_discussed_attributes': insights.get('most_discussed_attributes', []),
+                        'short_summary': insights.get('short_summary', '')
+                    }
 
                 return result_dict
 
@@ -1774,6 +1878,7 @@ class CollegeReviewsHelper:
                 logger.error(f"Error fetching reviews summary: {e}")
                 raise
 
+        # Return cached result or compute new one with 1-hour cache time
         return cache.get_or_set(cache_key, fetch_summary, 3600)
 
     @staticmethod
@@ -1782,18 +1887,16 @@ class CollegeReviewsHelper:
         Get recent reviews for colleges with caching.
 
         Args:
-            college_ids (List[int]): List of college IDs to filter.
+            college_ids (List[int]): List of college IDs to filter
             limit (int, optional): Maximum number of reviews per college. Defaults to 3.
 
         Returns:
-            Dict: Recent reviews for each college.
+            Dict: Recent reviews for each college
         """
-      
+        # Flatten nested lists if any
         college_ids = [item for sublist in college_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
         
-       
-        logger.debug(f"Fetching recent reviews for college_ids: {college_ids}")
-
+        # Generate cache key
         cache_key = CollegeReviewsHelper.get_cache_key(
             'Recent_Reviews',
             '-'.join(map(str, sorted(college_ids))),
@@ -1802,24 +1905,24 @@ class CollegeReviewsHelper:
 
         def fetch_recent():
             try:
-            
+                # Fetch recent reviews with user information
                 results = (
                     CollegeReviews.objects.filter(
                         college_id__in=college_ids,
-                        title__isnull=False  
+                        title__isnull=False
                     )
-                    .select_related('user') 
+                    .select_related('user')
                     .values(
                         'college_id',
                         'title',
                         'user__display_name',
                         rating=Round(F('overall_rating') / 20, 1),
-                        review_date=TruncDate('created') 
+                        review_date=TruncDate('created')
                     )
-                    .order_by('college_id', '-created')  
+                    .order_by('college_id', '-created')
                 )
 
-              
+                # Organize reviews by college
                 reviews_by_college = {}
                 for review in results:
                     college_id = review['college_id']
@@ -1833,7 +1936,7 @@ class CollegeReviewsHelper:
                             'review_date': review['review_date']
                         })
 
-             
+                # Format final response
                 result_dict = {}
                 for i, college_id in enumerate(college_ids, 1):
                     key = f"college_{i}"
@@ -1845,8 +1948,9 @@ class CollegeReviewsHelper:
                 logger.error(f"Error fetching recent reviews: {e}")
                 raise
 
-        return cache.get_or_set(cache_key, fetch_recent, 1800*48) 
-    
+        # Return cached result or compute new one with 36-hour cache time
+        return cache.get_or_set(cache_key, fetch_recent, 1800 * 48)
+
 
 
 class ExamCutoffHelper:
