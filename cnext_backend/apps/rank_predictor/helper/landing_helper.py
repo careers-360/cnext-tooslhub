@@ -1,24 +1,62 @@
 from tools.models import CPProductCampaign
-from rank_predictor.models import RpFormField, RpContentSection
+from rank_predictor.models import RpFormField, RpContentSection, RpInputFlowMaster
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias
+from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE
+import os
 
 class RPHelper:
 
     def __init__(self):
+        self.base_image_url = os.getenv("CAREERS_BASE_IMAGES_URL","https://cnextassets.careers360.de/media_tools/")
         pass
 
-    def _get_header_section(self, product_id=None):
+    def _get_header_section(self, product_id=None, alias=None):
 
-        header_data = CPProductCampaign.objects.filter(id=product_id).values("id", "header_section", "custom_exam_name", "custom_flow_type", "custom_year", "video", "usage_count_matrix", "positive_feedback_percentage")
+        if alias != None:
+            alias_data = self._get_product_from_alias(alias=alias)
+            split_string = alias_data.source.split("/")
+
+            print(split_string[1])
+
+            product_id = int(split_string[1])
+
+
+        header_data = CPProductCampaign.objects.filter(id=product_id).values("id", "header_section", "custom_exam_name", "custom_flow_type", "custom_year", "video", "usage_count_matrix", "positive_feedback_percentage", "display_preference", "gif", "secondary_image", 'image')
+        # print(header_data['result'])
+
+        header_data_list = list(header_data)
+
+        for data in header_data_list:
+
+            removable_fields = {key: value for key, value in HEADER_DISPLAY_PREFERANCE.items() if key != data.get('display_preference')}
+            # print(removable_fields)
+
+            for k in removable_fields:
+                data.pop(HEADER_DISPLAY_PREFERANCE.get(k), None)
 
         return header_data
     
     def _get_form_section(self, product_id=None):
 
-        form_data = RpFormField.objects.filter(product_id=product_id).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status")
+        input_form_master_list = RpInputFlowMaster.objects.all().values('id', 'input_flow_type')
 
-        return form_data
+        flow_type_map = {item['id']: item['input_flow_type'] for item in input_form_master_list}
+
+        # print(f"master form data {flow_type_map}")
+
+        form_data = RpFormField.objects.filter(product_id=product_id).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status").order_by('-weight')
+
+        modified_form_data = []
+
+        for form_field in form_data:
+
+            flow_type = flow_type_map.get(form_field['input_flow_type'], None)  
+            form_field['input_flow_type'] = flow_type  
+        
+            modified_form_data.append(form_field)
+
+        return modified_form_data
     
     def _get_top_colleges(self, exam_id=None):
         """
@@ -48,8 +86,25 @@ class RPHelper:
         Fetch content for the product
         """
 
-        return RpContentSection.objects.filter(product_id=product_id).values("heading", "content", "image_web", "image_wap")
+        content_response = []
 
+        content_list = RpContentSection.objects.filter(product_id=product_id).values("heading", "content", "image_web", "image_wap")
+        
+        # print(content_list)
+
+        for content in content_list:
+            content['image_web'] = self.base_image_url+content.get('image_web', None)
+            content['image_wap'] = self.base_image_url+content.get('image_wap', None)
+            content_response.append(content)
+
+        return content_response
+    
+    def _get_product_from_alias(self , alias):
+        source = UrlAlias.objects.filter(alias=alias).first()
+        # source_list = list(source)
+        
+        return source
+        
         
         
     # def calculate_percentile(self, score, max_score):
