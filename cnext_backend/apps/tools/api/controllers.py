@@ -158,10 +158,10 @@ class CMSToolsFaqAPI(APIView):
         """
         Handles the creation, update, deletion of FAQs.
         """
-        faqs = request.data.get('faqs', [])  # List of ToolsFAQ dictionaries
-        product_id = request.data.get('product_id')  # List of ToolsFAQ dictionaries
-        product_type = request.data.get('product_type')  # List of ToolsFAQ dictionaries
-        user_id = request.data.get('user_id')  # List of ToolsFAQ dictionaries
+        faqs = request.data.get('faqs', [])
+        product_id = request.data.get('product_id')
+        product_type = request.data.get('product_type')  
+        user_id = request.data.get('user_id')  
 
         if not product_id:
             return CustomErrorResponse({"error": 'Product id needed'}, status=status.HTTP_400_BAD_REQUEST)
@@ -298,32 +298,32 @@ class CMSToolsResultPageAPI(APIView):
             return ErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class CMSToolsContentAPI(APIView):
+# class CMSToolsContentAPI(APIView):
 
-    permission_classes = (
-        ApiKeyPermission,
-    )
+#     permission_classes = (
+#         ApiKeyPermission,
+#     )
 
 
-    def get(self, request, version, format=None, **kwargs):
+#     def get(self, request, version, format=None, **kwargs):
 
-        pk = request.query_params.get('product_id')
-        # heading = data.get('headings')
-        # heading = data.get('upload_image_web')
-        # heading = data.get('upload_image_wap')
-        # heading = data.get('listing_description')
+#         pk = request.query_params.get('product_id')
+#         # heading = data.get('headings')
+#         # heading = data.get('upload_image_web')
+#         # heading = data.get('upload_image_wap')
+#         # heading = data.get('listing_description')
         
-        data = list(RpContentSection.objects.filter(product_id = pk).values())
-        return SuccessResponse(data, status = status.HTTP_200_OK)
+#         data = list(RpContentSection.objects.filter(product_id = pk).values())
+#         return SuccessResponse(data, status = status.HTTP_200_OK)
     
-    def post(self, request, version, format=None, **kwargs):
+#     def post(self, request, version, format=None, **kwargs):
 
-        data = request.data 
+#         data = request.data 
 
-        for content_dict in data: 
-            RpContentSection.objects.create(**content_dict)
+#         for content_dict in data: 
+#             RpContentSection.objects.create(**content_dict)
 
-        return SuccessResponse("ContentSection is updated", status=status.HTTP_200_OK)
+#         return SuccessResponse("ContentSection is updated", status=status.HTTP_200_OK)
 
 class CMSToolsInputPageDetailAPI(APIView):
     permission_classes = (

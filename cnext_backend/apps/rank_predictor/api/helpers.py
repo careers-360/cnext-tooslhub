@@ -767,8 +767,6 @@ class RPCmsHelper:
 
         return True, []
     
-
-    
     def _add_update_rp_form_data(self, id, data):
 
         final_output = {
@@ -788,6 +786,7 @@ class RPCmsHelper:
             RpFormField.objects.create(**data)
 
         return True, final_output
+    
     def get_input_form_data(self, pk):
         result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name','created_by','updated_by')
         input_process_type_dict = dict(RpInputFlowMaster.objects.all().values_list('id','input_process_type'))

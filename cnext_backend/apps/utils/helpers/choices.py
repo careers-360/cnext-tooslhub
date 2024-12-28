@@ -15,8 +15,7 @@ TOOL_TYPE_INTEGER = {
 FIELD_TYPE = {
     1: "Studying In",
     2: "Course Interest for College",
-    3: "Stream Interest for Class 11th",
-    4: "College Education Stream",
+    3: "College Education Stream",
 }
 QUESTION_STATUS = {
     "Published": "Published",
@@ -37,3 +36,7 @@ DISABILITY_CATEGORY = [
 RP_FIELD_TYPE = {1:"User Input", 2: "Application Number", 3 : "Category Dropdown", 4 : "Select List Dropdown" , 5 : "Radio Button" , 6 : "Date of Birth"}
 
 FORM_INPUT_PROCESS_TYPE = {1:"Score", 2:"Marks", 3:"Percentile"}
+
+DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately Difficult", 5:"Difficult"}
+
+MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
