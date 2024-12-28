@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -885,6 +885,88 @@ class SingleCollegeReviewsView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+
+
+class CollegeReviewRatingGraphView(APIView):
+    """
+    API view for generating and retrieving college review rating graphs.
+    Provides both raw rating data and classified insights.
+    """
+
+    @extend_schema(
+        summary="Get College Review Rating Graph",
+        description="Retrieve rating data and classification insights for multiple colleges",
+        parameters=[
+            OpenApiParameter(
+                name='college_ids', 
+                type=str, 
+                description='Comma-separated list of college IDs',
+                required=True
+            ),
+            OpenApiParameter(
+                name='grad_year',
+                type=int,
+                description='Graduation year for filtering reviews',
+                required=True
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved rating graph data'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        """
+        Handle GET requests for college review rating graph data.
+        
+        Args:
+            request: HTTP request object with query parameters
+                - college_ids: Comma-separated list of college IDs
+                - grad_year: Graduation year for filtering reviews
+                
+        Returns:
+            Response: JSON response containing rating data and classification insights
+        """
+        try:
+            # Extract and validate required parameters
+            college_ids = request.query_params.get('college_ids')
+            grad_year = request.query_params.get('grad_year')
+
+            if not college_ids or not grad_year:
+                raise ValidationError("Both college_ids and grad_year are required.")
+
+            # Convert college IDs to a list of integers
+            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+
+            # Fetch rating data and insights
+            rating_insights = CollegeReviewsRatingGraphHelper.prepare_rating_insights(
+                college_ids=college_ids_list,
+                grad_year=int(grad_year)
+            )
+
+            # Return success response
+            return SuccessResponse(rating_insights, status=status.HTTP_200_OK)
+
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse(
+                {"error": str(ve)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except ValueError as ve:
+            logger.error(f"Value error: {ve}")
+            return CustomErrorResponse(
+                {"error": "Invalid college ID format."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error fetching rating insights: {e}")
+            return CustomErrorResponse(
+                {"error": str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class ExamCutoffView(APIView):
     @extend_schema(

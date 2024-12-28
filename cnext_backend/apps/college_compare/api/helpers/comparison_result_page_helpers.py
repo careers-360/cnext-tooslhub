@@ -332,7 +332,8 @@ class CollegeRankingService:
         college_ids: List[int], selected_domain: int, year: int
     ) -> Dict[str, Dict]:
         """
-        Gets state-wise and ownership-wise ranks for given college IDs.
+        Gets state-wise and ownership-wise ranks based on overall ranks for given college IDs.
+        Ensures rank consistency by using overall rank as the base for calculations.
 
         Args:
             college_ids: List of college IDs.
@@ -342,86 +343,102 @@ class CollegeRankingService:
         Returns:
             A dictionary containing rank information.
         """
+        try:
+            domain_id_str = str(selected_domain)
 
-        domain_id_str = str(selected_domain)
+            # Get all colleges with their overall ranks
+            base_queryset = RankingUploadList.objects.filter(
+                ranking__ranking_stream=domain_id_str,
+                ranking__year=year,
+                ranking__status=1
+            ).select_related('college', 'college__location')
 
-        base_queryset = RankingUploadList.objects.filter(
-            ranking__ranking_stream=domain_id_str,
-            ranking__year=year,
-            ranking__status=1
-        ).select_related('college', 'college__location')
+            # Get distinct colleges to avoid duplicates
+            college_ranks = base_queryset.values(
+                'college_id',
+                'overall_rank',
+                'college__location__state_id',
+                'college__location__loc_string',
+                'college__ownership'
+            ).distinct('college_id').order_by('college_id', 'overall_rank')
 
-        distinct_colleges_subquery = base_queryset.values('college_id').distinct()
-        base_queryset = base_queryset.filter(college_id__in=Subquery(distinct_colleges_subquery))
+            # Group colleges by state and ownership
+            state_groups = {}
+            ownership_groups = {}
 
-        state_ranks = base_queryset.annotate(
-            state_rank=Window(
-                expression=RowNumber(),
-                partition_by=[F('college__location__state_id')],
-                order_by=F('overall_rank').asc(),
-            )
-        )
+            for college in college_ranks:
+                state_id = college['college__location__state_id']
+                ownership = college['college__ownership']
+                
+                # Initialize groups if they don't exist
+                if state_id not in state_groups:
+                    state_groups[state_id] = []
+                if ownership not in ownership_groups:
+                    ownership_groups[ownership] = []
+                
+                # Add college to respective groups
+                state_groups[state_id].append({
+                    'college_id': college['college_id'],
+                    'overall_rank': college['overall_rank'],
+                    'state_name': college['college__location__loc_string']
+                })
+                
+                ownership_groups[ownership].append({
+                    'college_id': college['college_id'],
+                    'overall_rank': college['overall_rank']
+                })
 
-        ownership_ranks = base_queryset.annotate(
-            ownership_rank=Window(
-                expression=RowNumber(),
-                partition_by=[F('college__ownership')],
-                order_by=F('overall_rank').asc(),
-            )
-        )
+            # Sort colleges within each group by overall rank
+            for state_id in state_groups:
+                state_groups[state_id].sort(key=lambda x: x['overall_rank'])
+            
+            for ownership in ownership_groups:
+                ownership_groups[ownership].sort(key=lambda x: x['overall_rank'])
 
-        state_totals = base_queryset.values(
-            state_id=Coalesce('college__location__state_id', Value(-1))
-        ).annotate(total=Count('id'))
+            # Calculate ranks within each group
+            result = {}
+            for idx, college_id in enumerate(college_ids):
+                college_key = f"college_{idx + 1}"
+                state_rank = ownership_rank = "Not Available"
+                state_total = ownership_total = 0
+                state_name = ""
+                ownership_type = dict(College.OWNERSHIP_CHOICES).get(None, 'Unknown')
 
-        ownership_totals = base_queryset.values(
-            ownership=Coalesce('college__ownership', Value(-1))
-        ).annotate(total=Count('id'))
+                
+                for state_id, colleges in state_groups.items():
+                    for rank, college in enumerate(colleges, 1):
+                        if college['college_id'] == college_id:
+                            state_rank = rank
+                            state_total = len(colleges)
+                            state_name = college['state_name']
+                            break
 
-        state_total_dict = {item['state_id']: item['total'] for item in state_totals}
-        ownership_total_dict = {item['ownership']: item['total'] for item in ownership_totals}
-
-        state_rank_dict = {
-            obj.college_id: (obj.state_rank, obj.college.location.state_id, obj.college.location.loc_string)
-            for obj in state_ranks if obj.college_id in college_ids
-        }
-
-        ownership_rank_dict = {
-            obj.college_id: (obj.ownership_rank, obj.college.ownership)
-            for obj in ownership_ranks if obj.college_id in college_ids
-        }
-
-        result = {}
-        for idx, college_id in enumerate(college_ids):
-            college_key = f"college_{idx + 1}"
-            state_info = state_rank_dict.get(college_id)
-            ownership_info = ownership_rank_dict.get(college_id)
-
-            if state_info and ownership_info:
-                state_rank, state_id, state_name = state_info
-                state_total = state_total_dict.get(state_id, 0)
-                ownership_rank, ownership_type_id = ownership_info
-                ownership_total = ownership_total_dict.get(ownership_type_id, 0)
-                ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership_type_id, 'Unknown')
+                # Find ownership rank
+                for ownership_id, colleges in ownership_groups.items():
+                    for rank, college in enumerate(colleges, 1):
+                        if college['college_id'] == college_id:
+                            ownership_rank = rank
+                            ownership_total = len(colleges)
+                            ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership_id, 'Unknown')
+                            break
 
                 result[college_key] = {
                     "college_id": college_id,
                     "state_rank_display": (
                         f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
+                        if isinstance(state_rank, int) else "Not Available"
                     ),
                     "ownership_rank_display": (
                         f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
+                        if isinstance(ownership_rank, int) else "Not Available"
                     ),
                 }
-            else:
-                result[college_key] = {
-                    "college_id": college_id,
-                    "state_rank_display": "Not Available",
-                    "ownership_rank_display": "Not Available",
-                }
 
-        return result
+            return result
 
+        except Exception as e:
+            logger.error("Error calculating state and ownership ranks: %s", traceback.format_exc())
+            raise
 
 def get_ordinal_suffix(num: int) -> str:
     """Returns ordinal suffix for a number (1st, 2nd, 3rd, etc.)"""
@@ -430,8 +447,6 @@ def get_ordinal_suffix(num: int) -> str:
     else:
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num % 10, 'th')
     return suffix
-    
-
    
 
 
@@ -1001,7 +1016,8 @@ class FeesHelper:
         
         def fetch_data():
             try:
-                # Fetch basic fee details with consistent DecimalField output, and include college name
+                
+
                 fee_details = (
                     Course.objects.filter(id__in=course_ids, college_id__in=college_ids)
                     .annotate(
@@ -1046,7 +1062,7 @@ class FeesHelper:
                     CourseFeeAmountType.objects.filter(
                         course_fee_duration__college_course_id__in=course_ids,
                         course_fee_duration__type='year',
-                        fees_type='tuition'
+                        fees_type='Tution Fees' or 'Tution Fee' 
                     ).annotate(
                         course_id=F('course_fee_duration__college_course_id'),
                         duration_count=F('course_fee_duration__count'),
@@ -1952,6 +1968,142 @@ class CollegeReviewsHelper:
         return cache.get_or_set(cache_key, fetch_recent, 1800 * 48)
 
 
+
+class CollegeReviewsRatingGraphHelper:
+    """
+    Helper class for generating college review rating graphs with classification of ratings
+    as Very Good (>4), Good (3-4), and Average (<3).
+    """
+    
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        """
+        Generate a consistent cache key from variable arguments.
+        
+        Args:
+            *args: Variable arguments to include in the cache key
+            
+        Returns:
+            str: MD5 hash of the concatenated arguments
+        """
+        key = '_'.join(map(str, args))
+        return hashlib.md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def classify_rating(rating: float) -> str:
+        """
+        Classify a rating value into categories.
+        
+        Args:
+            rating (float): Rating value to classify
+            
+        Returns:
+            str: Classification as 'V.Good', 'Good', or 'Avg'
+        """
+        if rating > 4:
+            return 'V.Good'
+        elif 3 <= rating <= 4:
+            return 'Good'
+        else:
+            return 'Avg'
+
+    @staticmethod
+    def fetch_rating_data(college_ids: List[int], grad_year: int) -> Dict:
+        """
+        Fetch and process college rating data with classifications.
+        
+        Args:
+            college_ids (List[int]): List of college IDs to analyze
+            grad_year (int): Graduation year to filter reviews
+            
+        Returns:
+            Dict: Processed rating data with classifications for each college
+        """
+        try:
+            college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+        except (ValueError, TypeError):
+            raise ValueError("college_ids must be a flat list of integers or strings.")
+
+        cache_key = CollegeReviewsRatingGraphHelper.get_cache_key(
+            'college_reviews_graph_data',
+            '-'.join(map(str, sorted(college_ids))),
+            grad_year
+        )
+
+        def fetch_data():
+            
+            rating_type = [
+                'infra_rating',
+                'campus_life_ratings',
+                'academics_ratings',
+                'value_for_money_ratings',
+                'placement_rating'
+            ]
+
+        
+            ratings = (
+                CollegeReviews.objects.filter(
+                    college_id__in=college_ids,
+                    graduation_year__year=grad_year,
+                    status=True
+                )
+                .select_related('college')
+                .values('college_id', 'college__name')
+                .annotate(
+                    infra_rating=Coalesce(Round(Avg(F('infra_rating') / 20), 1), Value(0.0)),
+                    campus_life_ratings=Coalesce(Round(Avg(F('college_life_rating') / 20), 1), Value(0.0)),
+                    academics_ratings=Coalesce(Round(Avg(F('overall_rating') / 20), 1), Value(0.0)),
+                    value_for_money_ratings=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0)),
+                    placement_rating=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0))
+                )
+                .order_by('college_id')  
+            )
+
+            result_dict = {
+                "rating_type": rating_type,
+                "rating_data": {   "type": "spider"},
+                "classification_data": {   "type": "horizontal bar",},
+                "college_names": []
+            }
+
+            for idx, college in enumerate(ratings, 1):
+                college_key = f"college_{idx}"
+                college_name = college['college__name']
+                result_dict["college_names"].append(college_name)
+                
+                
+                result_dict["rating_data"][college_key] = {
+                    "college_id": college['college_id'],
+                    "college_name": college_name,
+                    **{param: college[param] for param in rating_type}
+                }
+                
+                
+                result_dict["classification_data"][college_key] = {
+                    "college_id": college['college_id'],
+                    "college_name": college_name,
+                    "V.Good": sum(1 for param in rating_type if college[param] > 4),
+                    "Good": sum(1 for param in rating_type if 3 <= college[param] <= 4),
+                    "Avg": sum(1 for param in rating_type if college[param] < 3)
+                }
+
+            return result_dict
+
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 *7) 
+
+    @staticmethod
+    def prepare_rating_insights(college_ids: List[int], grad_year: int) -> Dict:
+        """
+        Prepare complete rating insights including raw data and classifications.
+        
+        Args:
+            college_ids (List[int]): List of college IDs to analyze
+            grad_year (int): Graduation year to filter reviews
+            
+        Returns:
+            Dict: Complete rating insights and classifications
+        """
+        return CollegeReviewsRatingGraphHelper.fetch_rating_data(college_ids, grad_year)
 
 class ExamCutoffHelper:
     @staticmethod
