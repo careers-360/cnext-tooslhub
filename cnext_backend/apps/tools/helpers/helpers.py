@@ -3,6 +3,7 @@ import re, time, os
 import threading
 from datetime import datetime as t
 from django.db.models import F, Q
+from cnext_backend import settings
 from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
 from tools.models import CPProductCampaign, UrlAlias, UrlMetaPatterns
@@ -196,7 +197,7 @@ class ToolsHelper():
                     "gif": data.get("gif"),
                     "youtube": data.get("youtube"),
                     "image": data.get("image"),
-                    "secondary_image": data.get("secondary_image"),
+                    "secondary_image": f"{settings.CAREERS_BASE_IMAGES_URL}{data.get('secondary_image')}" if data.get("secondary_image") else None,
                     "smart_registration": data.get("smart_registration"),
                     "promotion_banner_wap": data.get("promotion_banner_wap"),
                 },
@@ -337,11 +338,13 @@ class ToolsHelper():
             custom_exam_name = request_data.get('custom_exam_name')
             custom_flow_type = request_data.get('custom_flow_type')
             custom_year = request_data.get('custom_year')
+            update_by = request_data.get('updated_by')
             update_data.update({
                 'alias': f"{custom_exam_name} {custom_flow_type} {custom_year}",
                 'custom_exam_name': custom_exam_name,
                 'custom_flow_type': custom_flow_type,
                 'custom_year': custom_year,
+                'updated_by': update_by
             })
 
         incoming_header_section = request_data.get('header_section', [])
@@ -396,6 +399,7 @@ class ToolsHelper():
                         content_section = RpContentSection.objects.get(id=section_id)
                         content_section.heading = item.get('heading', content_section.heading)
                         content_section.content = item.get('content', content_section.content)
+                        content_section.updated_by = item.get('updated_by', content_section.updated_by)
                         if image_web:
                             content_section.image_web = image_web
                         if image_wap:
@@ -418,7 +422,10 @@ class ToolsHelper():
                         heading=item.get('heading'),
                         content=item.get('content'),
                         image_web=image_web,
-                        image_wap=image_wap
+                        image_wap=image_wap,
+                        created_by= item.get('created_by'),
+                        updated_by= item.get('updated_by'),
+
                     )
 
             ids_to_delete = existing_ids - incoming_ids
