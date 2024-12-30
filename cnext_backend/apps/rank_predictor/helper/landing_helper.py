@@ -1,5 +1,5 @@
 from tools.models import CPProductCampaign
-from rank_predictor.models import RpFormField, RpContentSection, RpInputFlowMaster
+from rank_predictor.models import RpFormField, RpContentSection, RPCreateInputForm
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE
@@ -39,24 +39,27 @@ class RPHelper:
     
     def _get_form_section(self, product_id=None):
 
-        input_form_master_list = RpInputFlowMaster.objects.all().values('id', 'input_flow_type')
+        # flow_type_count = RpFormField.objects.filter(product_id=product_id, status=1, mapped_process_type__isnull=False).values('mapped_process_type').distinct().count()
 
-        flow_type_map = {item['id']: item['input_flow_type'] for item in input_form_master_list}
+        input_form_mapping = RPCreateInputForm.objects.filter(product_id=product_id).values('input_process_type', 'process_type_toggle_label', 'submit_cta_name')
 
-        # print(f"master form data {flow_type_map}")
+        input_process_type_mapping = {}
+        input_process_type_list = []
 
-        form_data = RpFormField.objects.filter(product_id=product_id).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status").order_by('-weight')
-
-        modified_form_data = []
-
-        for form_field in form_data:
-
-            flow_type = flow_type_map.get(form_field['input_flow_type'], None)  
-            form_field['input_flow_type'] = flow_type  
+        # fetch cta submit button once
+        for process_type in input_form_mapping:
+            input_process_type_mapping[process_type['input_process_type']] = {
+                'process_type_toggle_label': process_type['process_type_toggle_label'],
+                'submit_cta_name': process_type['submit_cta_name']
+        }
+            input_process_type_list.append(input_process_type_mapping)
         
-            modified_form_data.append(form_field)
+        # print(f"process type mapping {input_process_type_mapping}")
+        form_data = RpFormField.objects.filter(product_id=product_id, status=1).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status", 'min_val', 'max_val').order_by('weight')
 
-        return modified_form_data
+        with_appended_cta = {'form_data': form_data, 'input_process_type_mapping': input_process_type_mapping }
+
+        return with_appended_cta
     
     def _get_top_colleges(self, exam_id=None):
         """

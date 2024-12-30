@@ -260,7 +260,20 @@ class RPStudentAppeared(models.Model):
 
     def __str__(self):
         return f"Student Appeared {self.id} - {self.year}"
+    
+class RPCreateInputForm(models.Model):
+    product_id =  models.IntegerField(null=True, blank=True)
+    input_process_type = models.IntegerField()
+    process_type_toggle_label = models.CharField(max_length=255, null=True, blank=True)
+    submit_cta_name = models.CharField(max_length=255, null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+    created = models.DateTimeField(default=timezone.now)
+    updated_by =  models.IntegerField(null=False, blank=False)
+    created_by =  models.IntegerField(null=False, blank=False)
 
-
+    class Meta:
+        db_table = "cnext_rp_create_input_form"
+        verbose_name = "rp_create_input_form"
+        verbose_name_plural = "rp_create_input_form"
 
 
