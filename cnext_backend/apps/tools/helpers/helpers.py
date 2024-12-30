@@ -3,6 +3,7 @@ import re, time, os
 import threading
 from datetime import datetime as t
 from django.db.models import F, Q
+from cnext_backend import settings
 from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
 from tools.models import CPProductCampaign, UrlAlias, UrlMetaPatterns
@@ -196,7 +197,7 @@ class ToolsHelper():
                     "gif": data.get("gif"),
                     "youtube": data.get("youtube"),
                     "image": data.get("image"),
-                    "secondary_image": data.get("secondary_image"),
+                    "secondary_image": f"{settings.CAREERS_BASE_IMAGES_URL}{data.get('secondary_image')}" if data.get("secondary_image") else None,
                     "smart_registration": data.get("smart_registration"),
                     "promotion_banner_wap": data.get("promotion_banner_wap"),
                 },

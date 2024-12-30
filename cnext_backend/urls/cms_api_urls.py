@@ -15,5 +15,5 @@ urlpatterns = [
     path(cms_prefix + '/input-page-detail', tools_controller.CMSToolsInputPageDetailAPI.as_view(),name='manage-tools-input-page-detail'),
     path(cms_prefix + '/faq', tools_controller.CMSToolsFaqAPI.as_view(),name='manage-tools-faq'),
     path(cms_prefix + '/manage-result-page', tools_controller.CMSToolsResultPageAPI.as_view(),name='manage-tools-resu'),
-    path(cms_prefix + '/manage-content', tools_controller.CMSToolsContentAPI.as_view(),name='manage-tools-filter'),
+    # path(cms_prefix + '/manage-content', tools_controller.CMSToolsContentAPI.as_view(),name='manage-tools-filter'),
 ]

@@ -13,5 +13,5 @@ urlpatterns = [
     path("api/<int:version>/cms/rp/custom-mean-sd", cms_controller.CustomMeanSD.as_view(),  name='custom_mean_sd'),
     path("api/<int:version>/cms/rp/create-input-form", cms_controller.CreateInputForm.as_view(),  name='create_input_form'),
     path("api/<int:version>/cms/rp/input-form-list", cms_controller.InputFormList.as_view(),  name='input_form_list'),
-    path("api/<int:version>/cms/rp/upload-merit-list", cms_controller.UploadMeritList.as_view(),  name='upload_merit_list'),
+    # path("api/<int:version>/cms/rp/upload-merit-list", cms_controller.UploadMeritList.as_view(),  name='upload_merit_list'),
 ]
