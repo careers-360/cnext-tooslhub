@@ -14,12 +14,7 @@ class RPHelper:
     def _get_header_section(self, product_id=None, alias=None):
 
         if alias != None:
-            alias_data = self._get_product_from_alias(alias=alias)
-            split_string = alias_data.source.split("/")
-
-            print(split_string[1])
-
-            product_id = int(split_string[1])
+            product_id = self._get_product_from_alias(alias=alias)
 
 
         header_data = CPProductCampaign.objects.filter(id=product_id).values("id", "header_section", "custom_exam_name", "custom_flow_type", "custom_year", "video", "usage_count_matrix", "positive_feedback_percentage", "display_preference", "gif", "secondary_image", 'image', 'exam_other_content')
@@ -37,7 +32,10 @@ class RPHelper:
 
         return header_data
     
-    def _get_form_section(self, product_id=None):
+    def _get_form_section(self, product_id=None, alias=None):
+
+        if alias != None:
+            product_id = self._get_product_from_alias(alias=alias)
 
         # flow_type_count = RpFormField.objects.filter(product_id=product_id, status=1, mapped_process_type__isnull=False).values('mapped_process_type').distinct().count()
 
@@ -55,7 +53,7 @@ class RPHelper:
             input_process_type_list.append(input_process_type_mapping)
         
         # print(f"process type mapping {input_process_type_mapping}")
-        form_data = RpFormField.objects.filter(product_id=product_id, status=1).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status", 'min_val', 'max_val').order_by('weight')
+        form_data = RpFormField.objects.filter(product_id=product_id, status=1).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status", 'min_val', 'max_val', 'list_option_data').order_by('weight')
 
         with_appended_cta = {'form_data': form_data, 'input_process_type_mapping': input_process_type_mapping }
 
@@ -103,10 +101,13 @@ class RPHelper:
         return content_response
     
     def _get_product_from_alias(self , alias):
-        source = UrlAlias.objects.filter(alias=alias).first()
-        # source_list = list(source)
-        
-        return source
+
+        base_url_alias = UrlAlias.objects.filter(alias=alias).first()
+        split_string = base_url_alias.source.split("/")
+
+        product_id = int(split_string[1])
+
+        return product_id
         
         
         

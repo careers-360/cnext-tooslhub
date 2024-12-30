@@ -191,6 +191,8 @@ class FormSectionAPI(APIView):
     def get(self, request, version, **kwargs):
 
         product_id = request.GET.get('product_id')
+        alias = request.GET.get('alias')
+
         if not product_id or not product_id.isdigit():
             return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -198,7 +200,7 @@ class FormSectionAPI(APIView):
 
         # Fetch content from database and return it to client.
         rp_helper = RPHelper()
-        form_fields = rp_helper._get_form_section(product_id=product_id)
+        form_fields = rp_helper._get_form_section(product_id=product_id, alias=alias)
 
         if form_fields:
             resp = {
