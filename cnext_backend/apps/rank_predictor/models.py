@@ -263,6 +263,7 @@ class RPStudentAppeared(models.Model):
 
     def __str__(self):
         return f"Student Appeared {self.id} - {self.year}"
+    
 
 
 class CnextRpCreateInputForm(models.Model):
@@ -283,5 +284,3 @@ class CnextRpCreateInputForm(models.Model):
 
     def __str__(self):
         return f"Input Form {self.id}"
-
-
