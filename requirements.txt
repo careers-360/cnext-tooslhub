@@ -36,3 +36,5 @@ urllib3==1.25.4
 wrapt==1.17.0
 uWSGI==2.0.28
 requests==2.32.3
+pandas==2.2.3
+openpyxl==3.1.5
