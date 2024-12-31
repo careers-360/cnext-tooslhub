@@ -605,8 +605,7 @@ class CollegeData(models.Model):
 
 class CollegeCompareData(models.Model):
     id = models.AutoField(primary_key=True)
-    uid = models.IntegerField(db_i
-            # Return success responsendex=True)
+    uid = models.IntegerField(db_index=True)
     college_1 = models.ForeignKey(
         'College', on_delete=models.CASCADE, related_name='comparisons_1', db_column='college_1', db_index=True
     )
