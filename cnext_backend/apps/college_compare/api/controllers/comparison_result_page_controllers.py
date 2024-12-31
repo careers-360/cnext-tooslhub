@@ -553,7 +553,7 @@ class ClassProfileComparisonView(APIView):
         college_ids = request.query_params.get('college_ids')
         year = request.query_params.get('year') or current_year -1
 
-        intake_year = int(request.query_params.get('intake_year')) or current_year -4
+        intake_year = current_year -4
         level = int( request.query_params.get('level'))
       
 
