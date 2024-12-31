@@ -260,8 +260,8 @@ SESSION_DOMAIN_NAME = os.getenv('SESSION_DOMAIN_NAME', '.careers360.com')
 
 
 USE_S3 = os.getenv('USE_S3', False)
-AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'xxxxxx')
-AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'xxxxxx')
+# AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID', 'xxxxxx')
+# AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'xxxxxx')
 
 if USE_S3 == 'True':
 	try:
