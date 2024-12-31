@@ -212,14 +212,15 @@ class CnextRpSession(models.Model):
 
     DIFFICULTY_ENUM = (
         (1, 'Easy'),
-        (2, 'Moderate'),
-        (3, 'Hard'),
+        (2, 'Moderately Easy'),
+        (3, 'Moderate'),
+        (4, 'Moderately Difficult'),
+        (5, 'Difficult'),
     )
 
     SHIFT_ENUM = (
-        (1, 'Morning'),
-        (2, 'Afternoon'),
-        (3, 'Evening'),
+        (1, 'Shift1'),
+        (2, 'Shift2')
     )
     
     product_id = models.IntegerField(null=True, blank=True)
