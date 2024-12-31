@@ -7,7 +7,7 @@ from college_compare.models import (
 )
 
 
-from django.db.models import Avg, Min, Count, Q
+from django.db.models import Avg, Min, Count, Q,Subquery,F
 from django.core.cache import cache
 from django.db.models import Prefetch
 from functools import lru_cache
@@ -114,6 +114,24 @@ class DomainHelper:
             }
         
         return CacheHelper.get_or_set(cache_key, fetch_domain_names, 3600)
+    
+    @staticmethod
+    def annotate_domain_name(queryset, domain_field: str = 'ranking__nirf_stream') -> Subquery:
+        """
+        Creates a Subquery annotation for fetching the `old_domain_name`
+        corresponding to the specified domain field in a queryset.
+
+        Args:
+            queryset: The queryset to annotate.
+            domain_field: The field in the queryset to match against `Domain.name`.
+
+        Returns:
+            A Subquery that fetches the formatted `old_domain_name`.
+        """
+        return Subquery(
+            Domain.objects.filter(name=F(domain_field))
+            .values('old_domain_name')[:1]
+        )
 
 
 class UserContextHelper:

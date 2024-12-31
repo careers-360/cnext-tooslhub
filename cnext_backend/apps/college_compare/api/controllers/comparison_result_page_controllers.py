@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,PlacementStatsComparisonHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -17,16 +17,23 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
+import time
+
+current_year = time.localtime().tm_year
+
+
+
+
 
 
 class RankingAccreditationComparisonView(APIView):
     @extend_schema(
         summary="Get Ranking and Accreditation Comparison",
-        description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year.",
+        description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year. Accepts a comma-separated list of selected domains.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='selected_domain', type=str, description='Domain for ranking', required=True),
-            OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=True),
+            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of selected domains (e.g., 1,2,3 or 1,1,1). Must be the same length as college_ids.', required=True),
+            OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved ranking and accreditation comparison'),
@@ -35,25 +42,36 @@ class RankingAccreditationComparisonView(APIView):
         },
     )
     def get(self, request):
-        college_ids = request.query_params.get('college_ids')
-        selected_domain = request.query_params.get('selected_domain')
-        year = request.query_params.get('year')
+        college_ids_str = request.query_params.get('college_ids')
+        selected_domains_str = request.query_params.get('selected_domains')
+        year = request.query_params.get('year') or current_year-1
 
         try:
-            if not college_ids or not selected_domain:
-                raise ValidationError("Both college_ids and selected_domain are required")
+            if not college_ids_str or not selected_domains_str:
+                raise ValidationError("Both college_ids and selected_domains are required")
 
-            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+            college_ids = [int(cid) for cid in college_ids_str.split(',')]
+            selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
+
+            if len(college_ids) != len(selected_domains):
+                raise ValidationError("The number of college_ids and selected_domains must be the same.")
+
+            selected_domains_dict = {college_ids[i]: str(selected_domains[i]) for i in range(len(college_ids))}
+
             year = int(year) if year else None
 
-            result = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domain, year)
+            result = RankingAccreditationHelper.fetch_ranking_data(college_ids, selected_domains_dict, year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
+
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError:
+            logger.error("Invalid input format. college_ids and selected_domains must be comma-separated integers.")
+            return CustomErrorResponse({"error": "Invalid input format. college_ids and selected_domains must be comma-separated integers."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching ranking and accreditation comparison: {e}")
-            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}") # Log the full traceback
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -64,8 +82,8 @@ class RankingAccreditationCombinedComparisonView(APIView):
         description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year, and includes combined and multi-year data.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='selected_domain', type=str, description='Domain for ranking', required=True),
-            OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=True),
+            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of domains for ranking', required=True),
+            OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved ranking and accreditation comparison'),
@@ -75,29 +93,40 @@ class RankingAccreditationCombinedComparisonView(APIView):
     )
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
-        selected_domain = request.query_params.get('selected_domain')
-        year = request.query_params.get('year')
+        selected_domains_str = request.query_params.get('selected_domains')
+        year_str = request.query_params.get('year') or current_year-1
 
         try:
-            if not college_ids or not selected_domain:
-                raise ValidationError("Both college_ids and selected_domain are required")
+            if not college_ids or not selected_domains_str or not year_str:
+                raise ValidationError("Both college_ids, selected_domains, and year are required")
 
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
-            year = int(year) if year else None
 
-           
-            ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domain, year)
-            ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domain, year - 1)
 
-         
-            combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domain, year)
-            combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domain, year - 1)
+            selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
 
-            years = [year - i for i in range(5)] if year else None
-            multi_year_ranking_data = (
-                MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domain, years)
-                if years else {}
-            )
+
+            if len(college_ids_list) != len(selected_domains):
+                raise ValidationError("The number of college_ids must match the number of selected_domains.")
+
+            selected_domains_dict = {college_ids_list[i]: str(selected_domains[i]) for i in range(len(college_ids_list))}
+
+            year = int(year_str)
+
+
+            ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year)
+
+      
+            ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year - 1)
+
+  
+            combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year)
+
+            combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year - 1)
+
+
+            years = [year - i for i in range(5)]
+            multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domains_dict, years)
 
             result = {
                 "current_year_data": ranking_data_current_year,
@@ -108,12 +137,14 @@ class RankingAccreditationCombinedComparisonView(APIView):
             }
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
+
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error fetching ranking and accreditation comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class RankingGraphInsightsView(APIView):
     @extend_schema(
@@ -130,18 +161,18 @@ class RankingGraphInsightsView(APIView):
                 name="start_year",
                 type=int,
                 description="Starting year for the range",
-                required=True,
+                required=False,
             ),
             OpenApiParameter(
                 name="end_year",
                 type=int,
                 description="Ending year for the range",
-                required=True,
+                required=False,
             ),
             OpenApiParameter(
-                name="domain_id",
-                type=int,
-                description="domain_id",
+                name="selected_domains",
+                type=str,
+                description="Comma-separated list of Domain IDs corresponding to the college IDs",
                 required=True,
             ),
         ],
@@ -214,40 +245,51 @@ class RankingGraphInsightsView(APIView):
     )
     def get(self, request):
         college_ids = request.query_params.get("college_ids")
-        start_year = request.query_params.get("start_year")
-        end_year = request.query_params.get("end_year")
-        domain_id= request.query_params.get("domain_id")
+        start_year = request.query_params.get("start_year") or current_year - 6
+        end_year = request.query_params.get("end_year") or current_year - 1
+        selected_domains = request.query_params.get("selected_domains")
 
         try:
-            if not college_ids or not start_year or not end_year or not domain_id:
-                raise ValidationError("college_ids, start_year, and end_year  and domain_id are required")
+            if not college_ids or not start_year or not end_year or not selected_domains:
+                raise ValidationError("college_ids, start_year, end_year, and selected_domains are required")
 
             college_ids_list = [int(cid) for cid in college_ids.split(",")]
+            selected_domains_list = [int(did) for did in selected_domains.split(",")]
+
+            if len(college_ids_list) != len(selected_domains_list):
+                raise ValidationError("The number of college_ids must match the number of selected_domains")
+
             start_year = int(start_year)
             end_year = int(end_year)
 
             if start_year > end_year:
                 raise ValidationError("start_year must be less than or equal to end_year")
 
-            result = RankingGraphHelper.prepare_graph_insights(college_ids_list, start_year, end_year,domain_id)
+            # Mapping college_ids to their respective domain_ids
+            domain_mapping = dict(zip(college_ids_list, selected_domains_list))
+
+            result = RankingGraphHelper.prepare_graph_insights(
+                college_ids_list, start_year, end_year, domain_mapping
+            )
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error fetching ranking graph insights: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+
+
 
 
 class PlacementStatsComparisonView(APIView):
     @extend_schema(
         summary="Get Placement Stats Comparison",
-        description="Retrieve placement stats comparison for given colleges and courses.",
+        description="Retrieve placement stats comparison for given colleges and courses, allowing different domains per college.",
         parameters=[
-           
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='year', type=str, description='Year', required=True),
-             OpenApiParameter(name='domain_id', type=str, description='domain_id', required=True)
+            OpenApiParameter(name='year', type=str, description='Year', required=False),
+            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of Domain IDs corresponding to the college IDs', required=True)
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved placement stats comparison'),
@@ -256,51 +298,45 @@ class PlacementStatsComparisonView(APIView):
         },
     )
     def get(self, request):
-        
-        college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year')
-        domain_id = request.query_params.get('domain_id')
+        college_ids_str = request.query_params.get('college_ids')
+        year_str = request.query_params.get('year') or str(current_year - 1)
+        domain_ids_str = request.query_params.get('selected_domains')
 
         try:
-            if  not college_ids or not year:
-                raise ValidationError("course_ids, college_ids, and year are required")
+            if not college_ids_str or not domain_ids_str:
+                raise ValidationError("college_ids and domain_ids are required")
 
-           
-            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+            try:
+                college_ids = [int(cid) for cid in college_ids_str.split(',')]
+                domain_ids = [int(did) for did in domain_ids_str.split(',')]
+                year = int(year_str)
+            except ValueError:
+                raise ValidationError("college_ids, domain_ids and year must be integers")
+            
+            if len(college_ids) != len(domain_ids):
+                raise ValidationError("The number of college_ids must match the number of domain_ids")
 
-            result = PlacementStatsComparisonHelper.fetch_placement_stats(college_ids_list, year=int(year),domain_id=domain_id)
+            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+            
+            result = PlacementInsightHelper.fetch_placement_stats(college_ids, selected_domains, year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
+
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching placement stats comparison: {e}")
-            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error fetching placement stats comparison: {traceback.format_exc()}") #use traceback for more detail error
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PlacementGraphInsightsView(APIView):
     @extend_schema(
         summary="Get Placement Graph Insights",
-        description="Retrieve placement insights including placement percentages, salary data, and recruiter information for given colleges.",
+        description="Retrieve placement insights including placement percentages, salary data, and recruiter information for given colleges, allowing different domains per college.",
         parameters=[
-            OpenApiParameter(
-                name='college_ids', 
-                type=str, 
-                description='Comma-separated list of college IDs', 
-                required=True
-            ),
-            OpenApiParameter(
-                name='domain_id', 
-                type=int, 
-                description='Domain/Stream ID', 
-                required=True
-            ),
-            OpenApiParameter(
-                name='year', 
-                type=int, 
-                description='Academic year', 
-                required=True
-            ),
+            OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
+            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of Domain IDs corresponding to the college IDs', required=True),
+            OpenApiParameter(name='year', type=str, description='Academic year', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved placement insights'),
@@ -309,47 +345,41 @@ class PlacementGraphInsightsView(APIView):
         },
     )
     def get(self, request):
-        college_ids = request.query_params.get('college_ids')
-        domain_id = request.query_params.get('domain_id')
-        year = request.query_params.get('year')
+        college_ids_str = request.query_params.get('college_ids')
+        domain_ids_str = request.query_params.get('selected_domains')
+        year_str = request.query_params.get('year') or str(current_year - 1)
 
         try:
-            # Validate required parameters
-            if not college_ids or not year or domain_id is None:
-                raise ValidationError("college_ids, domain_id, and year are required parameters")
+            if not college_ids_str or not domain_ids_str:
+                raise ValidationError("college_ids and selected_domains are required parameters")
 
-            # Convert parameters to appropriate types
-            college_ids_list = [int(cid) for cid in college_ids.split(',')]
-            domain_id = int(domain_id) if domain_id else 0
-            year = int(year)
+            try:
+                college_ids = [int(cid) for cid in college_ids_str.split(',')]
+                domain_ids = [int(did) for did in domain_ids_str.split(',')]
+                year = int(year_str)
+            except ValueError:
+                raise ValidationError("college_ids, selected_domains, and year must be integers")
 
-            # Fetch insights using the helper
+            if len(college_ids) != len(domain_ids):
+                raise ValidationError("The number of college_ids must match the number of selected_domains")
+            
+            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+
             result = PlacementGraphInsightsHelper.fetch_placement_insights(
-                college_ids=college_ids_list,
-                domain_id=domain_id,
+                college_ids=college_ids,
+                selected_domains=selected_domains,
                 year=year
             )
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
-        except ValueError as ve:
-            logger.error(f"Value error in parameters: {ve}")
-            return CustomErrorResponse(
-                {"error": "Invalid parameter values. Please check the input format."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
-            return CustomErrorResponse(
-                {"error": str(ve)}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching placement insights: {e}")
-            return CustomErrorResponse(
-                {"error": "An error occurred while fetching placement insights"}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Error fetching placement insights: {traceback.format_exc()}")
+            return CustomErrorResponse({"error": "An error occurred while fetching placement insights"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CourseFeeComparisonView(APIView):
     @extend_schema(
@@ -393,7 +423,7 @@ class FeesComparisonView(APIView):
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
               OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of coursee IDs', required=True),
-               OpenApiParameter(name='intake_year', type=str, description='year of admission ', required=True)
+               OpenApiParameter(name='intake_year', type=str, description='year of admission ', required=False)
 
            
         ],
@@ -406,7 +436,7 @@ class FeesComparisonView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
-        intake_year = request.query_params.get('intake_year')
+        intake_year = request.query_params.get('intake_year') or current_year-1 
       
 
         try:
@@ -508,7 +538,7 @@ class ClassProfileComparisonView(APIView):
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='year', type=str, description='year', required=True),
-            OpenApiParameter(name='intake_year', type=str, description='year of admission ', required=True),
+            OpenApiParameter(name='intake_year', type=str, description='year of admission ', required=False),
              OpenApiParameter(name='level', type=str, description='level', required=True)
 
            
@@ -521,9 +551,9 @@ class ClassProfileComparisonView(APIView):
     )
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year')
+        year = request.query_params.get('year') or current_year -1
 
-        intake_year = int(request.query_params.get('intake_year'))
+        intake_year = int(request.query_params.get('intake_year')) or current_year -4
         level = int( request.query_params.get('level'))
       
 
@@ -560,13 +590,13 @@ class ProfileInsightsView(APIView):
                 name="year",
                 type=int,
                 description="Academic year",
-                required=True,
+                required=False,
             ),
             OpenApiParameter(
                 name="intake_year",
                 type=int,
                 description="Year of student intake",
-                required=True,
+                required=False,
             ),
             OpenApiParameter(
                 name="level",
@@ -646,8 +676,8 @@ class ProfileInsightsView(APIView):
         GET endpoint to retrieve profile insights for specified colleges.
         """
         college_ids = request.query_params.get("college_ids")
-        year = request.query_params.get("year")
-        intake_year = request.query_params.get("intake_year")
+        year = request.query_params.get("year") or current_year -1
+        intake_year = request.query_params.get("intake_year") or current_year -4
         level = request.query_params.get("level", 1)  
 
         try:
@@ -754,7 +784,7 @@ class CollegeReviewsComparisonView(APIView):
                 name='grad_year',
                 type=int,
                 description='Graduation year for filtering reviews',
-                required=True
+                required=False
             )
         ],
         responses={
@@ -776,17 +806,17 @@ class CollegeReviewsComparisonView(APIView):
             Response: JSON response containing reviews summary and recent reviews
         """
         try:
-            # Extract and validate required parameters
+           
             college_ids = request.query_params.get('college_ids')
-            grad_year = request.query_params.get('grad_year')
+            grad_year = request.query_params.get('grad_year') or current_year -1
 
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required")
 
-            # Convert college IDs to list of integers
+     
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
             
-            # Fetch reviews summary and recent reviews
+          
             reviews_summary = self.reviews_helper.get_college_reviews_summary(
                 college_ids=college_ids_list,
                 grad_year=int(grad_year)
@@ -797,7 +827,7 @@ class CollegeReviewsComparisonView(APIView):
                 limit=3
             )
             
-            # Combine results and return success response
+            
             result = {
                 'reviews_summary': reviews_summary,
                 'recent_reviews': recent_reviews
@@ -840,7 +870,7 @@ class SingleCollegeReviewsView(APIView):
                 name='grad_year',
                 type=int,
                 description='Graduation year for filtering reviews',
-                required=True
+                required=False
             )
         ],
         responses={
@@ -851,7 +881,7 @@ class SingleCollegeReviewsView(APIView):
     )
     def get(self, request):
         college_id = request.query_params.get('college_id')
-        grad_year = request.query_params.get('grad_year')
+        grad_year = request.query_params.get('grad_year') or current_year -1
 
         try:
             if not college_id or not grad_year:
@@ -908,7 +938,7 @@ class CollegeReviewRatingGraphView(APIView):
                 name='grad_year',
                 type=int,
                 description='Graduation year for filtering reviews',
-                required=True
+                required=False
             )
         ],
         responses={
@@ -930,23 +960,21 @@ class CollegeReviewRatingGraphView(APIView):
             Response: JSON response containing rating data and classification insights
         """
         try:
-            # Extract and validate required parameters
+            
             college_ids = request.query_params.get('college_ids')
-            grad_year = request.query_params.get('grad_year')
+            grad_year = request.query_params.get('grad_year') or current_year -1
 
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required.")
 
-            # Convert college IDs to a list of integers
+          
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
 
-            # Fetch rating data and insights
             rating_insights = CollegeReviewsRatingGraphHelper.prepare_rating_insights(
                 college_ids=college_ids_list,
                 grad_year=int(grad_year)
             )
 
-            # Return success response
             return SuccessResponse(rating_insights, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
@@ -983,7 +1011,7 @@ class ExamCutoffView(APIView):
                 name='year',
                 type=int,
                 description='Academic year for cutoff data',
-                required=True
+                required=False
             ),
             OpenApiParameter(
                 name='exam_id',
@@ -1045,7 +1073,7 @@ class ExamCutoffView(APIView):
         Supports filtering by exam_id and category_id.
         """
         college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year')
+        year = request.query_params.get('year') or current_year-1
         exam_id = request.query_params.get('exam_id')
         category_id = request.query_params.get('category_id')
 
