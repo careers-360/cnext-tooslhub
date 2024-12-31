@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -365,10 +365,9 @@ class RPCmsHelper:
         disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
 
         for student_data in rp_students_appeared:
-            student_data['student_type'] = STUDENT_TYPE.get(student_data.get('student_type'))
-            student_data['category'] = cast_category_dict.get(student_data.get('category'))
-            student_data['disability'] = disability_category_dict.get(student_data.get('disability'))
-
+            student_data['student_type'] = {"id":student_data.get('student_type',None),"name":STUDENT_TYPE.get(student_data.get('student_type',None))}
+            student_data['category'] = {"id":student_data.get('category'),"name":cast_category_dict.get(student_data.get('category'))}
+            student_data['disability'] = {"id":student_data.get('disability'),"name": disability_category_dict.get(student_data.get('disability'))}
         data["student_appeared_data"] = rp_students_appeared 
 
         
@@ -910,6 +909,9 @@ class CommonDropDownHelper:
 
         elif field_name == "student_type":
             dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
+        
+        elif field_name == "input_process_type":
+            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FORM_INPUT_PROCESS_TYPE.items()]
 
         elif field_name == "category":
             dropdown_data["dropdown"] = CASTE_CATEGORY

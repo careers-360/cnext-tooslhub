@@ -3,11 +3,16 @@ from django.utils import timezone
 def upload_to(instance, filename):
     return 'tools/images/{filename}'.format(filename=filename)
 
+def upload_sheet(instance, filename):
+    year = instance.year if instance.year else "unknown_year"
+    product_id = instance.product_id if instance.product_id else "unknown_product"
+    return f'tools/merit_sheet/product_id_{product_id}/{year}/{filename}'
+
 class RpMeritSheet(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
-    file_name = models.CharField(max_length=255, null=True, blank=True)
+    file_name = models.FileField(upload_to = upload_sheet,null=True, blank=True)
     to_graph = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
     created = models.DateTimeField(null=True, blank=True)
@@ -19,6 +24,23 @@ class RpMeritSheet(models.Model):
         db_table = "cnext_rp_merit_sheet"
         verbose_name = "cnext_rp_merit_sheet"
         verbose_name_plural = "Merit Sheets"
+
+class TempRpMeritSheet(models.Model):
+    product_id = models.IntegerField(null=True, blank=True)
+    product_type = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    file_name = models.FileField(upload_to = upload_sheet,null=True, blank=True)
+    to_graph = models.BooleanField(default=False)
+    status = models.BooleanField(default=True)
+    created = models.DateTimeField(null=True, blank=True)
+    created_by = models.IntegerField(null=True, blank=True)
+    updated = models.DateTimeField(null=True, blank=True)
+    updated_by = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "temp_cnext_rp_merit_sheet"
+        verbose_name = "temp_cnext_rp_merit_sheet"
+        verbose_name_plural = "Temp Merit Sheets"
 
 
 class RpSmartRegistration(models.Model):
@@ -76,7 +98,51 @@ class RpMeanSd(models.Model):
         verbose_name = "Mean and Standard Deviation"
         verbose_name_plural = "Means and Standard Deviations"
 
+class TempRpMeanSd(models.Model):
+    product_id = models.IntegerField(null=True, blank=True)
+    product_type = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    # input_flow_type = models.IntegerField(null=True, blank=True)
+    input_flow_type = models.ForeignKey(RpInputFlowMaster, on_delete=models.DO_NOTHING, db_column="input_flow_type", null=True, blank=True)
+    sheet_mean = models.FloatField(null=True, blank=True)
+    sheet_sd = models.FloatField(null=True, blank=True)
+    admin_mean = models.FloatField(null=True, blank=True)
+    admin_sd = models.FloatField(null=True, blank=True)
+    status = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now_add=True)
+    created_by = models.IntegerField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+    updated_by = models.IntegerField(null=True, blank=True)
 
+    class Meta:
+        db_table = "temp_cnext_rp_mean_sd"
+        verbose_name = "Temp Mean and Standard Deviation"
+        verbose_name_plural = "Temp Means and Standard Deviations"
+
+
+
+class TempRpMeritList(models.Model):
+    product_id = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    caste = models.IntegerField(null=True, blank=True)
+    disability = models.IntegerField(null=True, blank=True)
+    slot = models.IntegerField(null=True, blank=True)
+    difficulty_level = models.IntegerField(null=True, blank=True)
+    input_flow_type = models.IntegerField(null=True, blank=True)
+    input_value = models.FloatField(null=True, blank=True)
+    z_score = models.DecimalField(max_digits=15, decimal_places=10,null=True, blank=True)
+    result_flow_type = models.IntegerField(null=True, blank=True)
+    result_value = models.FloatField(null=True, blank=True)
+    status = models.BooleanField(default=True)
+    created = models.DateTimeField(null=True, blank=True)
+    created_by = models.IntegerField(null=True, blank=True)
+    updated = models.DateTimeField(null=True, blank=True)
+    updated_by = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "temp_cnext_rp_merit_list"
+        verbose_name = "Temp Merit List"
+        verbose_name_plural = "Temp Merit Lists"
 
 class RpMeritList(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
@@ -87,7 +153,7 @@ class RpMeritList(models.Model):
     difficulty_level = models.IntegerField(null=True, blank=True)
     input_flow_type = models.IntegerField(null=True, blank=True)
     input_value = models.FloatField(null=True, blank=True)
-    z_score = models.FloatField(null=True, blank=True)
+    z_score = models.DecimalField(max_digits=15, decimal_places=10,null=True, blank=True)
     result_flow_type = models.IntegerField(null=True, blank=True)
     result_value = models.FloatField(null=True, blank=True)
     status = models.BooleanField(default=True)
@@ -120,7 +186,7 @@ class RpContentSection(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
     product_type = models.IntegerField(null=True, blank=True)
     heading = models.CharField(max_length=255, null=True, blank=True)
-    content = models.CharField(max_length=255, null=True, blank=True)
+    content = models.TextField(null=True, blank=True)
     image_web = models.ImageField(upload_to = upload_to, blank=True, null=True)
     image_wap = models.ImageField(upload_to = upload_to, blank=True, null=True)
     status = models.BooleanField(default=True)
