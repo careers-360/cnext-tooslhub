@@ -1,4 +1,11 @@
-from rank_predictor.models import CnextRpCreateInputForm, RpMeanSd, RpMeritList, RpMeritSheet
+import requests
+import io
+from django.utils.timezone import now
+from collections import defaultdict
+from math import sqrt
+import csv
+from cnext_backend import settings
+from rank_predictor.models import CnextRpCreateInputForm, RpInputFlowMaster, RpMeanSd, RpMeritList, RpMeritSheet, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
 from rest_framework.views import APIView
 from rank_predictor.models import RpFormField
 from utils.helpers.response import SuccessResponse, CustomErrorResponse, ErrorResponse
@@ -7,9 +14,6 @@ from rest_framework import status
 from .helpers import RPCmsHelper, CommonDropDownHelper
 from rest_framework.response import Response
 import json
-import pandas as pd
-from django.db import transaction
-
 
 
 class FlowTypeAPI(APIView):
@@ -365,83 +369,204 @@ class InputFormList(APIView):
         except Exception as e:
             return ErrorResponse(e.__str__(), status=status.HTTP_400_BAD_REQUEST)
 
-# class UploadMeritList(APIView):
-#     permission_classes = [ApiKeyPermission]
 
-    # def post(self, request, *args, **kwargs):
-    #     file = request.FILES.get('file')
-    #     selected_year = request.POST.get('year')
-    #     product_id = request.POST.get('product_id')
-    #     if not file:
-    #         return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+class MeritListValidationCheck(APIView):
+    permission_classes = [ApiKeyPermission]
 
-    #     file_extension = file.name.split('.')[-1].lower()
-    #     if file_extension not in ['csv', 'xlsx']:
-    #         return Response({"error": "Unsupported file format. Only .csv and .xlsx are allowed."}, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        selected_year = request.POST.get('year')
+        product_id = request.POST.get('product_id')
+        user_id = request.POST.get('uid')
 
-    #     try:
-    #         if file_extension == 'csv':
-    #             df = pd.read_csv(file)
-    #         else:
-    #             df = pd.read_excel(file)
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not selected_year:
+            return Response({"error": "year key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not product_id:
+            return Response({"error": "product_id key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
+    
+        if not user_id:
+            return Response({"error": "uid key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
 
-    #         # Clean column names to remove any leading/trailing spaces
-    #         df.columns = df.columns.str.strip()
+        # File validation
+        file_extension = file.name.split('.')[-1].lower()
+        if file_extension != 'csv':
+            return Response({"error": "Unsupported file format. Only .csv is allowed."}, status=status.HTTP_400_BAD_REQUEST)
 
-    #         # Validate 'year' column against selected_year
-    #         if 'year' not in df.columns:
-    #             return Response({"error": "'year' column not found in the file."}, status=status.HTTP_400_BAD_REQUEST)
+        expected_columns = [
+            'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
+            'input_flow_type', 'input', 'z_score', 'result_flow_type', 'result', 'year'
+        ]
 
-    #         # Check if all rows in the 'year' column match the selected_year
-    #         if not df['year'].astype(str).eq(str(selected_year)).all():
-    #             return Response({"error": "Sheet Year does not match with the selected one."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # Read and process the CSV file
+            decoded_file = file.read().decode('utf-8').splitlines()
+            reader = csv.reader(decoded_file)
+            rows = list(reader)
+            headers = [header.strip() for header in rows[0]]
 
-    #         # Check if 'input_flow_type' exists in the columns
-    #         if 'input_flow_type' not in df.columns:
-    #             return Response({"error": "'input_flow_type' column not found in the file."}, status=status.HTTP_400_BAD_REQUEST)
+            # Validate required columns
+            missing_columns = [col for col in expected_columns if col not in headers]
+            if missing_columns:
+                return Response({"error": f"Missing columns: {', '.join(missing_columns)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    #         #DELETE SAME DATA CASE
-    #         RpMeritList.objects.filter(product_id = product_id,year = selected_year).delete()
-    #         # Group by 'input_flow_type' and calculate mean and standard deviation for each group
-    #         grouped = df.groupby('input_flow_type').agg(
-    #             sheet_mean=('input', 'mean'),
-    #             sheet_sd=('input', 'std')
-    #         ).reset_index()
+            # Validate year column
+            year_index = headers.index('year')
+            # Validate 'year' column matches selected year and is unique
+            year_values = []
+            for row in rows[1:]:
+                if len(row) > year_index:
+                    year_value = str(row[year_index]).strip()
+                    year_values.append(year_value)
+                    if year_value != str(selected_year):
+                        return Response({"error": "Sheet year does not match the selected year."}, status=status.HTTP_400_BAD_REQUEST)
 
-    #         # Process rows to calculate zscore
-    #         processed_rows = []
-    #         for _, row in df.iterrows():
-    #             input_flow_type = row.get('input_flow_type')
+            if len(set(year_values)) > 1:
+                return Response({"error": "Year is not unique in the merit list."}, status=status.HTTP_400_BAD_REQUEST)
 
-    #             # Get the mean and sd for the current input_flow_type
-    #             group_stats = grouped[grouped['input_flow_type'] == input_flow_type]
-    #             if not group_stats.empty:
-    #                 sheet_mean = group_stats['sheet_mean'].values[0]
-    #                 sheet_sd = group_stats['sheet_sd'].values[0]
-    #             else:
-    #                 sheet_mean = None
-    #                 sheet_sd = None
+            TempRpMeritSheet.objects.filter(product_id = product_id,year = selected_year).delete()
+            # Save metadata in TempRpMeritSheet
+            TempRpMeritSheet.objects.create(
+                product_id=product_id,
+                year=selected_year,
+                file_name=file,
+                created_by=user_id,
+                updated_by=user_id,
+                created=now(),
+                updated=now()
+            )
 
-    #             # Add results to the row dictionary
-    #             row_data = row.to_dict()
-    #             row_data['sheet_mean'] = sheet_mean
-    #             row_data['sheet_sd'] = sheet_sd
+            return Response({"message": "File validated and uploaded successfully."}, status=status.HTTP_200_OK)
 
-    #             # Calculate zscore if sheet_mean and sheet_sd are not None
-    #             if sheet_mean is not None and sheet_sd is not None and sheet_sd != 0:
-    #                 input_value = row.get('input')
-    #                 if pd.notnull(input_value) and isinstance(input_value, (int, float)):
-    #                     zscore = (input_value - sheet_mean) / sheet_sd
-    #                     row_data['zscore'] = zscore
-    #                 else:
-    #                     row_data['zscore'] = None
-    #             else:
-    #                 row_data['zscore'] = None
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
-    #             processed_rows.append(row_data)
+class UploadMeritList(APIView):
+    permission_classes = [ApiKeyPermission]
 
-    #         return Response({"message": "File processed successfully.", "data": processed_rows[:20]}, status=status.HTTP_200_OK)
+    def post(self, request, *args, **kwargs):
+        product_id = request.data.get('product_id')
+        year = request.data.get('year')
+        user_id = request.data.get('uid')
 
-    #     except Exception as e:
-    #         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        try:
+            # Fetch the merit sheet
+            merit_sheet = TempRpMeritSheet.objects.filter(product_id=product_id, year=year).first()
+            if not merit_sheet:
+                return Response({"error": "Merit sheet not found for the given product_id and year."}, status=status.HTTP_404_NOT_FOUND)
 
+            file_path = f"{settings.CAREERS_BASE_IMAGES_URL}{merit_sheet.file_name}" if merit_sheet.file_name else None
+            if not file_path:
+                return Response({"error": "File path is not available."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Download the file
+            response = requests.get(file_path)
+            if response.status_code != 200:
+                return Response({"error": "Failed to download the file from the provided path."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Read CSV file
+            csv_file = io.StringIO(response.text)
+            reader = csv.DictReader(csv_file)
+
+            # Delete existing records for the product_id and year
+            TempRpMeritList.objects.filter(product_id=product_id, year=year).delete()
+
+            # Fetch all input_flow_type instances to map them
+            input_flow_type_map = {str(obj.id): obj for obj in RpInputFlowMaster.objects.all()}
+
+            # Group data by input_flow_type
+            input_data = defaultdict(list)
+            for row in reader:
+                input_flow_type = row['input_flow_type']
+                try:
+                    input_value = float(row['input'])
+                    input_data[input_flow_type].append(input_value)
+                except ValueError:
+                    continue  # Skip invalid numeric values
+
+            # Calculate mean and standard deviation
+            stats_data = {}
+            for input_flow_type, values in input_data.items():
+                if values:
+                    mean = sum(values) / len(values)
+                    variance = sum((x - mean) ** 2 for x in values) / len(values)
+                    sd = sqrt(variance)
+                    stats_data[input_flow_type] = {'mean': mean, 'sd': sd}
+                else:
+                    stats_data[input_flow_type] = {'mean': None, 'sd': None}
+
+            # Insert data into TempRpMeanSd
+            for input_flow_type, stats in stats_data.items():
+                input_flow_type_instance = input_flow_type_map.get(input_flow_type)
+                if not input_flow_type_instance:
+                    return Response({"error": f"Invalid input_flow_type: {input_flow_type}."}, status=status.HTTP_400_BAD_REQUEST)
+
+                TempRpMeanSd.objects.update_or_create(
+                    product_id=product_id,
+                    year=year,
+                    input_flow_type=input_flow_type_instance,
+                    defaults={
+                        'sheet_mean': stats['mean'],
+                        'sheet_sd': stats['sd'],
+                        'created_by': user_id,
+                        'updated_by': user_id,
+                        'updated': now()
+                    }
+                )
+
+            # Calculate z-score and insert merit list entries
+            csv_file.seek(0)  # Reset CSV file pointer
+            reader = csv.DictReader(csv_file)
+            merit_list_entries = []
+            batch_size = 1000  # Adjust batch size as needed
+
+            for row in reader:
+                input_flow_type = row['input_flow_type']
+                input_value = None
+                try:
+                    input_value = float(row['input'])
+                except ValueError:
+                    pass  # Skip invalid numeric values
+
+                stats = stats_data.get(input_flow_type, {})
+                sheet_mean = stats.get('mean')
+                sheet_sd = stats.get('sd')
+                zscore = None
+                if sheet_mean is not None and sheet_sd is not None and sheet_sd != 0 and input_value is not None:
+                    zscore = (input_value - sheet_mean) / sheet_sd
+
+                merit_list_entries.append(TempRpMeritList(
+                    product_id=row['product_id'],
+                    year=row['year'],
+                    caste=row.get('caste'),
+                    disability=row.get('disability'),
+                    slot=row.get('slot'),
+                    difficulty_level=row.get('difficulty_level'),
+                    input_flow_type=input_flow_type,
+                    input_value=input_value,
+                    z_score=zscore,
+                    result_flow_type=row.get('result_flow_type'),
+                    result_value=row.get('result'),
+                    created_by=user_id,
+                    updated_by=user_id,
+                    created=now(),
+                    updated=now()
+                ))
+
+                # Bulk create in batches
+                if len(merit_list_entries) == batch_size:
+                    TempRpMeritList.objects.bulk_create(merit_list_entries)
+                    merit_list_entries = []  # Reset the list after each batch
+
+            # Insert remaining entries
+            if merit_list_entries:
+                TempRpMeritList.objects.bulk_create(merit_list_entries)
+
+            return Response({"message": "Mean, SD, and Z-scores calculated successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
