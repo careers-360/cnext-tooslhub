@@ -2,7 +2,7 @@ from tools.models import CPProductCampaign
 from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias
-from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE
+from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 
 class RPHelper:
@@ -53,9 +53,18 @@ class RPHelper:
             input_process_type_list.append(input_process_type_mapping)
         
         # print(f"process type mapping {input_process_type_mapping}")
-        form_data = RpFormField.objects.filter(product_id=product_id, status=1).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "status", 'min_val', 'max_val', 'list_option_data').order_by('weight')
 
-        with_appended_cta = {'form_data': form_data, 'input_process_type_mapping': input_process_type_mapping }
+        form_data = RpFormField.objects.filter(product_id=product_id, status=1).values("field_type", "input_flow_type", "display_name", "place_holder_text", "error_message", "weight", "mapped_process_type", "mandatory", "mapped_category", "status", 'min_val', 'max_val', 'list_option_data').order_by('weight')
+
+        modified_form_data_list = []
+
+        for fdata in form_data.values():
+            # print(f"form data list {type(fdata)}")
+            if fdata['list_option_data'] is not None:
+                fdata['list_option_data'] = [{"id": sp.split("|")[0], "val": sp.split("|")[1]} for sp in fdata['list_option_data'].split(",")]
+            modified_form_data_list.append(fdata)
+
+        with_appended_cta = {'form_data': modified_form_data_list, 'input_process_type_mapping': input_process_type_mapping , 'cast_category': CASTE_CATEGORY, 'disability_category': DISABILITY_CATEGORY, 'dificulty_level': DIFFICULTY_LEVEL}
 
         return with_appended_cta
     

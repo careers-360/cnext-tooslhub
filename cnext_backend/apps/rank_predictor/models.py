@@ -213,6 +213,7 @@ class RpFormField(models.Model):
     max_val = models.FloatField(null=True, blank=True)
     weight = models.IntegerField(null=True, blank=True)
     mapped_process_type = models.IntegerField(null=True, blank=True)
+    mapped_category = models.IntegerField(null=True, blank=True)
     list_option_data = models.TextField(null=True, blank=True)
     mandatory = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
