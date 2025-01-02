@@ -1,5 +1,5 @@
 from tools.models import CPProductCampaign
-from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm
+from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
@@ -10,6 +10,14 @@ class RPHelper:
     def __init__(self):
         self.base_image_url = os.getenv("CAREERS_BASE_IMAGES_URL","https://cnextassets.careers360.de/media_tools/")
         pass
+
+    def parse_choice(self, data_dic=dict)->list:
+        datalist = []
+        for key , value in data_dic.items():
+            print(f"Key: {key}, Value: {value}")
+            datalist.append({"id": key, "value": value})
+
+        return datalist
 
     def _get_header_section(self, product_id=None, alias=None):
 
@@ -39,6 +47,11 @@ class RPHelper:
 
         # flow_type_count = RpFormField.objects.filter(product_id=product_id, status=1, mapped_process_type__isnull=False).values('mapped_process_type').distinct().count()
 
+        SHIFTS = [
+        {"id": shift.get("session_shift"), "value": shift.get("session_shift")}
+        for shift in CnextRpSession.objects.filter(product_id=product_id).values('session_shift').distinct()
+        ]
+
         input_form_mapping = CnextRpCreateInputForm.objects.filter(product_id=product_id).values('input_process_type', 'process_type_toggle_label', 'submit_cta_name')
 
         input_process_type_mapping = {}
@@ -64,7 +77,7 @@ class RPHelper:
                 fdata['list_option_data'] = [{"id": sp.split("|")[0], "val": sp.split("|")[1]} for sp in fdata['list_option_data'].split(",")]
             modified_form_data_list.append(fdata)
 
-        with_appended_cta = {'form_data': modified_form_data_list, 'input_process_type_mapping': input_process_type_mapping , 'cast_category': CASTE_CATEGORY, 'disability_category': DISABILITY_CATEGORY, 'dificulty_level': DIFFICULTY_LEVEL}
+        with_appended_cta = {'form_data': modified_form_data_list, 'input_process_type_mapping': input_process_type_mapping , 'cast_category': CASTE_CATEGORY, 'disability_category': DISABILITY_CATEGORY, 'dificulty_level': self.parse_choice(DIFFICULTY_LEVEL), 'sessions': SHIFTS}
 
         return with_appended_cta
     
