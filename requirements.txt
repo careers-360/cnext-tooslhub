@@ -10,7 +10,7 @@ django-froala-editor==4.3.1
 django-redis==5.4.0
 django-unixtimestampfield==0.5.0
 djangorestframework==3.15.2
-djangorestframework-simplejwt==5.3.1
+djangorestframework-simplejwt==5.2.2
 django-storages==1.14.4
 ecs-logging==2.2.0
 elastic-apm==6.23.0
@@ -23,7 +23,7 @@ packaging==24.2
 pillow==11.0.0
 pyasn1==0.6.1
 pyasn1_modules==0.4.1
-PyJWT==2.10.1
+PyJWT==2.6.0
 pyparsing==3.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==0.21.1
