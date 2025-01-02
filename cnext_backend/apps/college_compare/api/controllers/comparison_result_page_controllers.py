@@ -532,6 +532,7 @@ class FeesGraphInsightsView(APIView):
 
 
 
+
 class ClassProfileComparisonView(APIView):
     @extend_schema(
         summary="Get Class Profile Comparison",
@@ -550,12 +551,11 @@ class ClassProfileComparisonView(APIView):
         },
     )
     def get(self, request):
-        college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year') or current_year -1
-
-        intake_year = current_year -4
-        level = int( request.query_params.get('level'))
-      
+        college_ids_str = request.query_params.get('college_ids')
+        year_str = request.query_params.get('year') or str(current_year - 2)
+        intake_year_str = request.query_params.get('intake_year') or str(current_year - 5)
+        level = request.query_params.get('level', 1)
+        domain_ids_str = request.query_params.get("selected_domains")
 
         try:
             # Validate required parameters
@@ -598,7 +598,6 @@ class ClassProfileComparisonView(APIView):
         except Exception as e:
             logger.error(f"Error fetching class profile comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class ProfileInsightsView(APIView):
     @extend_schema(
