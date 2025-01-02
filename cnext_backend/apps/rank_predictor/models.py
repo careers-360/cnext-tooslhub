@@ -226,6 +226,7 @@ class RpFormField(models.Model):
         verbose_name = "Form Field"
         verbose_name_plural = "Form Fields"
 
+#not used yet
 class RpVariationFactor(models.Model):
     rp_id = models.IntegerField(null=True, blank=True)
     lower_value = models.FloatField(null=True, blank=True)

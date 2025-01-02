@@ -8,7 +8,7 @@ from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -1139,6 +1139,51 @@ class RPCmsHelper:
             return (input_value - mean) / sd
         return None
     
+    def get_merit_list(self, request):
+        try:
+            items_on_page = int(request.query_params.get('page_size', 30))
+            product_id = request.query_params.get('product_id')
+            year = request.query_params.get('year')
+
+            if not product_id:
+                return False, 'product_id is required'
+            
+            queryset = TempRpMeritList.objects.filter(
+                product_id=product_id, year=year
+            ).values(
+                'caste', 'disability', 'slot', 'difficulty_level', 
+                'input_flow_type', 'input_value', 'z_score', 
+                'result_flow_type', 'result_value', 'year'
+            ).order_by('id')
+
+            # Paginate the results
+            paginator = CustomPaginator()
+            paginator.page_size = items_on_page
+            paginated_results = paginator.paginate_queryset(queryset, request)
+            caste_dict = dict(CasteCategory.objects.values_list("id", "name"))
+            disability_dict = dict(DisabilityCategory.objects.values_list("id", "name"))
+            input_flow_dict = dict(RpInputFlowMaster.objects.values_list("id", "input_flow_type"))
+            result_flow_dict = dict(RpResultFlowMaster.objects.values_list("id", "result_flow_type"))
+            slot_dict = {
+                int(key): value
+                for list_option_data in RpFormField.objects.filter(field_type=4).values_list('list_option_data', flat=True)
+                for key, value in (pair.split('|') for pair in list_option_data.split(','))
+            }
+
+            # Update paginated results with human-readable values
+            for item in paginated_results:
+                if item:
+                    item['caste'] = caste_dict.get(item['caste'], item['caste'])
+                    item['disability'] = disability_dict.get(item['disability'], item['disability'])
+                    item['slot'] = slot_dict.get(item['slot'], item['slot'])
+                    item['difficulty_level'] = DIFFICULTY_LEVEL.get(item['difficulty_level'], item['difficulty_level'])
+                    item['input_flow_type'] = input_flow_dict.get(item['input_flow_type'], item['input_flow_type'])
+                    item['result_flow_type'] = result_flow_dict.get(item['result_flow_type'], item['result_flow_type'])
+            return True, paginator.get_paginated_response(paginated_results)
+
+        except Exception as e:
+            return False, str(e)
+
 class CommonDropDownHelper:
 
     def __init__(self, limit, page, offset=None):
