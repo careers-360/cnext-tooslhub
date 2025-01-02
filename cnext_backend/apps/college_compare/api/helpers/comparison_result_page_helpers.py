@@ -23,6 +23,11 @@ import os
 import json
 import re
 
+from concurrent.futures import ThreadPoolExecutor
+from botocore.config import Config
+import requests
+
+
 
 
 class GroupConcat(Func):
@@ -552,7 +557,7 @@ class RankingGraphHelper:
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
         cache_key = RankingGraphHelper.get_cache_key(
-            'ranking_graph__insight__version233', '-'.join(map(str, college_ids)), start_year, end_year, domain_id, ranking_entity
+            'ranking_graph__insight_____version', '-'.join(map(str, college_ids)), start_year, end_year, domain_id, ranking_entity
         )
 
         def fetch_data():
@@ -586,8 +591,6 @@ class RankingGraphHelper:
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
 
-   
-
     @staticmethod
     def prepare_graph_insights(
         college_ids: List[int], start_year: int, end_year: int, selected_domains: Dict[int, int]
@@ -611,13 +614,15 @@ class RankingGraphHelper:
 
         result_dict = {
             "years": years,
-            "overall": {
-                "type": "line" if all_same_domain else "tabular",  
-                "colleges": overall_data
-            },
-            "domain": {
-                "type": "line" if all_same_domain else "tabular", 
-                "colleges": {}
+            "data": {
+                "overall": {
+                    "type": "line" if all_same_domain else "tabular",  
+                    "colleges": overall_data
+                },
+                "domain": {
+                    "type": "line" if all_same_domain else "tabular", 
+                    "colleges": {}
+                }
             },
             "college_names": list(
                 College.objects.filter(id__in=college_ids)
@@ -631,14 +636,12 @@ class RankingGraphHelper:
             )
         }
 
-
         for idx, college_id in enumerate(college_ids):
             college_key = f"college_{idx + 1}"
-            result_dict['domain']['colleges'][college_key] = domain_data[college_id][f"college_1"]
-
+            result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id][f"college_1"]
 
         for data_type in ["overall", "domain"]:
-            for college_key, college_data in result_dict[data_type]['colleges'].items():
+            for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
                 if college_data and "data" in college_data:
                     data = college_data["data"]
                     for year in years:
@@ -651,13 +654,13 @@ class RankingGraphHelper:
                             elif data_type == "domain":
                                 has_na_domain = True
 
-
         if has_na_overall:
-            result_dict["overall"]["type"] = "tabular"
+            result_dict["data"]["overall"]["type"] = "tabular"
         if has_na_domain:
-            result_dict["domain"]["type"] = "tabular"
+            result_dict["data"]["domain"]["type"] = "tabular"
 
         return result_dict
+
 
 
 class PlacementInsightHelper:
@@ -669,8 +672,7 @@ class PlacementInsightHelper:
     @staticmethod
     def fetch_placement_stats(college_ids: List[int], selected_domains: Dict[int, int], year: int) -> Dict:
         """
-        Fetches placement statistics for multiple colleges, allowing different domains per college.
-
+        
         Args:
             college_ids: A list of college IDs.
             selected_domains: A dictionary mapping college IDs to domain IDs.
@@ -789,15 +791,13 @@ class PlacementInsightHelper:
 
 
 
-
-
 class PlacementGraphInsightsHelper:
     """
     Helper class for processing and analyzing placement data across multiple colleges.
     Provides caching, data validation, and standardized formatting for placement insights.
     """
 
-    CACHE_TIMEOUT = 3600 * 24*7
+    CACHE_TIMEOUT = 3600 * 24 * 7
     
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -859,7 +859,6 @@ class PlacementGraphInsightsHelper:
                 f"college_id={placement_data.get('college_id')}"
             )
         
-   
         domestic = max(0, max_salary_dom) if isinstance(max_salary_dom, (int, float, Decimal)) else 0
         international = max(0, max_salary_inter) if isinstance(max_salary_inter, (int, float, Decimal)) else 0
         
@@ -940,8 +939,7 @@ class PlacementGraphInsightsHelper:
         if not isinstance(year, int) or year < 1900:
             raise ValueError(f"Invalid year: {year}")
             
- 
-        cache_key_parts = ['placement_insights_v4', year, '-'.join(map(str, college_ids))]
+        cache_key_parts = ['placement____insights', year, '-'.join(map(str, college_ids))]
         for cid in college_ids:
             cache_key_parts.append(f"{cid}-{selected_domains.get(cid, 'NA')}")
         cache_key = cls.get_cache_key(*cache_key_parts)
@@ -949,64 +947,60 @@ class PlacementGraphInsightsHelper:
         def fetch_data() -> Dict:
             """Inner function to fetch and process placement data."""
             try:
-    
-                placements = {}
-                for college_id in college_ids:
-                    domain_id = selected_domains.get(college_id)
-                    filters = Q(year=year, published='published')
-                    if domain_id:
-                        filters &= Q(stream_id=domain_id)
-
-                    placement = (
-                        CollegePlacement.objects.filter(filters, college_id=college_id)
-                        .values('total_students', 'no_placed', 'max_salary_dom', 'max_salary_inter')
-                        .annotate(total_offers=Coalesce(Sum('no_placed'), 0))
-                        .order_by('college_id')
-                        .first()
+                # Fetch placement data for all colleges
+                placements = {
+                    college_id: CollegePlacement.objects.filter(
+                        Q(year=year, published='published', college_id=college_id) &
+                        (Q(stream_id=selected_domains[college_id]) if selected_domains.get(college_id) else Q())
                     )
-                    placements[college_id] = placement or {}
+                    .values('total_students', 'no_placed', 'max_salary_dom', 'max_salary_inter')
+                    .annotate(total_offers=Coalesce(Sum('no_placed'), 0))
+                    .order_by('college_id')
+                    .first() or {}
+                    for college_id in college_ids
+                }
 
-
-                recruiter_data = {}
-                for college_id in college_ids:
-                    recruiters = (
-                        Company.objects.filter(
+                # Fetch recruiter data for all colleges
+                recruiter_data = {
+                    college_id: [
+                        {"name": rec.get('popular_name') or rec.get('name'), "logo": rec.get('logo')}
+                        for rec in Company.objects.filter(
                             collegeplacementcompany__collegeplacement__college_id=college_id,
                             collegeplacementcompany__collegeplacement__year=year,
                             published='published'
                         )
                         .values('popular_name', 'logo', 'name')
                         .distinct()[:5]
-                    )
-                    recruiter_data[college_id] = [
-                        {
-                            "name": recruiter.get('popular_name') or recruiter.get('name'),
-                            "logo": recruiter.get('logo'),
-                        }
-                        for recruiter in recruiters
                     ]
+                    for college_id in college_ids
+                }
 
-          
+                # Check for empty recruiter data across all colleges
+                no_recruiters = all(not data for data in recruiter_data.values())
+
+                # Fetch college names for the UI
                 colleges = {
                     college['id']: college['name']
                     for college in College.objects.filter(id__in=college_ids).values('id', 'name')
                 }
 
-        
+                # Initialize result structure
                 result_dict = {
-                    "placement_data": {"type": "horizontal bar", "year_tag": year, "colleges": {}},
-                    "salary_data": {"type": "horizontal bar", "year_tag": f"{year-1}-{year}", "colleges": {}},
-                    "recruiter_data": {"type": "horizontal logo bar", "colleges": {}},
+                    "placement_percentage": {"type": "horizontal bar", "year_tag": year, "colleges": {}},
+                    "salary": {"type": "horizontal bar", "year_tag": f"{year-1}-{year}", "colleges": {}},
+                    "recruiter": {},
                     "college_names": [colleges[college_id] for college_id in college_ids],
                 }
 
-    
+                # Check if all domains are the same to adjust data type
                 all_same_domain = len(set(selected_domains.values())) <= 1
-                if not all_same_domain:
-                    result_dict["placement_data"]["type"] = "tabular"
-                    result_dict["salary_data"]["type"] = "tabular"
+                if all_same_domain:
+                    result_dict["placement_percentage"]["type"] = "horizontal bar"
+                    result_dict["salary"]["type"] = "horizontal bar"
+                else:
+                    result_dict["placement_percentage"]["type"] = "tabular"
+                    result_dict["salary"]["type"] = "tabular"
 
-          
                 for idx, college_id in enumerate(college_ids, 1):
                     college_key, placement_data, salary_data, recruiters = cls.format_placement_data(
                         college_id,
@@ -1014,12 +1008,32 @@ class PlacementGraphInsightsHelper:
                         idx,
                         recruiter_data.get(college_id, [])
                     )
-                    
-                    result_dict["placement_data"]["colleges"][college_key] = placement_data
-                    result_dict["salary_data"]["colleges"][college_key] = salary_data
-                    result_dict["recruiter_data"]["colleges"][college_key] = recruiters
 
-                return result_dict
+                    result_dict["placement_percentage"]["colleges"][college_key] = placement_data
+                    result_dict["salary"]["colleges"][college_key] = salary_data
+                    result_dict["recruiter"][college_key] = recruiters
+
+                    # Adjust type to tabular if any data is "NA"
+                    if placement_data["value"] == 'NA':
+                        result_dict["placement_percentage"]["type"] = "tabular"
+                    if  salary_data["max_value"] == 'NA':
+                        result_dict["salary"]["type"] = "tabular"
+
+
+                if no_recruiters:
+                    result_dict["recruiter"] = {}
+
+                
+                final_result = {
+                    "data": {
+                        "placement_percentage": result_dict["placement_percentage"],
+                        "salary": result_dict["salary"],
+                        "recruiter": result_dict["recruiter"]
+                    },
+                    "college_names": result_dict["college_names"]
+                }
+
+                return final_result
 
             except Exception as e:
                 logger.error(f"Error in fetch_placement_insights: {traceback.format_exc()}")
@@ -1027,6 +1041,11 @@ class PlacementGraphInsightsHelper:
 
 
         return cache.get_or_set(cache_key, fetch_data, cls.CACHE_TIMEOUT)
+
+
+
+
+
 
 
 class CourseFeeComparisonHelper:
@@ -1341,7 +1360,6 @@ class FeesHelper:
         return max_authority if authority_map[max_authority] > 0 else 'NA'
 
 
-
 class FeesGraphHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -1355,10 +1373,10 @@ class FeesGraphHelper:
         except (ValueError, TypeError):
             raise ValueError("course_ids must be a flat list of integers or strings.")
         
-        cache_key = FeesGraphHelper.get_cache_key('fees_graph__data_v3', '-'.join(map(str, course_ids)))
+        cache_key = FeesGraphHelper.get_cache_key('fees_graph__data_v8', '-'.join(map(str, course_ids)))
         
         def fetch_data():
-            static_categories = ['gn', 'obc', 'sc']
+            static_categories = ['general', 'observed_backward_class', 'scheduled_caste']
             
             courses = (
                 Course.objects.filter(id__in=course_ids)
@@ -1374,7 +1392,7 @@ class FeesGraphHelper:
             
             result_dict = {
                 "categories": static_categories,
-                "year_tag":current_year-1,
+                "year_tag": current_year-1,
                 "data": {category: {"type": "horizontal bar", "values": {}} for category in static_categories},
                 "college_names": []
             }
@@ -1405,18 +1423,34 @@ class FeesGraphHelper:
                     fee_mapping[course_id] = {}
                 fee_mapping[course_id][category] = total_fees
             
+            category_mapping = {
+                "gn": "general",
+                "obc": "observed_backward_class",
+                "sc": "scheduled_caste"
+            }
+            
+            any_fee_na = False
+
             for idx, course_id in enumerate(ordered_course_ids, 1):
                 college_name = course_id_to_name.get(course_id)
                 if college_name:
-                    for category in static_categories:
+                    for raw_category in ['gn', 'obc', 'sc']:
+                        category = category_mapping[raw_category]
                         college_key = f"college_{idx}"
-                        total_fees = fee_mapping.get(course_id, {}).get(category)
+                        total_fees = fee_mapping.get(course_id, {}).get(raw_category)
                         
+                        if total_fees is None:
+                            any_fee_na = True
+
                         result_dict["data"][category]["values"][college_key] = {
                             "course_id": course_id,
-                            "fee": f"₹ {total_fees:,.0f}" if total_fees is not None else "NA"
+                            "fee":format_fee(total_fees) if total_fees is not None else "NA"
                         }
             
+            if any_fee_na:
+                for category in static_categories:
+                    result_dict["data"][category]["type"] = "tabular"
+
             result_dict["college_names"] = college_names
             return result_dict
         
@@ -1429,6 +1463,9 @@ class FeesGraphHelper:
 
 
 
+
+
+
 class ClassProfileHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -1436,15 +1473,22 @@ class ClassProfileHelper:
         return md5(key.encode()).hexdigest()
 
     @staticmethod
-    def fetch_class_profiles(college_ids: List[int], year: int, intake_year: int, level: int) -> Dict:
+    def fetch_class_profiles(
+        college_ids: List[int], 
+        year: int, 
+        intake_year: int, 
+        level: int, 
+        selected_domains: Dict[int, int]  
+    ) -> Dict:
         """
-        Fetch Class Profile data for a list of colleges.
+        Fetch Class Profile data for a list of colleges, considering selected domains.
 
         Args:
             college_ids (List[int]): List of college IDs to filter.
             year (int): Year of the placement.
             intake_year (int): Intake year of students.
-            level (int): level of course.
+            level (int): Level of course.
+            selected_domains (Dict[int, int]): A dictionary mapping college IDs to domain IDs.
 
         Returns:
             Dict: Class profile data for each college.
@@ -1452,22 +1496,21 @@ class ClassProfileHelper:
        
         college_ids = [item for sublist in college_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
         
-      
-        logger.debug(f"Fetching class profiles for college_ids: {college_ids}")
+        logger.debug(f"Fetching class profiles for college_ids: {college_ids} with selected domains: {selected_domains}")
 
         cache_key = ClassProfileHelper.get_cache_key(
-            'Class_Profiles_V1', '-'.join(map(str, sorted(college_ids))), year, intake_year, level
+            'Class_Profiles', '-'.join(map(str, sorted(college_ids))), year, intake_year, level,selected_domains
         )
 
         def fetch_data():
             try:
-                
                 results = (
                     College.objects.filter(
                         id__in=college_ids,
                         collegeplacement__year=year,
                         collegeplacement__intake_year=intake_year,
-                        collegeplacement__levels=level 
+                        collegeplacement__levels=level,
+                        collegeplacement__stream_id__in=list(selected_domains.values())  # Filter by domains
                     )
                     .distinct() 
                     .values('id')
@@ -1496,7 +1539,6 @@ class ClassProfileHelper:
                     for college in results
                 }
 
-             
                 result_dict = {}
                 for i, college_id in enumerate(college_ids, 1):
                     key = f"college_{i}"
@@ -1519,81 +1561,97 @@ class ClassProfileHelper:
                 logger.error(f"Error fetching class profiles: {e}")
                 raise
 
-        return cache.get_or_set(cache_key, fetch_data, 3600*24*365)
+        return cache.get_or_set(cache_key, fetch_data, 3600*24*7)
+
+
 
 
 class ProfileInsightsHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
-        """
-        Generate a unique cache key by hashing the combined arguments.
-        """
-        key = '_'.join(map(str, args))
-        return hashlib.md5(key.encode()).hexdigest()
+        key = '_'.join(str(arg) for arg in args)
+        return md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def validate_selected_domains(selected_domains):
+        if not isinstance(selected_domains, dict):
+            raise TypeError("selected_domains must be a dictionary with college_id as keys and domain_id as values.")
 
     @staticmethod
     def fetch_student_faculty_ratio(
         college_ids: List[int],
+        selected_domains: Dict[int, int],
         year: int,
         intake_year: int,
-        level: int = 1
+        level: int = 1,
     ) -> Dict[str, Dict]:
-        """
-        Fetch student to faculty ratio data for given colleges as a percentage.
-        """
+        ProfileInsightsHelper.validate_selected_domains(selected_domains)
+
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student__faculty_ratio', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student__faculty__ratio', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
-            query_result = (
-                College.objects.filter(id__in=college_ids)
-                .annotate(
-                    students=Coalesce(
-                        Sum(
-                            Case(
-                                When(
-                                    collegeplacement__year=year,
-                                    collegeplacement__intake_year=intake_year,
-                                    collegeplacement__levels=level,
-                                    then='collegeplacement__total_students'
-                                ),
-                                default=Value(0, output_field=IntegerField())
-                            )
-                        ),
-                        Value(0, output_field=IntegerField())
-                    ),
-                    faculty=Coalesce(
-                        F('total_faculty'),
-                        Value(0, output_field=IntegerField())
-                    ),
-                    ratio=Case(
-                        When(
-                            total_faculty__gt=0,
-                            then=Cast(F('students'), FloatField()) / Cast(F('faculty'), FloatField())
-                        ),
-                        default=Value(None, output_field=FloatField()),
-                        output_field=FloatField()
-                    )
-                )
-                .values('id', 'students', 'faculty', 'ratio')
+            latest_year = (
+                CollegePlacement.objects
+                .filter(college_id__in=college_ids)
+                .aggregate(Max('year'))['year__max'] or year
             )
+
+            query_result = []
+            for college_id in college_ids:
+                domain_id = selected_domains.get(college_id)
+                if not domain_id:
+                    continue
+
+                result = (
+                    College.objects.filter(id=college_id)
+                    .annotate(
+                        students=Coalesce(
+                            Sum(
+                                Case(
+                                    When(
+                                        Q(collegeplacement__intake_year=intake_year) &
+                                        Q(collegeplacement__year=latest_year) &
+                                        Q(collegeplacement__stream_id=domain_id),
+                                        then='collegeplacement__total_students'
+                                    ),
+                                    default=Value(0, output_field=IntegerField())
+                                )
+                            ),
+                            Value(0, output_field=IntegerField())
+                        ),
+                        faculty=Coalesce(
+                            F('total_faculty'),
+                            Value(0, output_field=IntegerField())
+                        ),
+                    )
+                    .values('id', 'students', 'faculty')
+                )
+
+                query_result.extend(result)
 
             import time
             current_year = time.localtime().tm_year
+            visualization_type = "horizontal bar"
+            result = {"year_tag": current_year - 1}
 
-
-            result = {"type": "horizontal bar","year_tag":current_year-1}
-
-            
             for idx, data in enumerate(query_result, 1):
-                student_faculty_ratio = data['ratio'] * 100 if data['ratio'] is not None else None
+                if data['faculty'] > 0 and data['students'] > 0:
+                    ratio = (data['students'] / data['faculty']) * 100
+                else:
+                    ratio = None
+                    visualization_type = "tabular"
+
                 result[f"college_{idx}"] = {
                     "college_id": str(data['id']),
-                    "total_students": data['students'],
-                    "total_faculty": data['faculty'],
-                    "student_faculty_ratio_percentage": round(student_faculty_ratio, 2) if student_faculty_ratio is not None else None
+                    "total_students": data['students'] or "NA",
+                    "total_faculty": data['faculty'] or "NA",
+                    "student_faculty_ratio_percentage": round(ratio, 2) if ratio is not None else "NA",
+                    "data_status": "complete" if ratio is not None else "incomplete"
                 }
+
+            result["type"] = visualization_type
             return result
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
@@ -1601,184 +1659,253 @@ class ProfileInsightsHelper:
     @staticmethod
     def fetch_student_demographics(
         college_ids: List[int],
+        selected_domains: Dict[int, int],
         year: int,
         intake_year: int,
         level: int = 1
     ) -> Dict[str, Dict]:
-        """
-        Fetch student demographics including outside state percentage.
-        """
+        ProfileInsightsHelper.validate_selected_domains(selected_domains)
+
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student__demographics', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student___demographics______', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
-            query_result = (
-                CollegePlacement.objects.filter(
-                    college_id__in=college_ids,
-                    year=year,
-                    intake_year=intake_year,
-                    levels=level
-                )
-                .values('college_id')
-                .annotate(
-                    total_students=Coalesce(Sum('total_students'), Value(0, output_field=IntegerField())),
-                    outside_state=Coalesce(Sum('outside_state'), Value(0, output_field=IntegerField()))
-                )
-                .annotate(
-                    outside_state_percentage=Case(
-                        When(
-                            total_students__gt=0,
-                            then=Cast(F('outside_state'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
-                        ),
-                        default=Value(None, output_field=FloatField())
+            latest_year = (
+                CollegePlacement.objects
+                .filter(college_id__in=college_ids)
+                .aggregate(Max('year'))['year__max'] or year
+            )
+
+            query_result = []
+            for college_id in college_ids:
+                domain_id = selected_domains.get(college_id)
+                if not domain_id:
+                    continue
+
+                result = (
+                    CollegePlacement.objects.filter(
+                        college_id=college_id,
+                        intake_year=intake_year,
+                        year=latest_year,
+                        stream_id=domain_id
+                    )
+                    .values('college_id')
+                    .annotate(
+                        total_students=Coalesce(Sum('total_students'), Value(0, output_field=IntegerField())),
+                        outside_state=Coalesce(Sum('outside_state'), Value(0, output_field=IntegerField()))
                     )
                 )
-            )
+
+                # Check if results are found, else handle missing data
+                if not result:
+                    query_result.append({
+                        'college_id': college_id,
+                        'total_students': 0,
+                        'outside_state': 0
+                    })
+                else:
+                    query_result.extend(result)
+
             import time
             current_year = time.localtime().tm_year
+            visualization_type = "horizontal bar"
+            result = {"year_tag": current_year - 1}
 
-
-            result = {"type": "horizontal bar","year_tag":current_year-1}
             for idx, data in enumerate(query_result, 1):
+                outside_state_percentage = (
+                    (data['outside_state'] / data['total_students'] * 100)
+                    if data['total_students'] > 0 else None
+                )
+
+                if outside_state_percentage is None:
+                    visualization_type = "tabular"
+
                 result[f"college_{idx}"] = {
                     "college_id": str(data['college_id']),
-                    "total_students": data['total_students'],
-                    "students_outside_state": data['outside_state'],
-                    "percentage_outside_state": round(data['outside_state_percentage'], 2) if data['outside_state_percentage'] is not None else None
+                    "total_students": data['total_students'] or "NA",
+                    "students_outside_state": data['outside_state'] or "NA",
+                    "percentage_outside_state": round(outside_state_percentage, 2) if outside_state_percentage is not None else "NA",
+                    "data_status": "complete" if outside_state_percentage is not None else "incomplete"
                 }
+
+            result["type"] = visualization_type
             return result
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
+
 
     @staticmethod
     def fetch_gender_diversity(
         college_ids: List[int],
+        selected_domains: Dict[int, int],
         year: int,
         intake_year: int,
         level: int = 1
     ) -> Dict[str, Dict]:
-        """
-        Fetch gender diversity statistics.
-        """
+        ProfileInsightsHelper.validate_selected_domains(selected_domains)
+
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'gender__diversity', '-'.join(map(str, college_ids)), year, intake_year, level
+            'gender___diversity___', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
-            query_result = (
-                CollegePlacement.objects.filter(
-                    college_id__in=college_ids,
-                    year=year,
-                    intake_year=intake_year,
-                    levels=level
-                )
-                .values('college_id')
-                .annotate(
-                    male_students=Coalesce(Sum('male_students'), Value(0, output_field=IntegerField())),
-                    female_students=Coalesce(Sum('female_students'), Value(0, output_field=IntegerField()))
-                )
-                .annotate(
-                    total_students=F('male_students') + F('female_students'),
-                    male_percentage=Case(
-                        When(
-                            total_students__gt=0,
-                            then=Cast(F('male_students'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
-                        ),
-                        default=Value(None, output_field=FloatField())
-                    ),
-                    female_percentage=Case(
-                        When(
-                            total_students__gt=0,
-                            then=Cast(F('female_students'), FloatField()) * 100.0 / Cast(F('total_students'), FloatField())
-                        ),
-                        default=Value(None, output_field=FloatField())
+            latest_year = (
+                CollegePlacement.objects
+                .filter(college_id__in=college_ids)
+                .aggregate(Max('year'))['year__max'] or year
+            )
+
+            query_result = []
+            for college_id in college_ids:
+                domain_id = selected_domains.get(college_id)
+                if not domain_id:
+                    continue
+
+                result = (
+                    CollegePlacement.objects.filter(
+                        college_id=college_id,
+                        intake_year=intake_year,
+                        year=latest_year,
+                        stream_id=domain_id
+                    )
+                    .values('college_id')
+                    .annotate(
+                        male_students=Coalesce(Sum('male_students'), Value(0, output_field=IntegerField())),
+                        female_students=Coalesce(Sum('female_students'), Value(0, output_field=IntegerField())),
+                        total_students=F('male_students') + F('female_students')
                     )
                 )
-            )
+
+                # Check if results are found, else handle missing data
+                if not result:
+                    query_result.append({
+                        'college_id': college_id,
+                        'male_students': 0,
+                        'female_students': 0,
+                        'total_students': 0
+                    })
+                else:
+                    query_result.extend(result)
 
             import time
             current_year = time.localtime().tm_year
-            
-            result = {"type": "horizontal bar","year_tag":current_year-1}
+            visualization_type = "horizontal bar"
+            result = {"year_tag": current_year - 1}
 
             for idx, data in enumerate(query_result, 1):
+                if data['total_students'] > 0:
+                    male_percentage = (data['male_students'] / data['total_students']) * 100
+                    female_percentage = (data['female_students'] / data['total_students']) * 100
+                else:
+                    male_percentage = None
+                    female_percentage = None
+                    visualization_type = "tabular"
+                
+
+                if male_percentage is None or female_percentage is None:
+                    visualization_type = "tabular"
+
                 result[f"college_{idx}"] = {
                     "college_id": str(data['college_id']),
-                    "male_students": data['male_students'],
-                    "female_students": data['female_students'],
-                    "percentage_male": round(data['male_percentage'], 2) if data['male_percentage'] is not None else None,
-                    "percentage_female": round(data['female_percentage'], 2) if data['female_percentage'] is not None else None
+                    "male_students": data['male_students'] or "NA",
+                    "female_students": data['female_students'] or "NA",
+                    "percentage_male": round(male_percentage, 2) if male_percentage is not None else "NA",
+                    "percentage_female": round(female_percentage, 2) if female_percentage is not None else "NA",
+                    "data_status": "complete" if male_percentage is not None else "incomplete"
                 }
+
+            result["type"] = visualization_type
             return result
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
-
     @staticmethod
     def prepare_profile_insights(
         college_ids: List[int],
         year: int,
         intake_year: int,
-        level: int = 1
+        selected_domains: Dict[int, int],
+        level: int = 1,
     ) -> Dict:
         """
         Prepare comprehensive profile insights including all metrics.
-
-        Args:
-            college_ids (List[int]): List of college IDs to analyze
-            year (int): Academic year
-            intake_year (int): Year of student intake
-            level (int): Academic level (defaults to 1)
-
-        Returns:
-            Dict: Combined profile insights in the specified format
         """
-        
+        ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
+        # Fetch college details without ordering
         college_details = list(
             College.objects.filter(id__in=college_ids)
-            .order_by('id')
             .values(
-                'id', 
-                'name', 
-                'short_name', 
-                'ownership', 
-                'institute_type_1', 
+                'id',
+                'name',
+                'short_name',
+                'ownership',
+                'institute_type_1',
                 'institute_type_2'
             )
         )
 
-        # Add ownership display and type of institute
-        for college in college_details:
-            college['ownership_display'] = dict(College.OWNERSHIP_CHOICES).get(college['ownership'], '-')
-            college['type_of_institute'] =  College.type_of_institute(
-        college['institute_type_1'], college['institute_type_2']
-    )
+        # Create a dictionary to map college IDs to their details
+        college_details_map = {college['id']: college for college in college_details}
 
-        student_faculty_metrics = ProfileInsightsHelper.fetch_student_faculty_ratio(
-            college_ids, year, intake_year, level
+        # Reorder college details based on the order of college_ids
+        ordered_college_details = [college_details_map[college_id] for college_id in college_ids]
+
+        # Add additional info to college details
+        for college in ordered_college_details:
+            college['ownership_display'] = (
+                dict(College.OWNERSHIP_CHOICES).get(college['ownership'], 'Not Available')
+            )
+            college['type_of_institute'] = (
+                College.type_of_institute(
+                    college['institute_type_1'], 
+                    college['institute_type_2']
+                ) or 'Not Available'
+            )
+
+        unique_domains = set(selected_domains.values())
+        visualization_type = "horizontal bar" if len(unique_domains) == 1 else "tabular"
+
+        student_faculty_ratio_data = ProfileInsightsHelper.fetch_student_faculty_ratio(
+            college_ids=college_ids,
+            selected_domains=selected_domains,
+            year=year,
+            intake_year=intake_year,
+            level=level
         )
-        demographic_metrics = ProfileInsightsHelper.fetch_student_demographics(
-            college_ids, year, intake_year, level
+
+        student_demographics_data = ProfileInsightsHelper.fetch_student_demographics(
+            college_ids=college_ids,
+            selected_domains=selected_domains,
+            year=year,
+            intake_year=intake_year,
+            level=level
         )
-        gender_metrics = ProfileInsightsHelper.fetch_gender_diversity(
-            college_ids, year, intake_year, level
+
+        gender_diversity_data = ProfileInsightsHelper.fetch_gender_diversity(
+            college_ids=college_ids,
+            selected_domains=selected_domains,
+            year=year,
+            intake_year=intake_year,
+            level=level
         )
 
         return {
             "year": year,
             "intake_year": intake_year,
             "level": level,
-            "student_faculty_metrics": student_faculty_metrics,
-            "student_outside_student_metrics": demographic_metrics,
-            "gender_metrics": gender_metrics,
-            "college_details": college_details
+            "data": {
+                "student_faculty_ratio": student_faculty_ratio_data,
+                "student_from_outside_state": student_demographics_data,
+                "gender_diversity": gender_diversity_data
+            },
+            "college_details": ordered_college_details,  # Returning the reordered college details
         }
 
 
-
-
-
+    
+    
+    
 class CollegeFacilitiesHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -1858,9 +1985,9 @@ class CollegeFacilitiesHelper:
     
 
 
-from concurrent.futures import ThreadPoolExecutor
-from botocore.config import Config
-import requests
+
+
+
 
 class CollegeReviewsHelper:
     """
@@ -1954,12 +2081,13 @@ class CollegeReviewsHelper:
             cache.set(cache_key, summary, 3600 * 12)  # Cache for 12 hours
         return summary
 
-    def get_college_reviews_summary(self, college_ids: List[int], grad_year: int) -> Dict:
+    def get_college_reviews_summary(self, college_ids: List[int], course_ids: Optional[List[int]] = None, grad_year: int = None) -> Dict:
         """
         Get comprehensive review summary including ratings and AI-generated insights.
         
         Args:
             college_ids (List[int]): List of college IDs to analyze
+            course_ids (Optional[List[int]]): List of course IDs to filter reviews by
             grad_year (int): Graduation year to filter reviews
             
         Returns:
@@ -1968,22 +2096,32 @@ class CollegeReviewsHelper:
         # Flatten nested lists if any
         college_ids = [item for sublist in college_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
         
+        if course_ids:
+            course_ids = [item for sublist in course_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
+        
         # Generate cache key
         cache_key = self.get_cache_key(
-            'College_Reviews_Summary_ne',
+            'College_Reviews_Summary_new_',
             '-'.join(map(str, sorted(college_ids))),
+            '-'.join(map(str, sorted(course_ids or []))),
             grad_year
         )
 
         def fetch_summary():
             try:
-                # Fetch aggregate ratings for each college
+                
+                filters = {
+                    'college_id__in': college_ids,
+                    'status': True
+                }
+
+                if grad_year:
+                    filters['graduation_year__year'] = grad_year
+                if course_ids:
+                    filters['college_course_id__in'] = course_ids 
+
                 ratings = (
-                    CollegeReviews.objects.filter(
-                        college_id__in=college_ids,
-                        graduation_year__year=grad_year,
-                        status=True
-                    )
+                    CollegeReviews.objects.filter(**filters)
                     .select_related('college')
                     .values('college_id', 'college__name')
                     .annotate(
@@ -2000,12 +2138,8 @@ class CollegeReviewsHelper:
 
                 # Fetch detailed reviews for text analysis
                 reviews = (
-                    CollegeReviews.objects.filter(
-                        college_id__in=college_ids,
-                        graduation_year__year=grad_year,
-                        status=True
-                    )
-                    .values('college_id', 'title', 'campus_life', 'college_infra', 
+                    CollegeReviews.objects.filter(**filters)
+                    .values('college_id', 'college_course_id', 'title', 'campus_life', 'college_infra', 
                             'academics', 'placements', 'value_for_money')
                 )
 
@@ -2060,15 +2194,16 @@ class CollegeReviewsHelper:
                 raise
 
       
-        return cache.get_or_set(cache_key, fetch_summary, 3600 * 24 *7 )
+        return cache.get_or_set(cache_key, fetch_summary, 3600 * 24 * 7)
 
     @staticmethod
-    def get_recent_reviews(college_ids: List[int], limit: int = 3) -> Dict:
+    def get_recent_reviews(college_ids: List[int], course_ids: Optional[List[int]] = None, limit: int = 3) -> Dict:
         """
         Get recent reviews for colleges with caching.
 
         Args:
             college_ids (List[int]): List of college IDs to filter
+            course_ids (Optional[List[int]]): List of course IDs to filter reviews by
             limit (int, optional): Maximum number of reviews per college. Defaults to 3.
 
         Returns:
@@ -2077,24 +2212,34 @@ class CollegeReviewsHelper:
         # Flatten nested lists if any
         college_ids = [item for sublist in college_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
         
+        if course_ids:
+            course_ids = [item for sublist in course_ids for item in (sublist if isinstance(sublist, list) else [sublist])]
+        
         # Generate cache key
         cache_key = CollegeReviewsHelper.get_cache_key(
             'Recent_Reviews',
             '-'.join(map(str, sorted(college_ids))),
+            '-'.join(map(str, sorted(course_ids or []))),
             limit
         )
 
         def fetch_recent():
             try:
                 # Fetch recent reviews with user information
+                filters = {
+                    'college_id__in': college_ids,
+                    'title__isnull':False
+                }
+
+                if course_ids:
+                    filters['college_course_id__in'] = course_ids  # Filter by course IDs
+
                 results = (
-                    CollegeReviews.objects.filter(
-                        college_id__in=college_ids,
-                        title__isnull=False
-                    )
+                    CollegeReviews.objects.filter(**filters)
                     .select_related('user')
                     .values(
                         'college_id',
+                        'college_course_id',
                         'title',
                         'user__display_name',
                         rating=Round(F('overall_rating') / 20, 1),
@@ -2136,55 +2281,21 @@ class CollegeReviewsHelper:
     
 
 
+
+
 class CollegeReviewsRatingGraphHelper:
-    """
-    Helper class for generating college review rating graphs with classification of ratings
-    as Very Good (>4), Good (3-4), and Average (<3).
-    """
-    
     @staticmethod
     def get_cache_key(*args) -> str:
         """
         Generate a consistent cache key from variable arguments.
-        
-        Args:
-            *args: Variable arguments to include in the cache key
-            
-        Returns:
-            str: MD5 hash of the concatenated arguments
         """
         key = '_'.join(map(str, args))
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
-    def classify_rating(rating: float) -> str:
-        """
-        Classify a rating value into categories.
-        
-        Args:
-            rating (float): Rating value to classify
-            
-        Returns:
-            str: Classification as 'V.Good', 'Good', or 'Avg'
-        """
-        if rating > 4:
-            return 'V.Good'
-        elif 3 <= rating <= 4:
-            return 'Good'
-        else:
-            return 'Avg'
-
-    @staticmethod
     def fetch_rating_data(college_ids: List[int], grad_year: int) -> Dict:
         """
-        Fetch and process college rating data with classifications.
-        
-        Args:
-            college_ids (List[int]): List of college IDs to analyze
-            grad_year (int): Graduation year to filter reviews
-            
-        Returns:
-            Dict: Processed rating data with classifications for each college
+        Fetch and process college rating data with classifications, maintaining input order.
         """
         try:
             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
@@ -2192,13 +2303,12 @@ class CollegeReviewsRatingGraphHelper:
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
         cache_key = CollegeReviewsRatingGraphHelper.get_cache_key(
-            'college_reviews_graph_data',
-            '-'.join(map(str, sorted(college_ids))),
+            'college_______reviews____graph_data',
+            '-'.join(map(str, sorted(college_ids))), 
             grad_year
         )
 
         def fetch_data():
-            
             rating_type = [
                 'infra_rating',
                 'campus_life_ratings',
@@ -2207,7 +2317,7 @@ class CollegeReviewsRatingGraphHelper:
                 'placement_rating'
             ]
 
-        
+       
             ratings = (
                 CollegeReviews.objects.filter(
                     college_id__in=college_ids,
@@ -2223,53 +2333,74 @@ class CollegeReviewsRatingGraphHelper:
                     value_for_money_ratings=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0)),
                     placement_rating=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0))
                 )
-                .order_by('college_id')  
             )
 
+            ratings_dict = {rating['college_id']: rating for rating in ratings}
+
+            all_colleges = College.objects.filter(id__in=college_ids).values('id', 'name')
+            college_names_dict = {college['id']: college['name'] for college in all_colleges}
+
+        
             result_dict = {
                 "rating_type": rating_type,
-                "year_tag":grad_year,
-                "rating_data": {   "type": "radar"},
-                "classification_data": {   "type": "horizontal bar",},
+                "year_tag": grad_year,
+                "data": {
+                    "rating": {"type": "radar", "values": {}},
+                    "classification": {"type": "horizontal bar", "values": {}}
+                },
                 "college_names": []
             }
 
-            for idx, college in enumerate(ratings, 1):
+            for idx, college_id in enumerate(college_ids, 1):
                 college_key = f"college_{idx}"
-                college_name = college['college__name']
+                college_name = college_names_dict.get(college_id, "Unknown")
+                rating_data = ratings_dict.get(college_id, None)
+
+                if rating_data:
+                    # College has ratings
+                    result_dict["data"]["rating"]["values"][college_key] = {
+                        "college_id": college_id,
+                        "college_name": college_name,
+                        **{param: rating_data[param] for param in rating_type}
+                    }
+
+                    result_dict["data"]["classification"]["values"][college_key] = {
+                        "college_id": college_id,
+                        "college_name": college_name,
+                        "V.Good": sum(1 for param in rating_type if rating_data[param] > 4),
+                        "Good": sum(1 for param in rating_type if 3 <= rating_data[param] <= 4),
+                        "Avg": sum(1 for param in rating_type if rating_data[param] < 3)
+                    }
+                else:
+                    # College has no ratings
+                    result_dict["data"]["rating"]["values"][college_key] = {
+                        "college_id": college_id,
+                        "college_name": college_name,
+                        **{param: 0.0 for param in rating_type}
+                    }
+
+                    result_dict["data"]["classification"]["values"][college_key] = {
+                        "college_id": college_id,
+                        "college_name": college_name,
+                        "V.Good": 0,
+                        "Good": 0,
+                        "Avg": 0
+                    }
+
                 result_dict["college_names"].append(college_name)
-                
-                
-                result_dict["rating_data"][college_key] = {
-                    "college_id": college['college_id'],
-                    "college_name": college_name,
-                    **{param: college[param] for param in rating_type}
-                }
-                
-                
-                result_dict["classification_data"][college_key] = {
-                    "college_id": college['college_id'],
-                    "college_name": college_name,
-                    "V.Good": sum(1 for param in rating_type if college[param] > 4),
-                    "Good": sum(1 for param in rating_type if 3 <= college[param] <= 4),
-                    "Avg": sum(1 for param in rating_type if college[param] < 3)
-                }
 
             return result_dict
 
-        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 *7) 
-
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
     @staticmethod
     def prepare_rating_insights(college_ids: List[int], grad_year: int) -> Dict:
         """
-        Prepare complete rating insights including raw data and classifications.
-        
         Args:
-            college_ids (List[int]): List of college IDs to analyze
-            grad_year (int): Graduation year to filter reviews
+            college_ids: List of college IDs to analyze, order will be preserved
+            grad_year: Graduation year to filter reviews
             
         Returns:
-            Dict: Complete rating insights and classifications
+            Dictionary containing complete rating insights and classifications.
         """
         return CollegeReviewsRatingGraphHelper.fetch_rating_data(college_ids, grad_year)
 
