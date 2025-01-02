@@ -491,6 +491,14 @@ class CollegeReviews(models.Model):
         related_name='reviews',
         db_index=True
     )
+    college_course = models.ForeignKey(
+        'Course', 
+        on_delete=models.CASCADE, 
+        related_name='reviews',
+        null=True, 
+        blank=True, 
+        db_index=True
+    )
     user = models.ForeignKey(
         'User',
         on_delete=models.CASCADE,

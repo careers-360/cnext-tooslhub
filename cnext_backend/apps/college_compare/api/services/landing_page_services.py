@@ -27,12 +27,13 @@ from multiprocessing import Pool,cpu_count
 
 
 
+
 class PeerComparisonService:
     @classmethod
     def get_peer_comparisons(cls, uid=None):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "peerComparisons", user_context.get('domain_id'), user_context.get('education_level')
+            "peerComparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         cached_result = cache.get(cache_key)
         if cached_result:
@@ -47,7 +48,7 @@ class PeerComparisonService:
             valid_course_ids = CacheHelper.get_or_set(
                 "valid_course_ids", lambda: CollegeDomain.objects.filter(
                     status=True, domain__in=valid_domains
-                ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 7
+                ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 31
             )
 
             domain_level_combinations = CacheHelper.get_or_set(
@@ -63,40 +64,33 @@ class PeerComparisonService:
                         output_field=IntegerField()
                     ),
                     domain_id=F('course_1__collegedomain_course__domain')
-                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 7
+                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 15
             )
 
-       
             num_processes = min(cpu_count(), len(domain_level_combinations))
             with Pool(processes=num_processes) as pool:
                 all_comparisons = pool.map(
                     partial(cls._fetch_comparisons_for_domain_level, valid_course_ids=valid_course_ids),
                     domain_level_combinations
                 )
-            
+
             all_comparisons = [comp for sublist in all_comparisons for comp in sublist]
 
-        
             college_ids = {comp['college_id_1'] for comp in all_comparisons}
             college_ids.update(comp['college_id_2'] for comp in all_comparisons)
-            colleges_dict = {
-                college.id: college for college in College.objects.filter(
-                    id__in=college_ids, published='published'
-                ).select_related('location')
-            }
 
-          
+            colleges = College.objects.filter(id__in=college_ids, published='published').select_related('location')
+            colleges_dict = {college.id: college for college in colleges}
+
             domain_names = {
                 domain.id: DomainHelper.format_domain_name(domain.old_domain_name)
                 for domain in ordered_domains
             }
 
-         
             for level in ["Undergraduate", "Postgraduate"]:
                 for domain in domain_names.values():
                     result[level][domain] = []
 
-     
             for comparison in all_comparisons:
                 domain_name = domain_names.get(comparison['domain_id'])
                 if not domain_name:
@@ -132,7 +126,7 @@ class PeerComparisonService:
                 "Undergraduate": result["Undergraduate"]
             } if user_context.get('education_level') == 2 else result
 
-            cache.set(cache_key, prioritized_result, timeout=3600 * 24)
+            cache.set(cache_key, prioritized_result, timeout=3600 * 24 *7)
             return prioritized_result
 
         except Exception as e:
@@ -143,7 +137,6 @@ class PeerComparisonService:
                     "exception_type": str(type(e).__name__)
                 }
             }
-
     @staticmethod
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids):
         domain_id = combo['domain_id']
@@ -153,37 +146,38 @@ class PeerComparisonService:
         if cached_result:
             return cached_result
 
-        comparisons = (
+        comparisons = list(
             CollegeCompareData.objects.filter(
                 college_1__isnull=False, college_2__isnull=False,
                 course_1__in=valid_course_ids, course_2__in=valid_course_ids,
                 course_1__collegedomain_course__domain=domain_id,
                 course_2__collegedomain_course__domain=domain_id,
                 course_1__level=level, course_2__level=level
-            ).annotate(
+            )
+            .annotate(
                 college_id_1=Case(
                     When(college_1__lt=F('college_2'), then=F('college_1')),
-                    default=F('college_2')
+                    default=F('college_2'),
+                    output_field=IntegerField()
                 ),
                 college_id_2=Case(
                     When(college_1__gt=F('college_2'), then=F('college_1')),
-                    default=F('college_2')
+                    default=F('college_2'),
+                    output_field=IntegerField()
                 ),
                 domain_id=F('course_1__collegedomain_course__domain'),
-                level=Case(
-                    When(course_1__level=1, then=Value(1)),
-                    When(course_1__level=2, then=Value(2)),
-                    default=Value(1),
-                    output_field=IntegerField()
-                )
-            ).filter(college_id_1__lt=F('college_id_2'))
+                level=Value(level, output_field=IntegerField())
+            )
+            .filter(college_id_1__lt=F('college_id_2'))
             .values('college_id_1', 'college_id_2', 'domain_id', 'level')
             .annotate(compare_count=Count('id'))
             .order_by('-compare_count')[:10]
         )
-        cache.set(cache_key, comparisons, timeout=3600 * 24*7)
-        return comparisons
 
+        cache.set(cache_key, comparisons, timeout=3600 * 24 * 7)
+        return comparisons
+    
+   
 
 
 
@@ -193,7 +187,7 @@ class PeerComparisonService:
 
 
 class TopCollegesCoursesService:
-    BATCH_SIZE = 10000
+    BATCH_SIZE = 5000
     CACHE_TIMEOUT = 3600 * 168
     MAX_WORKERS = 8
 
@@ -230,7 +224,7 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            print(domain_id)
+            
         
             cache_key = f"top_colleges_v5_{domain_id}"
 

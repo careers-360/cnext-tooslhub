@@ -299,7 +299,7 @@ class PlacementStatsComparisonView(APIView):
     )
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
-        year_str = request.query_params.get('year') or str(current_year - 1)
+        year_str = request.query_params.get('year') or str(current_year - 2)
         domain_ids_str = request.query_params.get('selected_domains')
 
         try:
@@ -347,7 +347,7 @@ class PlacementGraphInsightsView(APIView):
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
         domain_ids_str = request.query_params.get('selected_domains')
-        year_str = request.query_params.get('year') or str(current_year - 1)
+        year_str = request.query_params.get('year') or str(current_year - 2)
 
         try:
             if not college_ids_str or not domain_ids_str:
@@ -531,17 +531,17 @@ class FeesGraphInsightsView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
 class ClassProfileComparisonView(APIView):
     @extend_schema(
         summary="Get Class Profile Comparison",
         description="Retrieve class profile comparison data for given colleges",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='year', type=str, description='year', required=True),
-            OpenApiParameter(name='intake_year', type=str, description='year of admission ', required=False),
-             OpenApiParameter(name='level', type=str, description='level', required=True)
-
-           
+            OpenApiParameter(name='year', type=str, description='Year', required=True),
+            OpenApiParameter(name='intake_year', type=str, description='Year of admission', required=False),
+            OpenApiParameter(name='level', type=str, description='Level of course', required=True),
+            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of Domain IDs corresponding to the college IDs', required=True)
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved summary comparison'),
@@ -550,23 +550,47 @@ class ClassProfileComparisonView(APIView):
         },
     )
     def get(self, request):
-        college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year') or current_year -1
-
-        intake_year = int(request.query_params.get('intake_year')) or current_year -4
-        level = int( request.query_params.get('level'))
-      
+        college_ids_str = request.query_params.get('college_ids')
+        year_str = request.query_params.get('year') or str(current_year - 2)
+        intake_year_str = request.query_params.get('intake_year') or str(current_year - 5)
+        level = request.query_params.get('level', 1)
+        domain_ids_str = request.query_params.get("selected_domains")
 
         try:
-            if not college_ids and intake_year:
-                raise ValidationError("Both  college_ids and intake_year are required")
+            # Validate required parameters
+            if not college_ids_str or not domain_ids_str:
+                raise ValidationError("Both college_ids and selected_domains are required")
 
-            college_ids_list = [int(cid) for cid in college_ids.split(',')],
-           
-            
+            # Parse parameters
+            try:
+                college_ids = [int(cid) for cid in college_ids_str.split(",")]
+                domain_ids = [int(did) for did in domain_ids_str.split(",")]
+                year = int(year_str)
+                intake_year = int(intake_year_str)
+                level = int(level)
+            except ValueError:
+                raise ValidationError("college_ids, selected_domains, year, and intake_year must be integers")
 
-            result = ClassProfileHelper.fetch_class_profiles(college_ids_list,year,intake_year,level)
+            if len(college_ids) != len(domain_ids):
+                raise ValidationError("The number of college_ids must match the number of domain_ids")
+
+            if intake_year > year:
+                raise ValidationError("intake_year must be less than or equal to year")
+
+            # Create a mapping of college IDs to domain IDs
+            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+
+            # Fetch and prepare the class profiles including the selected domains
+            result = ClassProfileHelper.fetch_class_profiles(
+                college_ids=college_ids,
+                year=year,
+                intake_year=intake_year,
+                level=level,
+                selected_domains=selected_domains  # Pass selected domains to the helper
+            )
+
             return SuccessResponse(result, status=status.HTTP_200_OK)
+
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
@@ -599,6 +623,12 @@ class ProfileInsightsView(APIView):
                 required=False,
             ),
             OpenApiParameter(
+                name="selected_domains",
+                type=str,
+                description="Comma-separated list of Domain IDs corresponding to the college IDs",
+                required=True,
+            ),
+            OpenApiParameter(
                 name="level",
                 type=int,
                 description="Academic level (defaults to 1)",
@@ -613,57 +643,13 @@ class ProfileInsightsView(APIView):
                         "year": 2023,
                         "intake_year": 2019,
                         "level": 1,
-                        "student_faculty_metrics": {
-                            "type": "line",
-                            "college_1": {
-                                "college_id": "2",
-                                "total_students": 850,
-                                "total_faculty": 125,
-                                "student_faculty_ratio": 6.8
-                            },
-                            "college_2": {
-                                "college_id": "16",
-                                "total_students": 920,
-                                "total_faculty": 135,
-                                "student_faculty_ratio": 6.81
-                            }
+                        "type": "tabular",
+                        "data": {
+                            "student_faculty_ratio": {...},
+                            "student_from_outside_state": {...},
+                            "gender_diversity": {...},
                         },
-                        "demographic_metrics": {
-                            "type": "line",
-                            "college_1": {
-                                "college_id": "2",
-                                "total_students": 850,
-                                "students_outside_state": 680,
-                                "percentage_outside_state": 80.0
-                            },
-                            "college_2": {
-                                "college_id": "16",
-                                "total_students": 920,
-                                "students_outside_state": 736,
-                                "percentage_outside_state": 80.0
-                            }
-                        },
-                        "gender_metrics": {
-                            "type": "line",
-                            "college_1": {
-                                "college_id": "2",
-                                "male_students": 595,
-                                "female_students": 255,
-                                "percentage_male": 70.0,
-                                "percentage_female": 30.0
-                            },
-                            "college_2": {
-                                "college_id": "16",
-                                "male_students": 644,
-                                "female_students": 276,
-                                "percentage_male": 70.0,
-                                "percentage_female": 30.0
-                            }
-                        },
-                        "college_names": [
-                            "Indian Institute of Technology Delhi",
-                            "Indian Institute of Technology Bombay"
-                        ]
+                        "college_details": [...],
                     }
                 },
             ),
@@ -675,55 +661,54 @@ class ProfileInsightsView(APIView):
         """
         GET endpoint to retrieve profile insights for specified colleges.
         """
-        college_ids = request.query_params.get("college_ids")
-        year = request.query_params.get("year") or current_year -1
-        intake_year = request.query_params.get("intake_year") or current_year -4
-        level = request.query_params.get("level", 1)  
+        college_ids_str = request.query_params.get("college_ids")
+        year_str = request.query_params.get("year") or str(current_year - 1)
+        intake_year_str = request.query_params.get("intake_year") or str(current_year - 5)
+        level = request.query_params.get("level", 1)
+        domain_ids_str = request.query_params.get("selected_domains")
 
         try:
-          
-            if not all([college_ids, year, intake_year]):
-                raise ValidationError(
-                    "college_ids, year, and intake_year are required parameters"
-                )
+            # Validate required parameters
+            if not college_ids_str or not domain_ids_str:
+                raise ValidationError("college_ids and selected_domains are required")
 
-           
-            college_ids_list = [int(cid) for cid in college_ids.split(",")]
-            year = int(year)
-            intake_year = int(intake_year)
-            level = int(level)
+            # Parse parameters
+            try:
+                college_ids = [int(cid) for cid in college_ids_str.split(",")]
+                domain_ids = [int(did) for did in domain_ids_str.split(",")]
+                year = int(year_str)
+                intake_year = int(intake_year_str)
+                level = int(level)
+            except ValueError:
+                raise ValidationError("college_ids, selected_domains, year, and intake_year must be integers")
+
+            if len(college_ids) != len(domain_ids):
+                raise ValidationError("The number of college_ids must match the number of domain_ids")
 
             if intake_year > year:
-                raise ValidationError(
-                    "intake_year must be less than or equal to year"
-                )
+                raise ValidationError("intake_year must be less than or equal to year")
 
-           
+            # Create a mapping of college IDs to domain IDs
+            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+
+            # Fetch and prepare the profile insights
+            print(selected_domains)
             result = ProfileInsightsHelper.prepare_profile_insights(
-                college_ids=college_ids_list,
+                college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                level=level
+                selected_domains=selected_domains,
+                level=level,
             )
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
-            return CustomErrorResponse(
-                {"error": str(ve)}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except ValueError as ve:
-            return CustomErrorResponse(
-                {"error": "Invalid parameter values. Please check the input types."}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching profile insights: {e}")
-            return CustomErrorResponse(
-                {"error": "Internal server error"}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Error fetching profile insights: {traceback.format_exc()}")
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CollegeFacilitiesComparisonView(APIView):
     @extend_schema(
@@ -781,6 +766,12 @@ class CollegeReviewsComparisonView(APIView):
                 required=True
             ),
             OpenApiParameter(
+                name='course_ids', 
+                type=str, 
+                description='Comma-separated list of course IDs for filtering reviews',
+                required=False
+            ),
+            OpenApiParameter(
                 name='grad_year',
                 type=int,
                 description='Graduation year for filtering reviews',
@@ -800,23 +791,23 @@ class CollegeReviewsComparisonView(APIView):
         Args:
             request: HTTP request object with query parameters
                 - college_ids: Comma-separated list of college IDs
+                - course_ids: Comma-separated list of course IDs (optional)
                 - grad_year: Graduation year for filtering reviews
                 
         Returns:
             Response: JSON response containing reviews summary and recent reviews
         """
         try:
-           
             college_ids = request.query_params.get('college_ids')
+            course_ids = request.query_params.get('course_ids')
             grad_year = request.query_params.get('grad_year') or current_year -1
 
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required")
 
-     
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
-            
-          
+            course_ids_list = [int(cid) for cid in course_ids.split(',')] if course_ids else []
+
             reviews_summary = self.reviews_helper.get_college_reviews_summary(
                 college_ids=college_ids_list,
                 grad_year=int(grad_year)
@@ -827,7 +818,11 @@ class CollegeReviewsComparisonView(APIView):
                 limit=3
             )
             
-            
+            # Add additional filtering logic based on course_ids if provided
+            if course_ids_list:
+                # You can implement a method to filter the reviews based on courses if necessary
+                pass
+
             result = {
                 'reviews_summary': reviews_summary,
                 'recent_reviews': recent_reviews
@@ -853,6 +848,7 @@ class CollegeReviewsComparisonView(APIView):
                 {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 
 class SingleCollegeReviewsView(APIView):
