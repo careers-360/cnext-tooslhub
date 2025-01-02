@@ -662,7 +662,7 @@ class ProfileInsightsView(APIView):
         GET endpoint to retrieve profile insights for specified colleges.
         """
         college_ids_str = request.query_params.get("college_ids")
-        year_str = request.query_params.get("year") or str(current_year - 1)
+        year_str = request.query_params.get("year") or str(current_year - 2)
         intake_year_str = request.query_params.get("intake_year") or str(current_year - 5)
         level = request.query_params.get("level", 1)
         domain_ids_str = request.query_params.get("selected_domains")
