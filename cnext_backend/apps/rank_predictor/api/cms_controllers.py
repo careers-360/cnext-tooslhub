@@ -1,20 +1,11 @@
-import requests
-import io
-from django.utils.timezone import now
-from collections import defaultdict
-from math import sqrt
-import csv
 from cnext_backend import settings
-from rank_predictor.models import CnextRpCreateInputForm, RpInputFlowMaster, RpMeanSd, RpMeritList, RpMeritSheet, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
+from rank_predictor.models import CnextRpCreateInputForm
 from rest_framework.views import APIView
-from rank_predictor.models import RpFormField
 from utils.helpers.response import SuccessResponse, CustomErrorResponse, ErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from .helpers import RPCmsHelper, CommonDropDownHelper
 from rest_framework.response import Response
-import json
-
 
 class FlowTypeAPI(APIView):
 
@@ -386,124 +377,10 @@ class UploadMeritList(APIView):
     permission_classes = [ApiKeyPermission]
 
     def post(self, request, *args, **kwargs):
-        product_id = request.data.get('product_id')
-        year = request.data.get('year')
-        user_id = request.data.get('uid')
 
-        try:
-            # Fetch the merit sheet
-            merit_sheet = TempRpMeritSheet.objects.filter(product_id=product_id, year=year).first()
-            if not merit_sheet:
-                return Response({"error": "Merit sheet not found for the given product_id and year."}, status=status.HTTP_404_NOT_FOUND)
-
-            file_path = f"{settings.CAREERS_BASE_IMAGES_URL}{merit_sheet.file_name}" if merit_sheet.file_name else None
-            if not file_path:
-                return Response({"error": "File path is not available."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Download the file
-            response = requests.get(file_path)
-            if response.status_code != 200:
-                return Response({"error": "Failed to download the file from the provided path."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Read CSV file
-            csv_file = io.StringIO(response.text)
-            reader = csv.DictReader(csv_file)
-
-            # Delete existing records for the product_id and year
-            TempRpMeritList.objects.filter(product_id=product_id, year=year).delete()
-
-            # Fetch all input_flow_type instances to map them
-            input_flow_type_map = {str(obj.id): obj for obj in RpInputFlowMaster.objects.all()}
-
-            # Group data by input_flow_type
-            input_data = defaultdict(list)
-            for row in reader:
-                input_flow_type = row['input_flow_type']
-                try:
-                    input_value = float(row['input'])
-                    input_data[input_flow_type].append(input_value)
-                except ValueError:
-                    continue  # Skip invalid numeric values
-
-            # Calculate mean and standard deviation
-            stats_data = {}
-            for input_flow_type, values in input_data.items():
-                if values:
-                    mean = sum(values) / len(values)
-                    variance = sum((x - mean) ** 2 for x in values) / len(values)
-                    sd = sqrt(variance)
-                    stats_data[input_flow_type] = {'mean': mean, 'sd': sd}
-                else:
-                    stats_data[input_flow_type] = {'mean': None, 'sd': None}
-
-            # Insert data into TempRpMeanSd
-            for input_flow_type, stats in stats_data.items():
-                input_flow_type_instance = input_flow_type_map.get(input_flow_type)
-                if not input_flow_type_instance:
-                    return Response({"error": f"Invalid input_flow_type: {input_flow_type}."}, status=status.HTTP_400_BAD_REQUEST)
-
-                TempRpMeanSd.objects.update_or_create(
-                    product_id=product_id,
-                    year=year,
-                    input_flow_type=input_flow_type_instance,
-                    defaults={
-                        'sheet_mean': stats['mean'],
-                        'sheet_sd': stats['sd'],
-                        'created_by': user_id,
-                        'updated_by': user_id,
-                        'updated': now()
-                    }
-                )
-
-            # Calculate z-score and insert merit list entries
-            csv_file.seek(0)  # Reset CSV file pointer
-            reader = csv.DictReader(csv_file)
-            merit_list_entries = []
-            batch_size = 1000  # Adjust batch size as needed
-
-            for row in reader:
-                input_flow_type = row['input_flow_type']
-                input_value = None
-                try:
-                    input_value = float(row['input'])
-                except ValueError:
-                    pass  # Skip invalid numeric values
-
-                stats = stats_data.get(input_flow_type, {})
-                sheet_mean = stats.get('mean')
-                sheet_sd = stats.get('sd')
-                zscore = None
-                if sheet_mean is not None and sheet_sd is not None and sheet_sd != 0 and input_value is not None:
-                    zscore = (input_value - sheet_mean) / sheet_sd
-
-                merit_list_entries.append(TempRpMeritList(
-                    product_id=row['product_id'],
-                    year=row['year'],
-                    caste=row.get('caste'),
-                    disability=row.get('disability'),
-                    slot=row.get('slot'),
-                    difficulty_level=row.get('difficulty_level'),
-                    input_flow_type=input_flow_type,
-                    input_value=input_value,
-                    z_score=zscore,
-                    result_flow_type=row.get('result_flow_type'),
-                    result_value=row.get('result'),
-                    created_by=user_id,
-                    updated_by=user_id,
-                    created=now(),
-                    updated=now()
-                ))
-
-                # Bulk create in batches
-                if len(merit_list_entries) == batch_size:
-                    TempRpMeritList.objects.bulk_create(merit_list_entries)
-                    merit_list_entries = []  # Reset the list after each batch
-
-            # Insert remaining entries
-            if merit_list_entries:
-                TempRpMeritList.objects.bulk_create(merit_list_entries)
-
-            return Response({"message": "Mean, SD, and Z-scores calculated successfully."}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        helper = RPCmsHelper()
+        resp, data = helper.upload_merit_list(request)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)

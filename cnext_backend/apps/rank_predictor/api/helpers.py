@@ -1,10 +1,15 @@
 import csv
+import requests
+import io
+import threading
+from collections import defaultdict
+from math import sqrt
 from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
-from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeritSheet
+from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
@@ -590,18 +595,24 @@ class RPCmsHelper:
         if not product_id or not uid or not year or not isinstance(custom_mean_sd_data, list):
             return False, "Missing arguments or Incorrect data type"
         
-        rp_session_ids = list(RpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
+        rp_session_ids = list(TempRpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
         incomming_ids = [row_["id"] for row_ in custom_mean_sd_data if row_.get("id")]
         rp_session_mapping = {row_["id"]:row_ for row_ in custom_mean_sd_data if row_.get("id")}
 
         error = []
         to_create = []
-        to_update = RpMeanSd.objects.filter(id__in=incomming_ids)
+        to_update = TempRpMeanSd.objects.filter(id__in=incomming_ids)
+
+        # Fetch existing mean and SD before any updates
+        existing_mean_sd_mapping = {
+            row["input_flow_type_id"]: {"sheet_mean": row["sheet_mean"], "sheet_sd": row["sheet_sd"]}
+            for row in TempRpMeanSd.objects.filter(product_id=product_id, year=year).values("input_flow_type_id", "sheet_mean", "sheet_sd")
+        }
 
         # Delete non existing records
         non_common_ids = set(rp_session_ids) - set(incomming_ids)
         if non_common_ids:
-            RpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+            TempRpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
         # Create new records
         for new_row in custom_mean_sd_data:
@@ -618,11 +629,11 @@ class RPCmsHelper:
             if not new_row.get("id"):
                 if not admin_mean: admin_mean = None
                 if not admin_sd: admin_sd = None
-                to_create.append(RpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
+                to_create.append(TempRpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
                                                 admin_mean=admin_mean, admin_sd=admin_sd, created_by=uid, updated_by=uid))
         
         if to_create:
-            RpMeanSd.objects.bulk_create(to_create)
+            TempRpMeanSd.objects.bulk_create(to_create)
 
         # Update records
         for row_ in to_update:
@@ -649,8 +660,14 @@ class RPCmsHelper:
             row_.updated_by = uid
 
         if incomming_ids:
-            RpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
-        
+            TempRpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
+
+        #thread implememtation for zscore calculation, on the change of mean or sd value
+        thread = threading.Thread(
+        target=self.process_input_flow_types,
+        args=(product_id, year, custom_mean_sd_data, existing_mean_sd_mapping, uid))
+        thread.start()
+
         final_output = {
             "message": "Successfully created session",
             "error": error,
@@ -658,6 +675,64 @@ class RPCmsHelper:
             "count": len(custom_mean_sd_data) - len(error)
         }
         return True, final_output
+
+    def process_input_flow_types(self, product_id, year, custom_mean_sd_data, existing_mean_sd_mapping, uid):
+        for input_flow_type in set(row["input_flow_type"] for row in custom_mean_sd_data if row.get("input_flow_type")):
+            existing_mean_sd = existing_mean_sd_mapping.get(int(input_flow_type))
+            updated_mean_sd = next((row for row in custom_mean_sd_data if row["input_flow_type"] == input_flow_type), None)
+
+            if not updated_mean_sd:
+                continue
+
+            new_mean = float(updated_mean_sd["sheet_mean"])
+            new_sd = float(updated_mean_sd["sheet_sd"])
+
+            if existing_mean_sd:
+                old_mean = float(existing_mean_sd["sheet_mean"])
+                old_sd = float(existing_mean_sd["sheet_sd"])
+
+                if new_mean == old_mean and new_sd == old_sd:
+                    print(f"No changes detected for input_flow_type {input_flow_type}, skipping z-score update.")
+                    continue
+
+            # Call the Z-score update function in the same thread
+            self.update_zscores(product_id, year, input_flow_type, new_mean, new_sd, uid)
+    
+    # Update Z-Scores
+    def update_zscores(self, product_id, year, input_flow_type, mean, sd, uid):
+        """
+        Update the z-score column in TempRpMeritList for a specific input_flow_type
+        when the mean or standard deviation changes.
+        """
+        if not product_id or not year or not input_flow_type or mean is None or sd is None:
+            return False, "Missing arguments or invalid data"
+
+        # Check if data exists in TempRpMeritList for the given product_id and year
+        rows_to_update = TempRpMeritList.objects.filter(
+            product_id=product_id,
+            year=year,
+            input_flow_type=input_flow_type
+        )
+
+        if not rows_to_update.exists():
+            return False, "No data found for the given product_id, year, and input_flow_type"
+
+        # List to hold updated rows
+        updated_rows = []
+
+        # Iterate through the rows and calculate z-scores
+        for row in rows_to_update:
+            z_score = self.calculate_zscore(row.input_value, mean, sd)
+            row.z_score = z_score
+            row.updated_by = uid
+            updated_rows.append(row)
+
+        # Bulk update the rows
+        if updated_rows:
+            TempRpMeritList.objects.bulk_update(updated_rows, ["z_score", "updated_by"])
+            return True, f"Updated z-scores for {len(updated_rows)} rows"
+        else:
+            return False, "No rows updated"
 
     def _get_input_form_field_data(seld, id):
         resp = RpFormField.objects.filter(id = id).values()
@@ -935,6 +1010,134 @@ class RPCmsHelper:
 
         except Exception as e:
             return False, str(e)
+        
+    def upload_merit_list(self, request):
+        product_id = request.data.get('product_id')
+        year = request.data.get('year')
+        user_id = request.data.get('uid')
+
+        try:
+            # Fetch the merit sheet
+            merit_sheet = TempRpMeritSheet.objects.filter(product_id=product_id, year=year).first()
+            if not merit_sheet:
+                return False, "Merit sheet not found for the given product_id and year."
+
+            file_path = f"{settings.CAREERS_BASE_IMAGES_URL}{merit_sheet.file_name}" if merit_sheet.file_name else None
+            if not file_path:
+                return False, "File path is not available."
+
+            # Download the file
+            response = requests.get(file_path)
+            if response.status_code != 200:
+                return False, "Failed to download the file from the provided path."
+
+            # Read CSV file
+            csv_file = io.StringIO(response.text)
+            reader = csv.DictReader(csv_file)
+
+            # Delete existing records for the product_id and year
+            TempRpMeritList.objects.filter(product_id=product_id, year=year).delete()
+
+            # Fetch all input_flow_type instances to map them
+            input_flow_type_map = {str(obj.id): obj for obj in RpInputFlowMaster.objects.all()}
+
+            # Group data by input_flow_type
+            input_data = defaultdict(list)
+            for row in reader:
+                input_flow_type = row['input_flow_type']
+                try:
+                    input_value = float(row['input'])
+                    input_data[input_flow_type].append(input_value)
+                except ValueError:
+                    continue  # Skip invalid numeric values
+
+            # Calculate mean and standard deviation
+            stats_data = {}
+            for input_flow_type, values in input_data.items():
+                if values:
+                    mean = sum(values) / len(values)
+                    variance = sum((x - mean) ** 2 for x in values) / len(values)
+                    sd = sqrt(variance)
+                    stats_data[input_flow_type] = {'mean': mean, 'sd': sd}
+                else:
+                    stats_data[input_flow_type] = {'mean': None, 'sd': None}
+
+            # Insert data into TempRpMeanSd
+            for input_flow_type, stats in stats_data.items():
+                input_flow_type_instance = input_flow_type_map.get(input_flow_type)
+                if not input_flow_type_instance:
+                    return False, f"Invalid input_flow_type: {input_flow_type}."
+
+                TempRpMeanSd.objects.update_or_create(
+                    product_id=product_id,
+                    year=year,
+                    input_flow_type=input_flow_type_instance,
+                    defaults={
+                        'sheet_mean': stats['mean'],
+                        'sheet_sd': stats['sd'],
+                        'created_by': user_id,
+                        'updated_by': user_id,
+                        'updated': now()
+                    }
+                )
+
+            # Calculate z-score and insert merit list entries
+            csv_file.seek(0)  # Reset CSV file pointer
+            reader = csv.DictReader(csv_file)
+            merit_list_entries = []
+            batch_size = 1000  # Adjust batch size as needed
+
+            for row in reader:
+                input_flow_type = row['input_flow_type']
+                input_value = None
+                try:
+                    input_value = float(row['input'])
+                except ValueError:
+                    pass  # Skip invalid numeric values
+
+                stats = stats_data.get(input_flow_type, {})
+                sheet_mean = stats.get('mean')
+                sheet_sd = stats.get('sd')
+                zscore = self.calculate_zscore(input_value, sheet_mean, sheet_sd)
+
+                merit_list_entries.append(TempRpMeritList(
+                    product_id=row['product_id'],
+                    year=row['year'],
+                    caste=row.get('caste'),
+                    disability=row.get('disability'),
+                    slot=row.get('slot'),
+                    difficulty_level=row.get('difficulty_level'),
+                    input_flow_type=input_flow_type,
+                    input_value=input_value,
+                    z_score=zscore,
+                    result_flow_type=row.get('result_flow_type'),
+                    result_value=row.get('result'),
+                    created_by=user_id,
+                    updated_by=user_id,
+                    created=now(),
+                    updated=now()
+                ))
+
+                # Bulk create in batches
+                if len(merit_list_entries) == batch_size:
+                    TempRpMeritList.objects.bulk_create(merit_list_entries)
+                    merit_list_entries = []  # Reset the list after each batch
+
+            # Insert remaining entries
+            if merit_list_entries:
+                TempRpMeritList.objects.bulk_create(merit_list_entries)
+
+            return True, "Mean, SD, and Z-scores calculated successfully."
+        except Exception as e:
+            return False, str(e)
+
+    def calculate_zscore(self, input_value, mean, sd):
+        """
+        Calculate the z-score for a given input value, mean, and standard deviation.
+        """
+        if mean is not None and sd is not None and sd != 0 and input_value is not None:
+            return (input_value - mean) / sd
+        return None
     
 class CommonDropDownHelper:
 
@@ -980,6 +1183,9 @@ class CommonDropDownHelper:
 
         elif field_name == "input_process_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FORM_INPUT_PROCESS_TYPE.items()]
+
+        elif field_name == "mapped_category":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in MAPPED_CATEGORY.items()]
 
         elif field_name == "category":
             dropdown = CASTE_CATEGORY
