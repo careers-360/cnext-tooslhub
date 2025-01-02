@@ -1,8 +1,10 @@
+import csv
+from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
 from utils.helpers.choices import CASTE_CATEGORY, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
-from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
+from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeritSheet
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
@@ -865,6 +867,75 @@ class RPCmsHelper:
 
         return paginator.get_paginated_response(paginated_results)
     
+    def validate_sheet(self, request):
+        file = request.FILES.get('file')
+        selected_year = request.POST.get('year')
+        product_id = request.POST.get('product_id')
+        user_id = request.POST.get('uid')
+        if not file:
+            return False, {"error": "No file provided"}
+        
+        if not selected_year:
+            return False, {"error": "year key is missing in params"}
+        
+        if not product_id:
+            return False, {"error": "product_id key is missing in params"}
+    
+        if not user_id:
+            return False, {"error": "uid key is missing in params"}
+
+        # File validation
+        file_extension = file.name.split('.')[-1].lower()
+        if file_extension != 'csv':
+            return  False, {"error": "Unsupported file format. Only .csv is allowed."}
+
+        expected_columns = [
+            'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
+            'input_flow_type', 'input', 'z_score', 'result_flow_type', 'result', 'year'
+        ]
+
+        try:
+            # Read and process the CSV file
+            decoded_file = file.read().decode('utf-8').splitlines()
+            reader = csv.reader(decoded_file)
+            rows = list(reader)
+            headers = [header.strip() for header in rows[0]]
+
+            # Validate required columns
+            missing_columns = [col for col in expected_columns if col not in headers]
+            if missing_columns:
+                return False, {"error": f"Missing columns: {', '.join(missing_columns)}"}
+
+            # Validate year column
+            year_index = headers.index('year')
+            # Validate 'year' column matches selected year and is unique
+            year_values = []
+            for row in rows[1:]:
+                if len(row) > year_index:
+                    year_value = str(row[year_index]).strip()
+                    year_values.append(year_value)
+                    if year_value != str(selected_year):
+                        return False, {"error": "Sheet year does not match the selected year."}
+
+            if len(set(year_values)) > 1:
+                return False, {"error": "Year is not unique in the merit list."}
+            TempRpMeritSheet.objects.filter(product_id = product_id,year = selected_year).delete()
+            # Save metadata in TempRpMeritSheet
+            TempRpMeritSheet.objects.create(
+                product_id=product_id,
+                year=selected_year,
+                file_name=file,
+                created_by=user_id,
+                updated_by=user_id,
+                created=now(),
+                updated=now()
+            )
+
+            return True, "File validated and uploaded successfully."
+
+        except Exception as e:
+            return False, str(e)
+    
 class CommonDropDownHelper:
 
     def __init__(self, limit, page, offset=None):
@@ -875,77 +946,66 @@ class CommonDropDownHelper:
             self.offset = (self.page - 1) * self.limit
 
     def _get_dropdown_list(self, *args, **kwargs):
-        q = kwargs.get('q','')
+        q = kwargs.get('q', '')
         field_name = kwargs.get('field_name')
         selected_id = kwargs.get('selected_id')
         product_id = kwargs.get('product_id')
 
-        
         internal_limit = None
         dropdown_data = {
             "field": field_name,
             "message": "",
-            "dropdown": []
         }
+        dropdown = []
+
         if field_name == "difficulty":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.DIFFICULTY_ENUM).items()]
 
         elif field_name == "session_shift":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpSession.SHIFT_ENUM).items()]
 
         elif field_name == "preset_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
 
         elif field_name == "input_flow_type":
-            #TODO better way -             
-            # dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RpInputFlowMaster.objects.filter(status=1).annotate(key=F('id'), value=F('input_flow_type')).values_list('key', 'value')]
-
             master_result_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type"))
-            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+            dropdown = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
         elif field_name == "result_flow_type":
             master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_process_type"))
-            dropdown_data["dropdown"] = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+            dropdown = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
         elif field_name == "student_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
-        
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
+
         elif field_name == "input_process_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FORM_INPUT_PROCESS_TYPE.items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FORM_INPUT_PROCESS_TYPE.items()]
 
         elif field_name == "category":
-            dropdown_data["dropdown"] = CASTE_CATEGORY
+            dropdown = CASTE_CATEGORY
 
         elif field_name == "disability":
-            dropdown_data["dropdown"] = DISABILITY_CATEGORY
+            dropdown = DISABILITY_CATEGORY
 
         elif field_name == "year":
             year_range = list(range(2020, 2031))
-            dropdown_data["dropdown"] = [{"id": year, "value": year} for year in year_range]
+            dropdown = [{"id": year, "value": year} for year in year_range]
 
         elif field_name == "tools_name":
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
-            dropdown_data["dropdown"] = tools
-            dropdown_data["dropdown"] = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
+            dropdown = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
 
         elif field_name == "tools_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key,val in TOOL_TYPE.items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in TOOL_TYPE.items()]
 
         elif field_name == "mapped_process_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id).annotate(key=F('id'), value=F('input_process_type')).values_list('key', 'value')]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id).annotate(key=F('id'), value=F('input_process_type')).values_list('key', 'value')]
 
         elif field_name == "rp_field_type":
-            dropdown_data["dropdown"] = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
 
         elif field_name == "exam":
-            #TODO optimize this and check structure
-            """
-            Fetches and structures exams based on the query.
-            """
-            published_exam_list = Exam.objects.exclude(
-                type_of_exam='counselling'
-            ).exclude(status='unpublished')
-
+            published_exam_list = Exam.objects.exclude(type_of_exam='counselling').exclude(status='unpublished')
             exam_list = (
                 published_exam_list
                 .filter(instance_id=0)
@@ -972,13 +1032,13 @@ class CommonDropDownHelper:
                         'exam_short_name': exam['exam_short_name'],
                         'parent_exam_name': parent_exam['exam_name'],
                         'parent_exam_short_name': parent_exam['exam_short_name']
-                    })           
-                else:
-                    dropdown_data["message"] = "Invalid field name"
+                    })
 
-            dropdown_data["dropdown"] = dropdown 
+        else:
+            dropdown_data["message"] = "Invalid field name"
 
-        if not internal_limit and dropdown_data["dropdown"]:
-            dropdown_data["dropdown"] = dropdown_data["dropdown"][self.offset:self.offset + self.limit]
+        if not internal_limit and dropdown:
+            dropdown = dropdown[self.offset:self.offset + self.limit]
 
+        dropdown_data[field_name] = dropdown
         return dropdown_data

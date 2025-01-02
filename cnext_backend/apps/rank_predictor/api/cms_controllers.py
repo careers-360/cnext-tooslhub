@@ -374,76 +374,13 @@ class MeritListValidationCheck(APIView):
     permission_classes = [ApiKeyPermission]
 
     def post(self, request, *args, **kwargs):
-        file = request.FILES.get('file')
-        selected_year = request.POST.get('year')
-        product_id = request.POST.get('product_id')
-        user_id = request.POST.get('uid')
 
-        if not file:
-            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not selected_year:
-            return Response({"error": "year key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not product_id:
-            return Response({"error": "product_id key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
-    
-        if not user_id:
-            return Response({"error": "uid key is missing in params"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # File validation
-        file_extension = file.name.split('.')[-1].lower()
-        if file_extension != 'csv':
-            return Response({"error": "Unsupported file format. Only .csv is allowed."}, status=status.HTTP_400_BAD_REQUEST)
-
-        expected_columns = [
-            'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
-            'input_flow_type', 'input', 'z_score', 'result_flow_type', 'result', 'year'
-        ]
-
-        try:
-            # Read and process the CSV file
-            decoded_file = file.read().decode('utf-8').splitlines()
-            reader = csv.reader(decoded_file)
-            rows = list(reader)
-            headers = [header.strip() for header in rows[0]]
-
-            # Validate required columns
-            missing_columns = [col for col in expected_columns if col not in headers]
-            if missing_columns:
-                return Response({"error": f"Missing columns: {', '.join(missing_columns)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Validate year column
-            year_index = headers.index('year')
-            # Validate 'year' column matches selected year and is unique
-            year_values = []
-            for row in rows[1:]:
-                if len(row) > year_index:
-                    year_value = str(row[year_index]).strip()
-                    year_values.append(year_value)
-                    if year_value != str(selected_year):
-                        return Response({"error": "Sheet year does not match the selected year."}, status=status.HTTP_400_BAD_REQUEST)
-
-            if len(set(year_values)) > 1:
-                return Response({"error": "Year is not unique in the merit list."}, status=status.HTTP_400_BAD_REQUEST)
-
-            TempRpMeritSheet.objects.filter(product_id = product_id,year = selected_year).delete()
-            # Save metadata in TempRpMeritSheet
-            TempRpMeritSheet.objects.create(
-                product_id=product_id,
-                year=selected_year,
-                file_name=file,
-                created_by=user_id,
-                updated_by=user_id,
-                created=now(),
-                updated=now()
-            )
-
-            return Response({"message": "File validated and uploaded successfully."}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+        helper = RPCmsHelper()
+        resp, data = helper.validate_sheet(request)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
 
 class UploadMeritList(APIView):
     permission_classes = [ApiKeyPermission]
