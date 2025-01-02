@@ -238,6 +238,28 @@ class TopCollegesAPI(APIView):
         no_colleges_found = f"No colleges found for exam_id {exam_id}"
         return SuccessResponse({"message": no_colleges_found}, status=status.HTTP_404_NOT_FOUND)
     
+class RelatedProductsAPI(APIView):
+    """
+    API for fetching top colleges related to an exam.
+    Endpoint: api/<int:version>/rank-predictor/related-products
+    Params: product_id
+    """
+    permission_classes = [ApiKeyPermission]
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+        alias = request.GET.get('alias')
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse(
+                {"message": "product_id is required and should be an integer value"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        product_id = int(product_id)
+        # Fetch colleges from the database
+        rp_helper = RPHelper()
+        related_products = rp_helper._related_products(product_id=product_id, alias=alias)
+
+        return SuccessResponse(related_products, status=status.HTTP_200_OK)
+    
 # class RankCalculatorAPI(APIView):
 #     """
 #     API for Rank and Percentile Calculation
