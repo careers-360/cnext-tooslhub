@@ -2,7 +2,7 @@ from django.db.models import Avg, Count, F, Q,Max,Min
 from django.db.models.functions import Round, ExtractYear, TruncDate, Concat
 from django.core.cache import cache
 from functools import lru_cache
-from typing import Dict,List,Optional,Any
+from typing import Dict,List,Optional,Any,Union
 import hashlib
 from hashlib import md5
 from django.db.models import Subquery, ExpressionWrapper,Window, Func, OuterRef, Sum, Case, When,Value, CharField,IntegerField,DecimalField,Prefetch,FloatField,ExpressionWrapper
@@ -1361,45 +1361,65 @@ class FeesHelper:
 
 
 class FeesGraphHelper:
+    """
+  
+    """
+    
     @staticmethod
     def get_cache_key(*args) -> str:
+        """Creates a unique cache key from the provided arguments."""
         key = '_'.join(map(str, args))
         return hashlib.md5(key.encode()).hexdigest()
     
     @staticmethod
     def fetch_fee_data(course_ids: List[int]) -> Dict:
+        """
+        Fetches and processes fee data with independent display type handling per category.
+        """
         try:
-            course_ids = [int(course_id) for course_id in course_ids if isinstance(course_id, (int, str))]
+            course_ids = [int(course_id) for course_id in course_ids 
+                         if isinstance(course_id, (int, str))]
         except (ValueError, TypeError):
             raise ValueError("course_ids must be a flat list of integers or strings.")
         
-        cache_key = FeesGraphHelper.get_cache_key('fees_graph__data_v8', '-'.join(map(str, course_ids)))
+        cache_key = FeesGraphHelper.get_cache_key(
+            'fees_graph',
+            '-'.join(map(str, course_ids))
+        )
         
         def fetch_data():
-            static_categories = ['general', 'observed_backward_class', 'scheduled_caste']
+          
+            static_categories = [
+                'general',
+                'observed_backward_class',
+                'scheduled_caste'
+            ]
+            
             
             courses = (
                 Course.objects.filter(id__in=course_ids)
                 .select_related('college')
-                .values(
-                    'id',
-                    'college__name'
-                )
+                .values('id', 'college__name')
             )
-            import time
-            current_year = time.localtime().tm_year
-
             
+       
             result_dict = {
                 "categories": static_categories,
-                "year_tag": current_year-1,
-                "data": {category: {"type": "horizontal bar", "values": {}} for category in static_categories},
+                "year_tag": time.localtime().tm_year - 1,
+                "data": {
+                    category: {
+                        "type": "horizontal bar",  
+                        "values": {}
+                    } for category in static_categories
+                },
                 "college_names": []
             }
             
+       
             college_names = []
             course_id_to_name = {}
             ordered_course_ids = []
+            
             for course in courses:
                 college_names.append(course['college__name'])
                 course_id_to_name[course['id']] = course['college__name']
@@ -1407,13 +1427,10 @@ class FeesGraphHelper:
             
             fees_data = (
                 FeeBifurcation.objects.filter(college_course__in=course_ids)
-                .values(
-                    "college_course_id",
-                    "category",
-                    "total_fees"
-                )
+                .values("college_course_id", "category", "total_fees")
             )
             
+         
             fee_mapping = {}
             for fee in fees_data:
                 course_id = fee["college_course_id"]
@@ -1423,41 +1440,49 @@ class FeesGraphHelper:
                     fee_mapping[course_id] = {}
                 fee_mapping[course_id][category] = total_fees
             
+         
             category_mapping = {
                 "gn": "general",
                 "obc": "observed_backward_class",
                 "sc": "scheduled_caste"
             }
             
-            any_fee_na = False
-
+         
+            category_has_na = {category: False for category in static_categories}
+            
+        
             for idx, course_id in enumerate(ordered_course_ids, 1):
                 college_name = course_id_to_name.get(course_id)
                 if college_name:
                     for raw_category in ['gn', 'obc', 'sc']:
-                        category = category_mapping[raw_category]
+                        display_category = category_mapping[raw_category]
                         college_key = f"college_{idx}"
                         total_fees = fee_mapping.get(course_id, {}).get(raw_category)
                         
+                     
                         if total_fees is None:
-                            any_fee_na = True
-
-                        result_dict["data"][category]["values"][college_key] = {
+                            category_has_na[display_category] = True
+              
+                        result_dict["data"][display_category]["values"][college_key] = {
                             "course_id": course_id,
-                            "fee":format_fee(total_fees) if total_fees is not None else "NA"
+                            "fee": format_fee(total_fees) if total_fees is not None else "NA"
                         }
             
-            if any_fee_na:
-                for category in static_categories:
+    
+            for category in static_categories:
+                if category_has_na[category]:
                     result_dict["data"][category]["type"] = "tabular"
-
+               
+            
             result_dict["college_names"] = college_names
             return result_dict
         
+        # Cache for 1 year
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
     
     @staticmethod
     def prepare_fees_insights(course_ids: List[int]) -> Dict:
+        """Prepares fee insights for the specified courses."""
         return FeesGraphHelper.fetch_fee_data(course_ids)
 
 
@@ -1777,7 +1802,7 @@ class ProfileInsightsHelper:
                     )
                 )
 
-                # Check if results are found, else handle missing data
+         
                 if not result:
                     query_result.append({
                         'college_id': college_id,
@@ -1832,7 +1857,6 @@ class ProfileInsightsHelper:
         """
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
-        # Fetch college details without ordering
         college_details = list(
             College.objects.filter(id__in=college_ids)
             .values(
@@ -1845,7 +1869,7 @@ class ProfileInsightsHelper:
             )
         )
 
-        # Create a dictionary to map college IDs to their details
+     
         college_details_map = {college['id']: college for college in college_details}
 
         # Reorder college details based on the order of college_ids
@@ -2280,7 +2304,6 @@ class CollegeReviewsHelper:
 
 
 
-
 class CollegeReviewsRatingGraphHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -2301,21 +2324,20 @@ class CollegeReviewsRatingGraphHelper:
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
         cache_key = CollegeReviewsRatingGraphHelper.get_cache_key(
-            'college_______reviews____graph_data',
-            '-'.join(map(str, sorted(college_ids))), 
+            'college_reviews_graph_data',
+            '-'.join(map(str, sorted(college_ids))),
             grad_year
         )
 
         def fetch_data():
             rating_type = [
-                'infra_rating',
-                'campus_life_ratings',
-                'academics_ratings',
-                'value_for_money_ratings',
-                'placement_rating'
+                "college_infrastructure",
+                "campus_life",
+                "academics",
+                "value_for_money",
+                "placement"
             ]
 
-       
             ratings = (
                 CollegeReviews.objects.filter(
                     college_id__in=college_ids,
@@ -2325,11 +2347,11 @@ class CollegeReviewsRatingGraphHelper:
                 .select_related('college')
                 .values('college_id', 'college__name')
                 .annotate(
-                    infra_rating=Coalesce(Round(Avg(F('infra_rating') / 20), 1), Value(0.0)),
-                    campus_life_ratings=Coalesce(Round(Avg(F('college_life_rating') / 20), 1), Value(0.0)),
-                    academics_ratings=Coalesce(Round(Avg(F('overall_rating') / 20), 1), Value(0.0)),
-                    value_for_money_ratings=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0)),
-                    placement_rating=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0))
+                    college_infrastructure=Coalesce(Round(Avg(F('infra_rating') / 20), 1), Value(0.0)),
+                    campus_life=Coalesce(Round(Avg(F('college_life_rating') / 20), 1), Value(0.0)),
+                    academics=Coalesce(Round(Avg(F('overall_rating') / 20), 1), Value(0.0)),
+                    value_for_money=Coalesce(Round(Avg(F('affordability_rating') / 20), 1), Value(0.0)),
+                    placement=Coalesce(Round(Avg(F('placement_rating') / 20), 1), Value(0.0))
                 )
             )
 
@@ -2338,7 +2360,6 @@ class CollegeReviewsRatingGraphHelper:
             all_colleges = College.objects.filter(id__in=college_ids).values('id', 'name')
             college_names_dict = {college['id']: college['name'] for college in all_colleges}
 
-        
             result_dict = {
                 "rating_type": rating_type,
                 "year_tag": grad_year,
@@ -2355,7 +2376,6 @@ class CollegeReviewsRatingGraphHelper:
                 rating_data = ratings_dict.get(college_id, None)
 
                 if rating_data:
-                    # College has ratings
                     result_dict["data"]["rating"]["values"][college_key] = {
                         "college_id": college_id,
                         "college_name": college_name,
@@ -2370,19 +2390,19 @@ class CollegeReviewsRatingGraphHelper:
                         "Avg": sum(1 for param in rating_type if rating_data[param] < 3)
                     }
                 else:
-                    # College has no ratings
+                    result_dict["data"]["rating"]["type"] = "tabular"
                     result_dict["data"]["rating"]["values"][college_key] = {
                         "college_id": college_id,
                         "college_name": college_name,
-                        **{param: 0.0 for param in rating_type}
+                        **{param: "NA" for param in rating_type}
                     }
 
                     result_dict["data"]["classification"]["values"][college_key] = {
                         "college_id": college_id,
                         "college_name": college_name,
-                        "V.Good": 0,
-                        "Good": 0,
-                        "Avg": 0
+                        "V.Good": "NA",
+                        "Good": "NA",
+                        "Avg": "NA"
                     }
 
                 result_dict["college_names"].append(college_name)
@@ -2390,17 +2410,22 @@ class CollegeReviewsRatingGraphHelper:
             return result_dict
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+
     @staticmethod
     def prepare_rating_insights(college_ids: List[int], grad_year: int) -> Dict:
         """
+        Prepare rating insights for a given list of colleges and graduation year.
         Args:
-            college_ids: List of college IDs to analyze, order will be preserved
-            grad_year: Graduation year to filter reviews
-            
+            college_ids: List of college IDs to analyze; order will be preserved.
+            grad_year: Graduation year to filter reviews.
+        
         Returns:
             Dictionary containing complete rating insights and classifications.
         """
         return CollegeReviewsRatingGraphHelper.fetch_rating_data(college_ids, grad_year)
+
+
+
 
 class ExamCutoffHelper:
     @staticmethod
