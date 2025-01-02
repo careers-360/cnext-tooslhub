@@ -1,7 +1,7 @@
 from tools.models import CPProductCampaign
 from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 
@@ -131,7 +131,23 @@ class RPHelper:
 
         return product_id
         
+    def _related_products(self, product_id=None, alias=None):
+
+        if alias != None:
+            product_id = self._get_product_from_alias(alias=alias)
+
+        exam_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
         
+        exam_domain_education_level = Exam.objects.filter(id=exam_dict['exam']).values('domain_id', 'preferred_education_level_id').first()
+
+        exam_ids = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id']).values_list('id', flat=True).iterator()
+
+        campaigns = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "custom_exam_name", "custom_flow_type", "custom_year")
+
+        # print(f"data {exam_domain_education_level['domain_id']}")
+
+        return campaigns
+
         
     # def calculate_percentile(self, score, max_score):
     #     """
