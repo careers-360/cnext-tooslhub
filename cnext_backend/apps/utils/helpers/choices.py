@@ -24,6 +24,7 @@ QUESTION_STATUS = {
 }
 
 STUDENT_TYPE = {1: "Overall", 2: "Category-wise"}
+#Used in student appeared section
 CASTE_CATEGORY = [
     {"id": caste.get("id"), "value": caste.get("name")}
     for caste in CasteCategory.objects.all().values("id", "name")
@@ -38,5 +39,5 @@ RP_FIELD_TYPE = {1:"User Input", 2: "Application Number", 3 : "Category Dropdown
 FORM_INPUT_PROCESS_TYPE = {1:"Score", 2:"Marks", 3:"Percentile"}
 
 DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately Difficult", 5:"Difficult"}
-
+#Used in create input form
 MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
