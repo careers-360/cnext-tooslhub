@@ -41,3 +41,4 @@ FORM_INPUT_PROCESS_TYPE = {1:"Score", 2:"Marks", 3:"Percentile"}
 DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately Difficult", 5:"Difficult"}
 #Used in create input form
 MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
+FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}
