@@ -8,7 +8,7 @@ from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -1231,6 +1231,9 @@ class CommonDropDownHelper:
 
         elif field_name == "mapped_category":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in MAPPED_CATEGORY.items()]
+
+        elif field_name == "factor_type":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FACTOR_TYPE.items()]
 
         elif field_name == "category":
             dropdown = CASTE_CATEGORY

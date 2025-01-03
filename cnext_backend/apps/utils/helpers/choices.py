@@ -43,4 +43,4 @@ HEADER_DISPLAY_PREFERANCE = {1: 'gif', 2: 'video', 3: 'image', 4: 'secondary_ima
 DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately Difficult", 5:"Difficult"}
 #Used in create input form
 MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
-
+FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}
