@@ -175,54 +175,58 @@ class ToolsHelper():
         return None
 
     def get_basic_detail_data(self,pk):
-        data = CPProductCampaign.objects.filter(pk=pk).values('id','type','exam','name','usage_count_matrix'\
-                ,'positive_feedback_percentage','app_status','published','display_preference','gif','youtube',\
-                    'image','secondary_image','smart_registration',\
-                        'promotion_banner_wap').first()
-
-        if data:
-            structured_data = {
-                "id":data.get("id"),
-                "basic_detail": {
-                    "type": data.get("type"),
-                    "exam": data.get("exam"),
-                    "name": data.get("name"),
-                    "usage_count_matrix": data.get("usage_count_matrix"),
-                    "positive_feedback_percentage": data.get("positive_feedback_percentage"),
-                    "app_status": data.get("app_status"),
-                    "published": data.get("published"),
-                },
-                "input_page_media": {
-                    "display_preference": data.get("display_preference"),
-                    "gif": data.get("gif"),
-                    "youtube": data.get("youtube"),
-                    "image": data.get("image"),
-                    "secondary_image": f"{settings.CAREERS_BASE_IMAGES_URL}{data.get('secondary_image')}" if data.get("secondary_image") else None,
-                    "smart_registration": data.get("smart_registration"),
-                    "promotion_banner_wap": data.get("promotion_banner_wap"),
-                },
-            }
-            url_alias_data = UrlAlias.objects.filter(source = f'result-predictor/{pk}').values('alias','url_meta_pattern_id').first()
-            seo_data = UrlMetaPatterns.objects.filter(id = url_alias_data.get('url_meta_pattern_id')).values('page_title','meta_keywords', 'meta_desc').first()
-            structured_data['seo_detail'] = {
-                    "page_title": seo_data.get("page_title"),
-                    "meta_description": seo_data.get("meta_desc"),
-                    "keywords": seo_data.get("meta_keywords"),
-                    "url_alias": url_alias_data.get("alias"),
+        try:
+            seo_data = {}
+            data = CPProductCampaign.objects.filter(pk=pk).values('id','type','exam','name','usage_count_matrix'\
+                    ,'positive_feedback_percentage','app_status','published','display_preference','gif','youtube',\
+                        'image','secondary_image','smart_registration',\
+                            'promotion_banner_wap').first()
+            if data:
+                structured_data = {
+                    "id":data.get("id"),
+                    "basic_detail": {
+                        "type": data.get("type"),
+                        "exam": data.get("exam"),
+                        "name": data.get("name"),
+                        "usage_count_matrix": data.get("usage_count_matrix"),
+                        "positive_feedback_percentage": data.get("positive_feedback_percentage"),
+                        "app_status": data.get("app_status"),
+                        "published": data.get("published"),
+                    },
+                    "input_page_media": {
+                        "display_preference": data.get("display_preference"),
+                        "gif": data.get("gif"),
+                        "youtube": data.get("youtube"),
+                        "image": f"{settings.CAREERS_BASE_IMAGES_URL}{data.get('image')}" if data.get('image') else None,
+                        "secondary_image": f"{settings.CAREERS_BASE_IMAGES_URL}{data.get('secondary_image')}" if data.get("secondary_image") else None,
+                        "smart_registration": data.get("smart_registration"),
+                        "promotion_banner_wap": data.get("promotion_banner_wap"),
+                    },
                 }
-            smart_registration_instance = RpSmartRegistration.objects.filter(product_id = pk).values('field', 'peak_season', 'non_peak_season')
-            prepared_data = [
-                {
-                    'id': data['field'],
-                    'name': FIELD_TYPE.get(data['field'], 'Unknown'),
-                    'peak_season': data['peak_season'],
-                    'non_peak_season': data['non_peak_season']
-                }
-                for data in smart_registration_instance
-            ]
-            structured_data['smart_registration_flow'] = prepared_data
-        return structured_data
-    
+                url_alias_data = UrlAlias.objects.filter(source = f'result-predictor/{pk}').values('alias','url_meta_pattern_id').first()
+                if url_alias_data:
+                    seo_data = UrlMetaPatterns.objects.filter(id = url_alias_data.get('url_meta_pattern_id')).values('page_title','meta_keywords', 'meta_desc').first()
+                structured_data['seo_detail'] = {
+                        "page_title": seo_data.get("page_title") if seo_data else None,
+                        "meta_description": seo_data.get("meta_desc",None) if seo_data else None,
+                        "keywords": seo_data.get("meta_keywords",None) if seo_data else None,
+                        "url_alias": url_alias_data.get("alias",None )if url_alias_data else None,
+                    }
+                smart_registration_instance = RpSmartRegistration.objects.filter(product_id = pk).values('field', 'peak_season', 'non_peak_season')
+                prepared_data = [
+                    {
+                        'id': data['field'],
+                        'name': FIELD_TYPE.get(data['field'], 'Unknown'),
+                        'peak_season': data['peak_season'],
+                        'non_peak_season': data['non_peak_season']
+                    }
+                    for data in smart_registration_instance
+                ]
+                structured_data['smart_registration_flow'] = prepared_data
+            return structured_data
+        except Exception as e:
+            print(str(e))
+            return str(e)
     def add_edit_basic_detail(self, *args,**kwargs):
         bulk_create_data = []
         bulk_update_data = []
