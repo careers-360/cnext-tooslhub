@@ -396,3 +396,11 @@ class MeritListView(APIView):
             return SuccessResponse(data, status=status.HTTP_200_OK)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request, *args, **kwargs):
+        helper = RPCmsHelper()
+        resp, data = helper.add_edit_display_graph(request)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
