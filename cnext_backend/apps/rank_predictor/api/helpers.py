@@ -20,6 +20,7 @@ class CustomPaginator(PageNumberPagination):
 
     def get_paginated_response(self, data):
         return {
+            'to_graph':False,
             'lastPage': self.page.paginator.num_pages,
             'itemsOnPage': self.page_size,
             'current': self.page.number,
@@ -1187,7 +1188,9 @@ class RPCmsHelper:
                     item['difficulty_level'] = DIFFICULTY_LEVEL.get(item['difficulty_level'], item['difficulty_level'])
                     item['input_flow_type'] = input_flow_dict.get(item['input_flow_type'], item['input_flow_type'])
                     item['result_flow_type'] = result_flow_dict.get(item['result_flow_type'], item['result_flow_type'])
-            return True, paginator.get_paginated_response(paginated_results)
+            paginated_data = paginator.get_paginated_response(paginated_results)
+            paginated_data['to_graph'] = TempRpMeritSheet.objects.filter(product_id=product_id,year=year).values_list('to_graph',flat=True).first()
+            return True, paginated_data
 
         except Exception as e:
             return False, str(e)
