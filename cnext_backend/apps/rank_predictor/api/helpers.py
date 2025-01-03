@@ -1220,8 +1220,8 @@ class CommonDropDownHelper:
             dropdown = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
         elif field_name == "result_flow_type":
-            master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_process_type"))
-            dropdown = [{"id": item.get("id"), "value": item.get("result_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+            master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_flow_type"))
+            dropdown = [{"id": item.get("id"), "value": item.get("result_flow_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
 
         elif field_name == "student_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
