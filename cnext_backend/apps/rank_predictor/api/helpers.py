@@ -114,14 +114,16 @@ class RPCmsHelper:
         input_type = kwargs.get("input_type")
         input_flow_type = kwargs.get("input_flow_type")
         input_process_type = kwargs.get("input_process_type")
+        detail_input_id = kwargs.get("detail_input_id")
 
         result_id = kwargs.get("result_id")
         result_type = kwargs.get("result_type")
         result_flow_type = kwargs.get("result_flow_type")
         result_process_type = kwargs.get("result_process_type")
+        detail_result_id = kwargs.get("detail_result_id")
        
-        input_flow = self._get_rp_input_flow_types(input_id=input_id, input_type=input_type, input_flow_type=input_flow_type, input_process_type=input_process_type)
-        result_flow = self._get_rp_result_flow_types(result_id=result_id, result_type=result_type, result_flow_type=result_flow_type, result_process_type=result_process_type)
+        input_flow = self._get_rp_input_flow_types(input_id=input_id, input_type=input_type, input_flow_type=input_flow_type, input_process_type=input_process_type,detail_input_id=detail_input_id)
+        result_flow = self._get_rp_result_flow_types(result_id=result_id, result_type=result_type, result_flow_type=result_flow_type, result_process_type=result_process_type,detail_result_id=detail_result_id)
 
         data = {
             "input_flow": input_flow,
@@ -129,11 +131,14 @@ class RPCmsHelper:
         }
         return data
 
-    def _get_rp_input_flow_types(self, input_id=None, input_type=None, input_flow_type=None, input_process_type=None):
+    def _get_rp_input_flow_types(self, input_id=None, input_type=None, input_flow_type=None, input_process_type=None, detail_input_id=None): #TODO remove id
         # Fetch input flow type from database based on rp_id
         input_flow_type_data = []
         if input_id:
             input_flow_type_data = list(RpInputFlowMaster.objects.filter(id=input_id, status=1).values("id","input_flow_type", "input_type", "input_process_type").first())
+        
+        elif detail_input_id: #TODO COnfirm with ayush sir - removed.first
+            input_flow_type_data = RpInputFlowMaster.objects.filter(id=detail_input_id, status=1).values("id","input_flow_type", "input_type", "input_process_type")
     
         elif input_flow_type:
             input_flow_type_data = list(RpInputFlowMaster.objects.filter(input_flow_type__contains=input_flow_type, status=1).values("id","input_flow_type", "input_type", "input_process_type").first())
@@ -149,12 +154,15 @@ class RPCmsHelper:
 
         return input_flow_type_data
     
-    def _get_rp_result_flow_types(self, result_id=None, result_type=None, result_flow_type=None, result_process_type=None):
+    def _get_rp_result_flow_types(self, result_id=None, result_type=None, result_flow_type=None, result_process_type=None, detail_result_id=None):
         # Fetch input flow type from database based on rp_id
         result_flow_type_data = []
         if result_id:
             result_flow_type_data = list(RpResultFlowMaster.objects.filter(id=result_id, status=1).values("id","result_flow_type", "result_type", "result_process_type").first())
-    
+
+        elif detail_result_id: #TODO COnfirm with ayush sir - removed.first
+            result_flow_type_data = RpResultFlowMaster.objects.filter(id=detail_result_id, status=1).values("id","result_flow_type", "result_type", "result_process_type")
+
         elif result_flow_type:
             result_flow_type_data = list(RpResultFlowMaster.objects.filter(result_flow_type__contains=result_flow_type, status=1).values("id","result_flow_type", "result_type", "result_process_type").first())
     
