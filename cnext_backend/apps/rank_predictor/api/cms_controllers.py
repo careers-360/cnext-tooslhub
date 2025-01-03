@@ -20,7 +20,7 @@ class FlowTypeAPI(APIView):
     def get(self, request, version, **kwargs):
         # Fetch flow master data from database and return it to client.
         cms_helper = RPCmsHelper()
-        data = cms_helper._get_flow_types(**request.GET)
+        data = cms_helper._get_flow_types(**request.GET.dict())# TODO - added .dict
         return SuccessResponse(data, status=status.HTTP_200_OK)
     
     def post(self, request, version):
