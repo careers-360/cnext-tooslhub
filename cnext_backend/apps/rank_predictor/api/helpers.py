@@ -1184,6 +1184,19 @@ class RPCmsHelper:
         except Exception as e:
             return False, str(e)
 
+    def add_edit_display_graph(self, request):
+        product_id = request.data.get('product_id')
+        year = request.data.get('year')
+        to_graph = request.data.get('to_graph','not_found')
+        if to_graph == 'not_found':
+            return False, "to_graph key is required"
+
+        queryset = TempRpMeritSheet.objects.filter(product_id=product_id,year=year)
+        if queryset.exists():
+            queryset.update(to_graph=to_graph)
+        return True, "Data Created Successfully"
+
+        
 class CommonDropDownHelper:
 
     def __init__(self, limit, page, offset=None):
