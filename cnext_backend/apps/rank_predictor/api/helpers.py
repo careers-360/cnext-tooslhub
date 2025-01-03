@@ -8,7 +8,7 @@ from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
-from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, MAPPED_CATEGORY, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
@@ -864,7 +864,7 @@ class RPCmsHelper:
         return True, final_output
     
     def get_input_form_data(self, pk):
-        result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('product_id','input_process_type','process_type_toggle_label','submit_cta_name','created_by','updated_by')
+        result = CnextRpCreateInputForm.objects.filter(product_id = pk).values('id','product_id','input_process_type','process_type_toggle_label','submit_cta_name','created_by','updated_by')
         input_process_type_dict = dict(RpInputFlowMaster.objects.all().values_list('id','input_process_type'))
         for value in result:
             if value['input_process_type']:
@@ -1225,6 +1225,15 @@ class CommonDropDownHelper:
 
         elif field_name == "student_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in STUDENT_TYPE.items()]
+
+        elif field_name == "result_process_type":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RESULT_PROCESS_TYPE.items()]
+
+        elif field_name == "result_type":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RESULT_TYPE.items()]
+
+        elif field_name == "input_type":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in INPUT_TYPE.items()]
 
         elif field_name == "input_process_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FORM_INPUT_PROCESS_TYPE.items()]

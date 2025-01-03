@@ -43,4 +43,12 @@ HEADER_DISPLAY_PREFERANCE = {1: 'gif', 2: 'video', 3: 'image', 4: 'secondary_ima
 DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately Difficult", 5:"Difficult"}
 #Used in create input form
 MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
-FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}
+
+FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}\
+#Enum for manage input output cms panel for flow type ->input flow
+INPUT_TYPE = {1:"Overall", 2:"Sectional"}
+
+#Enum for manage input output cms panel for flow type ->result flow
+RESULT_TYPE = {1:"Overall",2: "Sectional", 3:"Category", 4:"Overall/CRL"}
+#Enum for manage input output cms panel for flow type ->result flow
+RESULT_PROCESS_TYPE = {1:"Rank", 2:"Score", 3:"Marks", 4:"Percentile"}
