@@ -1012,7 +1012,7 @@ class RPCmsHelper:
                 created_by=user_id,
                 updated_by=user_id,
                 created=now(),
-                updated=now()
+                updated=now()  # TODO remove it later 
             )
 
             return True, "File validated and uploaded successfully."
@@ -1279,9 +1279,12 @@ class CommonDropDownHelper:
             dropdown = [{"id": year, "value": year} for year in year_range]
 
         elif field_name == "tools_name":
-            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
-            dropdown = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
-
+            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")
+            dropdown = [
+                {"id": tool["id"], "value": tool["name"], "selected": selected_id == tool["id"]}
+                for tool in tools
+            ]
+            
         elif field_name == "tools_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in TOOL_TYPE.items()]
 
