@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.compare_college_page_serializers import CollegeCompareSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from college_compare.api.services.compare_college_page_services import (
-    DropdownService, SummaryComparisonService, QuickFactsService, CardDisplayService
+    DropdownService, SummaryComparisonService, QuickFactsService, CardDisplayService,NoDataAvailableError
 )
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,7 @@ class CourseDropdownView(APIView):
 class SummaryComparisonView(APIView):
     @extend_schema(
         summary="Get Summary Comparison",
-        description="Retrieve summary comparison data for given colleges and courses.",
+        description="Retrieve summary comparison for given colleges and courses.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs', required=True),
@@ -129,6 +129,7 @@ class SummaryComparisonView(APIView):
         responses={
             200: OpenApiResponse(description='Successfully retrieved summary comparison'),
             400: OpenApiResponse(description='Invalid parameters'),
+            404: OpenApiResponse(description='No data available for the provided college IDs and course IDs'),
             500: OpenApiResponse(description='Internal server error'),
         },
     )
@@ -148,10 +149,12 @@ class SummaryComparisonView(APIView):
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available error: {e}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error fetching summary comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class QuickFactsView(APIView):
     @extend_schema(
@@ -164,6 +167,7 @@ class QuickFactsView(APIView):
         responses={
             200: OpenApiResponse(description='Successfully retrieved quick facts'),
             400: OpenApiResponse(description='Invalid parameters'),
+            404: OpenApiResponse(description='No data available for the provided college IDs'),
             500: OpenApiResponse(description='Internal server error'),
         },
     )
@@ -183,6 +187,9 @@ class QuickFactsView(APIView):
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available error: {e}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error fetching quick facts: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
