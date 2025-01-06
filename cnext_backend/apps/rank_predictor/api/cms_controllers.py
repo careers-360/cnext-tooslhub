@@ -362,6 +362,11 @@ class InputFormList(APIView):
 
 
 class MeritListValidationCheck(APIView):
+    """
+    API for Validating Merit Sheet Uploaded
+    Endpoint : /cms/rp/merit-list-validation-check
+    Params : product_id, year, uid
+    """
     permission_classes = [ApiKeyPermission]
 
     def post(self, request, *args, **kwargs):
