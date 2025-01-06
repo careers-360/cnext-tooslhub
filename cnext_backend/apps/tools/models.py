@@ -994,3 +994,14 @@ class CPTopCollege(models.Model):
     submenu_data = models.TextField(null=True, blank=True)
     class Meta:
         db_table = 'cp_top_college'
+
+class ProductSession(models.Model):
+    product_id = models.IntegerField(null=False, blank=False)
+    session_start_date = models.DateTimeField(null=False, blank=False)
+    session_end_date = models.DateTimeField(null=False, blank=False)
+    created_by = models.IntegerField(null=False, blank=False)
+    created = models.DateTimeField(null=False, blank=False)
+    updated = models.DateTimeField(null=False, blank=False)
+
+    class Meta:
+        db_table = 'product_session'

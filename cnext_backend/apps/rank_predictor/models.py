@@ -365,7 +365,6 @@ class CnextRpUserTracking(models.Model):
     uuid = models.CharField(max_length=255)
     category = models.CharField(max_length=255)
     disability = models.CharField(max_length=255)
-    flow_type = models.CharField(max_length=255)
     application = models.CharField(max_length=255)
     dob = models.DateTimeField()
     exam_session = models.IntegerField(null=True, blank=True)

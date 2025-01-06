@@ -1,7 +1,7 @@
 from tools.models import CPProductCampaign
 from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 from django.utils import timezone
@@ -154,6 +154,8 @@ class RPHelper:
         # print(f"got user tracking from body as {kwargs['user_data']}")
         user_data = kwargs['user_data']
 
+        product_session_id =  ProductSession.objects.filter(product_id=int(user_data['product_id'])).values('id').last()
+
         user_tracking = CnextRpUserTracking(
             device_type=user_data['device_type'],
             product_id=user_data['product_id'],
@@ -163,11 +165,10 @@ class RPHelper:
             uuid=user_data['uuid'],
             category=user_data['category'],
             disability=user_data['disability'],
-            flow_type=user_data['flow_type'],
             application=user_data['application'],
             dob=user_data['dob'],
             exam_session=user_data['exam_session'],
-            tool_session_id=user_data['tool_session_id'],
+            tool_session_id=product_session_id['id'],
             input_fields=user_data['input_fields'],
             result_predictions=user_data['result_predictions'],
             additional_info=user_data['additional_info']
