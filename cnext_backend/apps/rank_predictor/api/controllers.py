@@ -260,6 +260,28 @@ class RelatedProductsAPI(APIView):
 
         return SuccessResponse(related_products, status=status.HTTP_200_OK)
     
+class UserTrackingAPI(APIView):
+    """
+    API for fetching top colleges related to an exam.
+    Endpoint: api/<int:version>/rank-predictor/form-submit
+    """
+    permission_classes = [ApiKeyPermission]
+    def post(self, request, version, **kwargs):
+        user_data = request.data
+        # print(f"user data got as {user_data}")
+        product_id = user_data['product_id']
+        alias = user_data['alias']
+        if not product_id:
+            return CustomErrorResponse(
+                {"message": "product_id is required and should be an integer value"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        product_id = int(product_id)
+        rp_helper = RPHelper()
+        user_data_id = rp_helper._user_tracking(product_id=product_id, alias=alias, user_data=user_data)
+
+        return SuccessResponse({"id": user_data_id}, status=status.HTTP_200_OK)
+    
 # class RankCalculatorAPI(APIView):
 #     """
 #     API for Rank and Percentile Calculation

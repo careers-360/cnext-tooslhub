@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/<int:version>/rank-predictor/form-section", rp_controller.FormSectionAPI.as_view(), name='form_section'),
     path("api/<int:version>/rank-predictor/top-colleges", rp_controller.TopCollegesAPI.as_view(), name='top_colleges_api'),
     path("api/<int:version>/rank-predictor/related-products", rp_controller.RelatedProductsAPI.as_view(), name='related_products'),
+    path("api/<int:version>/rank-predictor/form-submit", rp_controller.UserTrackingAPI.as_view(), name='user_tracking'),
     # path(
     #     "api/<int:version>/rank-predictor/rank-calculation",
     #     rp_controller.RankCalculatorAPI.as_view(),

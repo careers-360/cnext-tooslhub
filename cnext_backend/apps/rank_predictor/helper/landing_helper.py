@@ -1,9 +1,10 @@
 from tools.models import CPProductCampaign
-from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession
+from rank_predictor.models import RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
+from django.utils import timezone
 
 class RPHelper:
 
@@ -142,18 +143,45 @@ class RPHelper:
 
         exam_ids = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id']).values_list('id', flat=True).iterator()
 
-        campaigns = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "custom_exam_name", "custom_flow_type", "custom_year")
+        campaigns = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "custom_exam_name", "custom_flow_type", "custom_year")[:4]
 
         # print(f"data {exam_domain_education_level['domain_id']}")
 
         return campaigns
+    
+    def _user_tracking(self, product_id=None, alias=None,**kwargs):
 
+        # print(f"got user tracking from body as {kwargs['user_data']}")
+        user_data = kwargs['user_data']
+
+        user_tracking = CnextRpUserTracking(
+            device_type=user_data['device_type'],
+            product_id=user_data['product_id'],
+            input_flow_type=user_data['input_flow_type'],
+            login_status=user_data['login_status'],
+            uid=user_data['uid'],
+            uuid=user_data['uuid'],
+            category=user_data['category'],
+            disability=user_data['disability'],
+            flow_type=user_data['flow_type'],
+            application=user_data['application'],
+            dob=user_data['dob'],
+            exam_session=user_data['exam_session'],
+            tool_session_id=user_data['tool_session_id'],
+            input_fields=user_data['input_fields'],
+            result_predictions=user_data['result_predictions'],
+            additional_info=user_data['additional_info']
+        )
+
+        user_tracking.save()
+
+        return user_tracking.id
         
     # def calculate_percentile(self, score, max_score):
     #     """
     #     Calculate percentile from score
     #     Formula: (score / max_score) * 100
-    #     """
+    #     ""
     #     try:
     #         percentile = (score / max_score) * 100
     #         return round(percentile, 2)
