@@ -251,6 +251,7 @@ class CollegeFacility(models.Model):
 
 
 
+
 class CollegePlacement(models.Model):
     college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
     year = models.IntegerField(db_index=True)
@@ -271,21 +272,21 @@ class CollegePlacement(models.Model):
     student_count_hs = models.IntegerField(null=True, blank=True)
     entity_type = models.IntegerField(null=True, blank=True)
     programme = models.CharField(max_length=255, null=True, blank=True)
-    graduating_students = models.IntegerField(null=True, blank=True)
+    graduating_students = models.IntegerField(null=True, blank=True) 
     published = models.CharField(max_length=20, default='published')
     reimbursement_gov = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     reimbursement_institution = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     reimbursement_private_bodies = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    stream = models.ForeignKey('Domain', on_delete=models.CASCADE, db_index=True,db_column="stream_id" ,null=True, blank=True)
+    stream = models.ForeignKey('Domain', on_delete=models.CASCADE, db_index=True, db_column="stream_id", null=True, blank=True)
 
     class Meta:
         db_table = 'college_placements'
         indexes = [
             models.Index(fields=['college', 'year', 'intake_year', 'levels']),
             models.Index(fields=['published']),
-            models.Index(fields=['stream']),  
-            
+            models.Index(fields=['stream']),
         ]
+
 
 
 
@@ -360,6 +361,12 @@ class Course(models.Model):
         (2, 'offline')
     ]
 
+    CREDENTIAL_CHOICES = [
+        (0, 'Degree'),
+        (1, 'Diploma'),
+        (2, 'Certificate')
+    ]
+
     course_name = models.CharField(max_length=255)
     college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='courses', db_index=True)
     degree = models.ForeignKey('Degree', on_delete=models.SET_NULL, null=True, blank=True, related_name='course')
@@ -372,13 +379,14 @@ class Course(models.Model):
     approved_intake = models.IntegerField(null=True, blank=True)
     admission_procedure = models.TextField(null=True, blank=True)
     eligibility_criteria = models.TextField(null=True, blank=True)
+    credential = models.IntegerField(choices=CREDENTIAL_CHOICES, default=0)  # Default to Degree (0)
 
     class Meta:
         db_table = 'colleges_courses'
         unique_together = ['course_name', 'college', 'level']
         indexes = [
             models.Index(fields=['degree', 'branch', 'college', 'status']),
-             models.Index(fields=['degree_domain']),
+            models.Index(fields=['degree_domain']),
         ]
 
     def __str__(self):
@@ -405,7 +413,6 @@ class Course(models.Model):
     @staticmethod
     def get_total_tuition_fee_by_course(course_id, session):
         """
-       
         Args:
             course_id (int): The ID of the course
             session (int): The academic session year
@@ -418,7 +425,6 @@ class Course(models.Model):
         if cached_data:
             return cached_data
 
-   
         total_fees = {
             'total_tuition_fee_general': Decimal('0'),
             'total_tuition_fee_sc': Decimal('0'),
@@ -426,7 +432,6 @@ class Course(models.Model):
             'total_tuition_fee_obc': Decimal('0'),
         }
 
-   
         try:
             course = Course.objects.get(id=course_id)
             if not course.course_duration:
@@ -454,9 +459,7 @@ class Course(models.Model):
         except Course.DoesNotExist:
             return {key: format_fee(value) for key, value in total_fees.items()}
 
- 
         formatted_fees = {key: format_fee(value) for key, value in total_fees.items()}
-
 
         if any(total_fees.values()):
             cache.set(cache_key, formatted_fees, 3600 * 24)  
@@ -959,33 +962,34 @@ class AdmissionCategory(models.Model):
         return self.description
 
 
+
 class CollegeCourseComparisonFeedback(models.Model):
     id = models.AutoField(primary_key=True)
     uid = models.IntegerField(db_index=True)
     voted_college = models.ForeignKey(
-        'College', on_delete=models.CASCADE, related_name='voted_comparisons'
+        'College', on_delete=models.CASCADE, related_name='voted_comparisons',db_column='voted_college'
     )
     voted_course = models.ForeignKey(
-        'Course', on_delete=models.CASCADE, related_name='voted_course_comparisons'
+        'Course', on_delete=models.CASCADE, related_name='voted_course_comparisons',db_column='voted_course'
     )
     college_1 = models.ForeignKey(
-        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_1'
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_1',db_column='college_1'
     )
     course_1 = models.ForeignKey(
-        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_1'
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_1',db_column='course_1'
     )
     college_2 = models.ForeignKey(
-        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_2'
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_2',db_column='college_2'
     )
     course_2 = models.ForeignKey(
-        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_2'
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_2',db_column='course_2'
     )
     college_3 = models.ForeignKey(
-        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_3',
+        'College', on_delete=models.CASCADE, related_name='comparisons_feedback_3',db_column='college_3',
         null=True, blank=True
     )
     course_3 = models.ForeignKey(
-        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_3',
+        'Course', on_delete=models.CASCADE, related_name='course_comparisons_feedback_3',db_column='course_3',
         null=True, blank=True
     )
     createdAt = models.DateTimeField(auto_now_add=True)

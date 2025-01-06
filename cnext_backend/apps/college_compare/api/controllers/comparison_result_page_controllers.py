@@ -8,7 +8,7 @@ import logging
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -38,17 +38,19 @@ class RankingAccreditationComparisonView(APIView):
         responses={
             200: OpenApiResponse(description='Successfully retrieved ranking and accreditation comparison'),
             400: OpenApiResponse(description='Invalid parameters'),
+            404: OpenApiResponse(description='No data available for the provided inputs'),
             500: OpenApiResponse(description='Internal server error'),
         },
     )
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
         selected_domains_str = request.query_params.get('selected_domains')
-        year = request.query_params.get('year') or current_year-1
+        year = request.query_params.get('year') or current_year - 1
 
         try:
+            
             if not college_ids_str or not selected_domains_str:
-                raise ValidationError("Both college_ids and selected_domains are required")
+                raise ValidationError("Both college_ids and selected_domains are required.")
 
             college_ids = [int(cid) for cid in college_ids_str.split(',')]
             selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
@@ -60,17 +62,24 @@ class RankingAccreditationComparisonView(APIView):
 
             year = int(year) if year else None
 
+        
             result = RankingAccreditationHelper.fetch_ranking_data(college_ids, selected_domains_dict, year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except NoDataAvailableError as nde:
+            logger.warning(f"No data available: {nde}")
+            return CustomErrorResponse({"error": str(nde)}, status=status.HTTP_404_NOT_FOUND)
+
         except ValueError:
             logger.error("Invalid input format. college_ids and selected_domains must be comma-separated integers.")
             return CustomErrorResponse({"error": "Invalid input format. college_ids and selected_domains must be comma-separated integers."}, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
-            logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}") # Log the full traceback
+            logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}")
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -88,45 +97,48 @@ class RankingAccreditationCombinedComparisonView(APIView):
         responses={
             200: OpenApiResponse(description='Successfully retrieved ranking and accreditation comparison'),
             400: OpenApiResponse(description='Invalid parameters'),
+            404: OpenApiResponse(description='No data available for the provided inputs'),
             500: OpenApiResponse(description='Internal server error'),
         },
     )
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         selected_domains_str = request.query_params.get('selected_domains')
-        year_str = request.query_params.get('year') or current_year-1
+        year_str = request.query_params.get('year') or current_year - 1
 
         try:
             if not college_ids or not selected_domains_str or not year_str:
-                raise ValidationError("Both college_ids, selected_domains, and year are required")
+                raise ValidationError("Both college_ids, selected_domains, and year are required.")
 
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
-
-
             selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
-
 
             if len(college_ids_list) != len(selected_domains):
                 raise ValidationError("The number of college_ids must match the number of selected_domains.")
 
             selected_domains_dict = {college_ids_list[i]: str(selected_domains[i]) for i in range(len(college_ids_list))}
-
             year = int(year_str)
 
-
             ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year)
+            if not ranking_data_current_year:
+                raise NoDataAvailableError("No ranking data available for the current year.")
 
-      
             ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year - 1)
+            if not ranking_data_previous_year:
+                raise NoDataAvailableError("No ranking data available for the previous year.")
 
-  
             combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year)
+            if not combined_ranking_data_current_year:
+                raise NoDataAvailableError("No combined ranking data available for the current year.")
 
             combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year - 1)
-
+            if not combined_ranking_data_previous_year:
+                raise NoDataAvailableError("No combined ranking data available for the previous year.")
 
             years = [year - i for i in range(5)]
             multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domains_dict, years)
+            if not multi_year_ranking_data:
+                raise NoDataAvailableError("No multi-year ranking data available.")
 
             result = {
                 "current_year_data": ranking_data_current_year,
@@ -141,9 +153,15 @@ class RankingAccreditationCombinedComparisonView(APIView):
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except NoDataAvailableError as nde:
+            logger.warning(f"No data available: {nde}")
+            return CustomErrorResponse({"error": str(nde)}, status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
-            logger.error(f"Error fetching ranking and accreditation comparison: {e}")
-            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}")
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class RankingGraphInsightsView(APIView):
@@ -177,69 +195,9 @@ class RankingGraphInsightsView(APIView):
             ),
         ],
         responses={
-            200: OpenApiResponse(
-                description="Successfully retrieved ranking graph insights",
-                examples={
-                    "application/json": {
-                        "years": [2019, 2020, 2021, 2022, 2023],
-                        "overall": {
-                            "type": "line",
-                            "colleges": {
-                                "college_1": {
-                                    "college_id": 112,
-                                    "data": {
-                                        "2019": "87.5",
-                                        "2020": "85.0",
-                                        "2021": "88.2",
-                                        "2022": "NA",
-                                        "2023": "90.1",
-                                    },
-                                },
-                                "college_2": {
-                                    "college_id": 2,
-                                    "data": {
-                                        "2019": "75.3",
-                                        "2020": "NA",
-                                        "2021": "80.0",
-                                        "2022": "81.2",
-                                        "2023": "83.0",
-                                    },
-                                },
-                            },
-                        },
-                        "domain": {
-                            "type": "line",
-                            "colleges": {
-                                "college_1": {
-                                    "college_id": 112,
-                                    "data": {
-                                        "2019": "70.2",
-                                        "2020": "72.5",
-                                        "2021": "75.0",
-                                        "2022": "NA",
-                                        "2023": "78.4",
-                                    },
-                                },
-                                "college_2": {
-                                    "college_id": 2,
-                                    "data": {
-                                        "2019": "60.1",
-                                        "2020": "65.0",
-                                        "2021": "67.3",
-                                        "2022": "69.5",
-                                        "2023": "70.0",
-                                    },
-                                },
-                            },
-                        },
-                        "college_names": [
-                            "ABC College of Engineering",
-                            "XYZ Institute of Technology",
-                        ],
-                    }
-                },
-            ),
+            200: OpenApiResponse(description="Successfully retrieved ranking graph insights"),
             400: OpenApiResponse(description="Invalid parameters"),
+            404: OpenApiResponse(description="No data available for the provided inputs"),
             500: OpenApiResponse(description="Internal server error"),
         },
     )
@@ -251,35 +209,38 @@ class RankingGraphInsightsView(APIView):
 
         try:
             if not college_ids or not start_year or not end_year or not selected_domains:
-                raise ValidationError("college_ids, start_year, end_year, and selected_domains are required")
+                raise ValidationError("college_ids, start_year, end_year, and selected_domains are required.")
 
             college_ids_list = [int(cid) for cid in college_ids.split(",")]
             selected_domains_list = [int(did) for did in selected_domains.split(",")]
 
             if len(college_ids_list) != len(selected_domains_list):
-                raise ValidationError("The number of college_ids must match the number of selected_domains")
+                raise ValidationError("The number of college_ids must match the number of selected_domains.")
 
             start_year = int(start_year)
             end_year = int(end_year)
 
             if start_year > end_year:
-                raise ValidationError("start_year must be less than or equal to end_year")
+                raise ValidationError("start_year must be less than or equal to end_year.")
 
-            # Mapping college_ids to their respective domain_ids
             domain_mapping = dict(zip(college_ids_list, selected_domains_list))
 
-            result = RankingGraphHelper.prepare_graph_insights(
-                college_ids_list, start_year, end_year, domain_mapping
-            )
+            result = RankingGraphHelper.prepare_graph_insights(college_ids_list, start_year, end_year, domain_mapping)
+            if not result:
+                raise NoDataAvailableError("No ranking graph insights available for the provided inputs.")
+
             return SuccessResponse(result, status=status.HTTP_200_OK)
+
         except ValidationError as ve:
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except NoDataAvailableError as nde:
+            logger.warning(f"No data available: {nde}")
+            return CustomErrorResponse({"error": str(nde)}, status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
             logger.error(f"Error fetching ranking graph insights: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 
 class PlacementStatsComparisonView(APIView):
@@ -321,11 +282,14 @@ class PlacementStatsComparisonView(APIView):
             result = PlacementInsightHelper.fetch_placement_stats(college_ids, selected_domains, year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for placement stats comparison: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching placement stats comparison: {traceback.format_exc()}") #use traceback for more detail error
+            logger.error(f"Error fetching placement stats comparison: {traceback.format_exc()}")  # Use traceback for more detailed error
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -373,6 +337,9 @@ class PlacementGraphInsightsView(APIView):
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for placement insights: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
@@ -408,6 +375,9 @@ class CourseFeeComparisonView(APIView):
 
             result = CourseFeeComparisonHelper.fetch_comparison_data(college_ids_list, course_ids_list)
             return SuccessResponse(result, status=status.HTTP_200_OK)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for course_and_fees insights: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
@@ -451,6 +421,9 @@ class FeesComparisonView(APIView):
 
             result = FeesHelper.fetch_fees_details(course_ids_list,college_ids_list,intake_year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for fees comparison: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
@@ -591,6 +564,9 @@ class ClassProfileComparisonView(APIView):
             )
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for class Profile comparison: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -742,6 +718,43 @@ class CollegeFacilitiesComparisonView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class CollegeAmenitiesComparisonView(APIView):
+    @extend_schema(
+        summary="Get College Amenities Comparison",
+        description="Retrieve college amenities comparison data for given colleges",
+        parameters=[
+            OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved amenities comparison'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        """
+        Retrieve amenities comparison data for the specified colleges.
+        """
+        college_ids = request.query_params.get('college_ids')
+
+        try:
+            if not college_ids:
+                raise ValidationError("The 'college_ids' parameter is required.")
+
+        
+            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+
+    
+            result = CollegeAmenitiesHelper.get_college_amenities(college_ids_list)
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error fetching college amenities comparison: {e}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class CollegeReviewsComparisonView(APIView):
     """
     API view for comparing reviews across multiple colleges.
@@ -818,9 +831,9 @@ class CollegeReviewsComparisonView(APIView):
                 limit=3
             )
             
-            # Add additional filtering logic based on course_ids if provided
+        
             if course_ids_list:
-                # You can implement a method to filter the reviews based on courses if necessary
+            
                 pass
 
             result = {
@@ -829,6 +842,9 @@ class CollegeReviewsComparisonView(APIView):
             }
             
             return SuccessResponse(result, status=status.HTTP_200_OK)
+        except NoDataAvailableError as e:
+            logger.error(f"No data available for college rating & reviews: {str(e)}")
+            return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")

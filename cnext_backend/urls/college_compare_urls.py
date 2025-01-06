@@ -84,6 +84,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/college-facilities-comparison/',
         comparison_result_page_controllers.CollegeFacilitiesComparisonView.as_view(),
         name='college-facilities-comparison'),
+    
+    path(f'{compare_prefix}resultPage/college-amenities-comparison/',
+        comparison_result_page_controllers.CollegeAmenitiesComparisonView.as_view(),
+        name='college-amenities-comparison'),
 
 
     path(f'{compare_prefix}resultPage/college-reviews-comparison/',
@@ -103,7 +107,7 @@ urlpatterns = [
         comparison_result_page_controllers.CollegeReviewRatingGraphView.as_view(),
         name='college-rating-graph'),
 
-    path(f'{compare_prefix}resultPage/comparison-feedback/',
+    path(f'{compare_prefix}resultPage/comparison-feedback',
         comparison_result_page_controllers.FeedbackSubmitView.as_view(),
-        name='comparison-feedback/'),
+        name='comparison-feedback'),
 ]

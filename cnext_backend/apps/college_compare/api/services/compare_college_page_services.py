@@ -159,10 +159,18 @@ class ParallelService:
 
 
 
+
+
+
+class NoDataAvailableError(Exception):
+    """Custom exception to indicate no data is available."""
+    pass
+
+
 class SummaryComparisonService:
     @staticmethod
     def get_summary_comparison(college_ids: List[int], course_ids: List[int]) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("Summary_v4", college_ids, course_ids)
+        cache_key = CacheHelper.get_cache_key("Summary_h1_tag", college_ids, course_ids)
 
         def fetch_data():
             results = list(Course.objects.filter(
@@ -179,6 +187,10 @@ class SummaryComparisonService:
                 total_reviews=F('college__data__total_review'),
                 college_id_alias=F('college_id')
             ))
+
+        
+            if not results:
+                raise NoDataAvailableError("No data available for the provided college IDs and course IDs.")
 
             college_data = {
                 college.get('college_id_alias'): {
@@ -209,9 +221,7 @@ class SummaryComparisonService:
 
             return result_dict
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
-
-
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400 *7)
 
 
 
@@ -219,7 +229,7 @@ class SummaryComparisonService:
 class QuickFactsService:
     @staticmethod
     def get_quick_facts(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
-        cache_key = CacheHelper.get_cache_key("quick_facts_v2", college_ids, course_ids)
+        cache_key = CacheHelper.get_cache_key("quick_facts", college_ids, course_ids)
 
         def fetch_data():
             try:
@@ -251,12 +261,15 @@ class QuickFactsService:
                     course_counts[key] = count['count']
 
                 results = {}
+                all_na = True  
+
                 for idx, college_id in enumerate(college_ids, start=1):
                     matching_course = next(
                         (course for course in courses if course.college_id == college_id), None
                     )
                     key = f"college_{idx}"
                     if matching_course:
+                        all_na = False  
                         college = matching_course.college
                         count_key = (college.id, matching_course.degree_id)
                         results[key] = {
@@ -290,14 +303,21 @@ class QuickFactsService:
                             'campus_size': 'NA',
                             'total_courses_offered': 0
                         }
+
+                if all_na: 
+                    raise NoDataAvailableError("No data available for the provided college IDs.")
+
                 return results
+
+            except NoDataAvailableError as e:
+                print(f"Error: {e}")
+                raise  
 
             except Exception as e:
                 print(f"Error in fetching quick facts: {e}")
                 return {}
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600)
-
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600*24*7)
 
 class CardDisplayService:
     @staticmethod
@@ -344,7 +364,7 @@ class CardDisplayService:
                         'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else ''
                     }
                 else:
-                    # Default values for missing colleges
+                
                     results[key] = {
                         'id': 'NA',
                         'course_name': 'NA',
