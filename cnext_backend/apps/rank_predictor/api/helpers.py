@@ -1289,7 +1289,16 @@ class CommonDropDownHelper:
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in TOOL_TYPE.items()]
 
         elif field_name == "mapped_process_type":
-            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id).annotate(key=F('id'), value=F('input_process_type')).values_list('key', 'value')]
+            dropdown = [
+                {
+                    "id": key,
+                    "value": FORM_INPUT_PROCESS_TYPE.get(val, "Unknown"),
+                    "selected": selected_id == key
+                }
+                for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id)
+                .annotate(key=F('input_process_type'), value=F('input_process_type'))
+                .values_list('key', 'value')
+            ]
 
         elif field_name == "rp_field_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
