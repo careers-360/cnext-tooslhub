@@ -10,6 +10,7 @@ class RPHelper:
 
     def __init__(self):
         self.base_image_url = os.getenv("CAREERS_BASE_IMAGES_URL","https://cnextassets.careers360.de/media_tools/")
+        self.exam_logo_base_url = os.getenv("CAREERS_EXAM_BASE_IMAGES_URL", "https://cache.careers360.mobi/media/presets/45X45/")
         pass
 
     def parse_choice(self, data_dic=dict)->list:
@@ -158,10 +159,9 @@ class RPHelper:
             # print(f"data {exam_id}")
             product = CPProductCampaign.objects.filter(exam=exam_id).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year").first()
             # print(f"product data {product}")
-            try:
-                product['logo'] = exam_logo_mapping.get(product['exam'], '')
-            except Exception as e:
-                print(f"Error occurred: {e}")
+
+            if product != None:
+                product['logo'] = self.exam_logo_base_url+exam_logo_mapping.get(product['exam'], '')
 
             # print(f"product data {product}")
             product_list.append(product)
