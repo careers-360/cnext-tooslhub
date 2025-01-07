@@ -598,7 +598,7 @@ class RankingGraphHelper:
         """
         key = '_'.join(map(str, args))
         return hashlib.md5(key.encode()).hexdigest()
-
+    
     @staticmethod
     def fetch_ranking_data(
         college_ids: List[int],
@@ -616,7 +616,7 @@ class RankingGraphHelper:
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
         cache_key = RankingGraphHelper.get_cache_key(
-            'ranking_graph__insight_____version', '-'.join(map(str, college_ids)), start_year, end_year, domain_id, ranking_entity
+            'ranking_graph__insight_____version3', '-'.join(map(str, college_ids)), start_year, end_year, domain_id, ranking_entity
         )
 
         def fetch_data():
@@ -638,20 +638,41 @@ class RankingGraphHelper:
                     "overall_score"
                 )
             )
+            
             if not rankings:
                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
             
+            
+            max_scores = {}
+            for ranking in rankings:
+                college_id = ranking['college_id']
+                year = ranking['ranking__year']
+                score = ranking['overall_score']
+                
+            
+                if score is not None and score < 100:
+                    key = (college_id, year)
+                    if key not in max_scores or (max_scores[key] is None or score > max_scores[key]):
+                        max_scores[key] = score
+
+        
             college_order = {college_id: idx for idx, college_id in enumerate(college_ids)}
             result_dict = {
                 f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
                 for i, college_id in enumerate(college_ids)
             }
-            for ranking in rankings:
-                college_key = f"college_{college_order[ranking['college_id']] + 1}"
-                result_dict[college_key]["data"][str(ranking["ranking__year"])] = ranking["overall_score"] or "NA"
+
+            for (college_id, year), max_score in max_scores.items():
+                college_key = f"college_{college_order[college_id] + 1}"
+                result_dict[college_key]["data"][str(year)] = max_score
+
             return result_dict
 
-        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+    
+   
+
+   
 
     @staticmethod
     def prepare_graph_insights(
@@ -1242,13 +1263,13 @@ class CourseFeeComparisonHelper:
                         for course in college_courses[college_id]:
                             exams = exams_map.get(course.id, {})
                             
-                            # Query the credential of the course using its id
+                            
                             course_instance = Course.objects.get(id=course.id)
                             credential_label = {
                                 0: "Degree",
                                 1: "Diploma",
                                 2: "Certificate"
-                            }.get(course_instance.credential, "Degree")  # Default to "Degree" if not found
+                            }.get(course_instance.credential, "Degree")  
 
                             course_data = {
                                 "college_name": course.college.name,
@@ -1269,8 +1290,7 @@ class CourseFeeComparisonHelper:
                                 "admission_details": course.admission_procedure or "N/A",
                                 "eligibility_criteria": course.eligibility_criteria or "N/A",
                             }
-                            result_dict[college_key] = course_data  # Store course data as an object instead of a list
-
+                            result_dict[college_key] = course_data  
                     if not result_dict:
                         raise NoDataAvailableError("No data available for the specified comparison criteria.")
 
@@ -1310,7 +1330,7 @@ class FeesHelper:
             logger.error("Invalid course_ids or college_ids provided: course_ids=%s, college_ids=%s", course_ids, college_ids)
             raise ValueError("course_ids and college_ids must be flat lists of integers or strings.")
 
-        cache_key = FeesHelper.get_cache_key('feess_________detailss___v1234', '-'.join(map(str, course_ids)), intake_year)
+        cache_key = FeesHelper.get_cache_key('fees_comparisons', '-'.join(map(str, course_ids)), intake_year)
         def fetch_data():
             try:
                 fee_details = (
@@ -1340,6 +1360,14 @@ class FeesHelper:
                             )),
                             Value(0, output_field=DecimalField(max_digits=10, decimal_places=2))
                         ),
+                        st_fees=Coalesce(
+                            Sum(Case(
+                                When(fees__category='sT', then=F('fees__total_fees')),
+                                default=Value(0),
+                                output_field=DecimalField(max_digits=10, decimal_places=2)
+                            )),
+                            Value(0, output_field=DecimalField(max_digits=10, decimal_places=2))
+                        ),
                         nq_fees=Coalesce(
                             Sum(Case(
                                 When(fees__category='NQ', then=F('fees__total_fees')),
@@ -1347,9 +1375,10 @@ class FeesHelper:
                                 output_field=DecimalField(max_digits=10, decimal_places=2)
                             )),
                             Value(0, output_field=DecimalField(max_digits=10, decimal_places=2))
-                        )
+                        ),
+
                     )
-                    .values('id', 'college_id', 'gn_fees', 'obc_fees', 'sc_fees', 'nq_fees')
+                    .values('id', 'college_id', 'gn_fees', 'obc_fees', 'sc_fees','st_fees' ,'nq_fees')
                 )
 
 
@@ -1368,7 +1397,7 @@ class FeesHelper:
                 })
 
                 for course_id in course_ids:
-                    tuition_fees = Course.get_total_tuition_fee_by_course(course_id, current_year)
+                    tuition_fees = CollegeCourseFee.get_total_tuition_fee_by_course(course_id, current_year-1)
                     if tuition_fees:
                         tuition_fees_map[course_id] = tuition_fees
 
@@ -1437,9 +1466,10 @@ class FeesHelper:
                             "obc_fees": format_fee(fee_detail['obc_fees']),
                             "sc_fees": format_fee(fee_detail['sc_fees']),
                             "nq_fees": format_fee(fee_detail['nq_fees']),
+                            "st_fees":format_fee(fee_detail['st_fees']),
                             "total_scholarship_given": total_scholarship if total_scholarship > 0 else "NA",
                             "high_scholarship_authority": scholarship_data['high_scholarship_authority'],
-                            # "total_tuition_fees": tuition_fees
+                            "total_tuition_fees": tuition_fees
                             }
                     else:
                         result_dict[f"college_{idx + 1}"] = {
@@ -1480,6 +1510,7 @@ class FeesHelper:
         }
         max_authority = max(authority_map, key=authority_map.get)
         return max_authority if authority_map[max_authority] > 0 else 'NA'
+
 
 
 class FeesGraphHelper:
