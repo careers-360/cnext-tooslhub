@@ -234,16 +234,16 @@ class RPAppearedStudentsAPI(APIView):
     def get(self, request, version, **kwargs):
         resp = {}
         year = request.GET.get('year')
-        product_id = request.GET.get('product_id')
+        exam_id = request.GET.get('exam_id')
 
-        if not product_id or not product_id.isdigit():
-            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        if not exam_id or not exam_id.isdigit():
+            return CustomErrorResponse({"message": "exam_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
         
         if year and not year.isdigit():
             return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
 
         cms_helper = RPCmsHelper()
-        resp, data = cms_helper._get_student_appeared_data_(product_id=product_id, year=year)
+        resp, data = cms_helper._get_student_appeared_data_(exam_id=exam_id, year=year)
         if resp:
             return SuccessResponse(data, status=status.HTTP_200_OK)
         else:
@@ -255,21 +255,21 @@ class RPAppearedStudentsAPI(APIView):
         """
         Handles bulk create, update, and delete operations for RPStudentAppeared model.
         """
-        product_id = request.data.get('product_id')
+        exam_id = request.data.get('exam_id')
         year = request.data.get('year')
         student_data = request.data.get('student_data')
         user_id = request.data.get('user_id')
 
-        if not product_id or not str(product_id).isdigit():
-            return CustomErrorResponse({"message": "product_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
+        if not exam_id or not str(exam_id).isdigit():
+            return CustomErrorResponse({"message": "exam_id is required and should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
         
         if year and not str(year).isdigit():
             return CustomErrorResponse({"message": "year should be a integer value"}, status=status.HTTP_400_BAD_REQUEST)
 
-        product_id = int(product_id)
+        exam_id = int(exam_id)
         # add appeared student data in database.
         cms_helper = RPCmsHelper()
-        resp, data = cms_helper._add_update_student_appeared_data(student_data=student_data, product_id=product_id, year=year,user_id=user_id)
+        resp, data = cms_helper._add_update_student_appeared_data(student_data=student_data, exam_id=exam_id, year=year,user_id=user_id)
         if resp:
             return SuccessResponse(data, status=status.HTTP_201_CREATED)
         else:
