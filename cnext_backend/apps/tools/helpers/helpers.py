@@ -280,7 +280,7 @@ class ToolsHelper():
 
             thread = threading.Thread(target=self.prepare_meta_data, args=(request_data, obj))
             thread.start()
-            return "Ok"
+            return {'product_id':product_id}
         else:
             return serializer.errors
     
@@ -314,7 +314,7 @@ class ToolsHelper():
     def get_input_page_detail_data(self, pk):
         data = CPProductCampaign.objects.filter(pk=pk).values(
             'id', 'display_name_type', 'custom_exam_name', 'custom_flow_type', 
-            'custom_year', 'listing_desc','exam_other_content', 'header_section'
+            'custom_year', 'listing_desc','exam_other_content', 'header_section','alias'
         ).first()
         
         if data:
@@ -336,7 +336,7 @@ class ToolsHelper():
         update_data = {}
         update_data['listing_desc'] = request_data.get('listing_description')
         update_data['exam_other_content'] = request_data.get('exam_other_content')
-        if request_data.get('display_name_type') == 1:
+        if request_data.get('display_name_type') == 2:
             update_data['alias'] = request_data.get('alias')
         else:
             custom_exam_name = request_data.get('custom_exam_name')
