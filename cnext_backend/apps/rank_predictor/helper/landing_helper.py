@@ -141,13 +141,32 @@ class RPHelper:
         
         exam_domain_education_level = Exam.objects.filter(id=exam_dict['exam']).values('domain_id', 'preferred_education_level_id').first()
 
-        exam_ids = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id']).values_list('id', flat=True).iterator()
+        exam_ids_and_logos = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id'])[:4].values('id', 'ecb_logo')
 
-        campaigns = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "custom_exam_name", "custom_flow_type", "custom_year")[:4]
+        # print(f"exam ids {exam_ids_and_logos} type {type(exam_ids_and_logos)} value {[exam['id'] for exam in exam_ids_and_logos]}")
+        exam_logo_mapping = {}
 
-        # print(f"data {exam_domain_education_level['domain_id']}")
+        for exam in exam_ids_and_logos:
+            exam_logo_mapping[exam['id']] = exam['ecb_logo']
 
-        return campaigns
+        # print(f"exam mapping {exam_logo_mapping}")
+
+        exam_list = [exam['id'] for exam in exam_ids_and_logos]
+        product_list = []
+
+        for exam_id in exam_list:
+            # print(f"data {exam_id}")
+            product = CPProductCampaign.objects.filter(exam=exam_id).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year").first()
+            # print(f"product data {product}")
+            try:
+                product['logo'] = exam_logo_mapping.get(product['exam'], '')
+            except Exception as e:
+                print(f"Error occurred: {e}")
+
+            # print(f"product data {product}")
+            product_list.append(product)
+
+        return product_list
     
     def _user_tracking(self, product_id=None, alias=None,**kwargs):
 
