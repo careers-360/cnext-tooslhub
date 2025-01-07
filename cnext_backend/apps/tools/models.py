@@ -148,7 +148,7 @@ class CPProductCampaign(models.Model):
     usage_count_matrix = models.CharField(max_length=10, null=True, blank=True)
     positive_feedback_percentage = models.FloatField(null=True, blank=True)
     for_web = models.BooleanField(default=False)
-    for_app = models.BooleanField(default=False)
+    for_app = models.BooleanField(default=False)#not used yet
     display_name_type = models.IntegerField(null=True, blank=True)
     custom_exam_name = models.CharField(max_length=255, null=True, blank=True)
     custom_flow_type = models.CharField(max_length=255, null=True, blank=True)

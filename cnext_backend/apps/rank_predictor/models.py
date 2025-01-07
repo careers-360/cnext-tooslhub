@@ -311,7 +311,8 @@ class CnextRpSession(models.Model):
 
 
 class RPStudentAppeared(models.Model):
-    product_id =  models.IntegerField(null=True, blank=True)
+    # product_id =  models.IntegerField(null=True, blank=True)
+    exam_id =  models.IntegerField(null=False, blank=True)
     product_type = models.IntegerField()
     year = models.IntegerField()
     student_type = models.IntegerField(null=False, blank=False)

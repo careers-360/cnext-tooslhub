@@ -347,18 +347,18 @@ class RPCmsHelper:
         except ValueError:
             return None        
         
-    def _get_student_appeared_data_(self,product_id,year): #TODO change function name 
+    def _get_student_appeared_data_(self,exam_id,year): #TODO change function name 
         if year:
             year = int(year) 
     
         data = {
-            "product_id": int(product_id),
+            "exam_id": int(exam_id),
             "year": year,
             "count": 0,
             "student_appeared_data": []
         }
          # Filter by product_id and year (if provided)
-        query = RPStudentAppeared.objects.filter(product_id=product_id,status=1).values('id','product_id', 'year', 'student_type', 'min_student', 'max_student', 'status', 'category', 'disability')
+        query = RPStudentAppeared.objects.filter(exam_id=exam_id,status=1).values('id','exam_id', 'year', 'student_type', 'min_student', 'max_student', 'status', 'category', 'disability')
 
         if year:
             rp_students_appeared = list(query.filter(year=year))
@@ -389,14 +389,14 @@ class RPCmsHelper:
         
         return True, data
 
-    def _add_update_student_appeared_data(self, student_data, product_id, year, user_id, *args, **kwargs):
+    def _add_update_student_appeared_data(self, student_data, exam_id, year, user_id, *args, **kwargs):
         if not year:
             year = datetime.today().year
         
-        if not product_id or not year or not isinstance(student_data, list):
+        if not exam_id or not year or not isinstance(student_data, list):
             return False, "Missing arguments or Incorrect data type"
         
-        rp_student_appeared = list(RPStudentAppeared.objects.filter(product_id=product_id, year=year).values_list('id', flat=True))
+        rp_student_appeared = list(RPStudentAppeared.objects.filter(exam_id=exam_id, year=year).values_list('id', flat=True))
         incomming_ids = [row_["id"] for row_ in student_data if row_.get("id")]
         rp_student_appeared_mapping = {row_["id"]:row_ for row_ in student_data if row_.get("id")}
 
@@ -407,7 +407,7 @@ class RPCmsHelper:
         # Delete non existing records
         non_common_ids = set(rp_student_appeared) - set(incomming_ids)
         if non_common_ids:
-            RPStudentAppeared.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+            RPStudentAppeared.objects.filter(exam_id=exam_id, year=year, id__in=non_common_ids).delete()
 
         fields = ['student_type','category', 'disability', 'min_student', 'max_student','updated_by'] 
 
@@ -422,7 +422,7 @@ class RPCmsHelper:
 
             if not data.get("id"):
                 to_create.append(
-                    RPStudentAppeared(product_id=product_id, year=year,created_by=user_id,updated_by=user_id, **data)
+                    RPStudentAppeared(exam_id=exam_id, year=year,created_by=user_id,updated_by=user_id, **data)
                 )
         
         if to_create:
@@ -1012,7 +1012,7 @@ class RPCmsHelper:
                 created_by=user_id,
                 updated_by=user_id,
                 created=now(),
-                updated=now()
+                updated=now()  # TODO remove it later 
             )
 
             return True, "File validated and uploaded successfully."
@@ -1279,14 +1279,26 @@ class CommonDropDownHelper:
             dropdown = [{"id": year, "value": year} for year in year_range]
 
         elif field_name == "tools_name":
-            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", value=F("name"))
-            dropdown = [{"id": tool.get('id'), "value": tool.get('value'), "selected": selected_id == tool.get('id')} for tool in tools]
-
+            tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")
+            dropdown = [
+                {"id": tool["id"], "value": tool["name"], "selected": selected_id == tool["id"]}
+                for tool in tools
+            ]
+            
         elif field_name == "tools_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in TOOL_TYPE.items()]
 
         elif field_name == "mapped_process_type":
-            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id).annotate(key=F('id'), value=F('input_process_type')).values_list('key', 'value')]
+            dropdown = [
+                {
+                    "id": key,
+                    "value": FORM_INPUT_PROCESS_TYPE.get(val, "Unknown"),
+                    "selected": selected_id == key
+                }
+                for key, val in CnextRpCreateInputForm.objects.filter(product_id=product_id)
+                .annotate(key=F('input_process_type'), value=F('input_process_type'))
+                .values_list('key', 'value')
+            ]
 
         elif field_name == "rp_field_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in RP_FIELD_TYPE.items()]
