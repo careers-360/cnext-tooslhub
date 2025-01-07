@@ -359,6 +359,7 @@ class CnextRpUserTracking(models.Model):
     device_type = models.CharField(max_length=255, null=True, blank=True)
     product_id = models.IntegerField(null=True, blank=True)
     input_flow_type = models.IntegerField(null=True, blank=True)
+    flow_type = models.IntegerField(null=True, blank=True)
     form_submission_at = models.DateTimeField(auto_now_add=True)
     login_status = models.CharField(max_length=255, null=True, blank=True)
     uid = models.IntegerField()

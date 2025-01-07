@@ -160,6 +160,7 @@ class RPHelper:
             device_type=user_data['device_type'],
             product_id=user_data['product_id'],
             input_flow_type=user_data['input_flow_type'],
+            flow_type=user_data['flow_type'],
             login_status=user_data['login_status'],
             uid=user_data['uid'],
             uuid=user_data['uuid'],
