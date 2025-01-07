@@ -178,7 +178,7 @@ class ToolsHelper():
         try:
             seo_data = {}
             data = CPProductCampaign.objects.filter(pk=pk).values('id','type','exam','name','usage_count_matrix'\
-                    ,'positive_feedback_percentage','app_status','published','display_preference','gif','youtube',\
+                    ,'positive_feedback_percentage','app_status','for_web','display_preference','gif','youtube',\
                         'image','secondary_image','smart_registration',\
                             'promotion_banner_wap').first()
             if data:
@@ -191,7 +191,7 @@ class ToolsHelper():
                         "usage_count_matrix": data.get("usage_count_matrix"),
                         "positive_feedback_percentage": data.get("positive_feedback_percentage"),
                         "app_status": data.get("app_status"),
-                        "published": data.get("published"),
+                        "for_web": data.get("for_web"),
                     },
                     "input_page_media": {
                         "display_preference": data.get("display_preference"),
