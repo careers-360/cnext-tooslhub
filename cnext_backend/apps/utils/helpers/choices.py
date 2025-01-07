@@ -44,7 +44,7 @@ DIFFICULTY_LEVEL = {1:"Easy", 2:"Moderately Easy", 3:"Moderate", 4 :"Moderately 
 #Used in create input form
 MAPPED_CATEGORY={1:"Session", 2:"Category", 3: "Disability"}
 
-FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}\
+FACTOR_TYPE = {1:"Excellent", 2:"Good", 3:"Bad", 4:"Very Bad"}
 #Enum for manage input output cms panel for flow type ->input flow
 INPUT_TYPE = {1:"Overall", 2:"Sectional"}
 
