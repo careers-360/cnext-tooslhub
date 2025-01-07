@@ -34,6 +34,7 @@ DISABILITY_CATEGORY = [
     for disability in DisabilityCategory.objects.all().values("id", "name") #TODO do it using F in django
 ]
 
+# Used in creating rp form fields (CMS - Manage from)
 RP_FIELD_TYPE = {1:"User Input", 2: "Application Number", 3 : "Category Dropdown", 4 : "Select List Dropdown" , 5 : "Radio Button" , 6 : "Date of Birth"}
 
 FORM_INPUT_PROCESS_TYPE = {1:"Score", 2:"Marks", 3:"Percentile"}

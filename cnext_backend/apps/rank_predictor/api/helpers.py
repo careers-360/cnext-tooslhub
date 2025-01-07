@@ -745,6 +745,14 @@ class RPCmsHelper:
 
     def _get_input_form_field_data(seld, id):
         resp = RpFormField.objects.filter(id = id).values()
+        for data in resp:
+            if data.get('mapped_process_type'):
+                mapped_process_type = data.get('mapped_process_type')
+                data['mapped_process_type'] = {'id':mapped_process_type,'label':FORM_INPUT_PROCESS_TYPE.get(mapped_process_type)}
+            if data.get('field_type'):
+                field_type = data.get('field_type')
+                data['field_type'] = {'id':field_type,'label':RP_FIELD_TYPE.get(field_type)}
+
         return True, resp
 
     
