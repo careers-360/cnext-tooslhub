@@ -232,8 +232,11 @@ class CMSToolsBasicDetailAPI(APIView):
         smart_registration = json.loads(request_data.get('smart_registration_data', [])) if request_data.get('smart_registration_data') else None
         instance = self.get_object(product_id)
         helper = ToolsHelper()
-        data = helper.add_edit_basic_detail(instance = instance, request_data = request_data, smart_registration = smart_registration)
-        return SuccessResponse(data, status=status.HTTP_200_OK)
+        resp, data = helper.add_edit_basic_detail(instance = instance, request_data = request_data, smart_registration = smart_registration)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
     
 
 class CMSToolsResultPageAPI(APIView):

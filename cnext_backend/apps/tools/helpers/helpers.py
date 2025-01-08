@@ -237,6 +237,12 @@ class ToolsHelper():
         # Updating request data to handle created_by in update case
         if instance:
             request_data['created_by'] = instance.created_by
+            image_fields = ['image', 'secondary_image']
+            for field in image_fields:
+                if field in request_data:
+                    field_data = request_data.get(field)
+                    if isinstance(field_data, str):
+                        request_data[field] = getattr(instance, field)
 
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
@@ -280,9 +286,9 @@ class ToolsHelper():
 
             thread = threading.Thread(target=self.prepare_meta_data, args=(request_data, obj))
             thread.start()
-            return {'product_id':product_id}
+            return True, {'product_id':product_id}
         else:
-            return serializer.errors
+            return False, serializer.errors
     
     def prepare_meta_data(self, request_data, instance, **kwargs):
         url_alias = request_data.get('url_alias')
