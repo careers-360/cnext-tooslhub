@@ -407,13 +407,23 @@ class ToolsHelper():
                 if section_id:
                     try:
                         content_section = RpContentSection.objects.get(id=section_id)
+                        # to handle the case when the request has image in url format
+                        if isinstance(image_web, str):
+                            image_web = content_section.image_web
+                        if isinstance(image_wap, str):
+                            image_wap = content_section.image_wap
+
+                        # Handle `null` explicitly passed in the request data
+                        if image_web is None:
+                            image_web = None
+                        if image_wap is None:
+                            image_wap = None
+
                         content_section.heading = item.get('heading', content_section.heading)
                         content_section.content = item.get('content', content_section.content)
                         content_section.updated_by = item.get('updated_by', content_section.updated_by)
-                        if image_web:
-                            content_section.image_web = image_web
-                        if image_wap:
-                            content_section.image_wap = image_wap
+                        content_section.image_web = image_web
+                        content_section.image_wap = image_wap
                         content_section.save()
 
                         updated_sections.append({
