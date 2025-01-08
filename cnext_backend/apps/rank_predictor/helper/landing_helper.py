@@ -124,14 +124,18 @@ class RPHelper:
 
         return content_response
     
-    def _get_product_from_alias(self , alias):
+    def _get_product__exam_from_alias(self , alias):
 
         base_url_alias = UrlAlias.objects.filter(alias=alias).first()
         split_string = base_url_alias.source.split("/")
 
         product_id = int(split_string[1])
 
-        return product_id
+        exam_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
+
+        # print(f"exam dictionary {exam_dict.get('exam')}")
+
+        return { "product_id": product_id, "exam_id": exam_dict.get("exam", "")}
         
     def _related_products(self, product_id=None, alias=None):
 

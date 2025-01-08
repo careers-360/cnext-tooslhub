@@ -281,6 +281,19 @@ class UserTrackingAPI(APIView):
         user_data_id = rp_helper._user_tracking(product_id=product_id, alias=alias, user_data=user_data)
 
         return SuccessResponse({"id": user_data_id}, status=status.HTTP_200_OK)
+
+class ProductFromAliasAPI(APIView):
+    """
+    API for fetching top colleges related to an exam.
+    Endpoint: api/<int:version>/rank-predictor?alias=""
+    """
+    permission_classes = [ApiKeyPermission]
+    def get(self, request, version, **kwargs):
+        alias = request.GET.get('alias')
+        rp_helper = RPHelper()
+        product_exam_id = rp_helper._get_product__exam_from_alias(alias=alias)
+        return SuccessResponse( product_exam_id, status=status.HTTP_200_OK)
+    
     
 # class RankCalculatorAPI(APIView):
 #     """
