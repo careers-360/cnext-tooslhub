@@ -170,34 +170,38 @@ class RPHelper:
     
     def _user_tracking(self, product_id=None, alias=None,**kwargs):
 
-        # print(f"got user tracking from body as {kwargs['user_data']}")
-        user_data = kwargs['user_data']
-
-        product_session_id =  ProductSession.objects.filter(product_id=int(user_data['product_id'])).values('id').last()
-
-        user_tracking = CnextRpUserTracking(
-            device_type=user_data['device_type'],
-            product_id=user_data['product_id'],
-            input_flow_type=user_data['input_flow_type'],
-            flow_type=user_data['flow_type'],
-            login_status=user_data['login_status'],
-            uid=user_data['uid'],
-            uuid=user_data['uuid'],
-            category=user_data['category'],
-            disability=user_data['disability'],
-            application=user_data['application'],
-            dob=user_data['dob'],
-            exam_session=user_data['exam_session'],
-            tool_session_id=product_session_id['id'],
-            input_fields=user_data['input_fields'],
-            result_predictions=user_data['result_predictions'],
-            additional_info=user_data['additional_info']
-        )
-
-        user_tracking.save()
-
-        return user_tracking.id
+        user_data = kwargs.get('user_data', {})
         
+        id = user_data.get('id', None)
+        login_status = user_data.get('login_status', None)
+
+        if id is not None:
+            CnextRpUserTracking.objects.filter(id=id).update(login_status=login_status)
+            return id
+        
+        else:
+            product_session_id = ProductSession.objects.filter(product_id=int(user_data['product_id'])).values('id').last()
+            user_tracking = CnextRpUserTracking(
+                device_type=user_data.get('device_type', None),
+                product_id=user_data.get('product_id', None),
+                input_flow_type=user_data.get('input_flow_type', None),
+                flow_type=user_data.get('flow_type', None),
+                login_status=user_data.get('login_status', None),
+                uid=user_data.get('uid', None),
+                uuid=user_data.get('uuid', None),
+                category=user_data.get('category', None),
+                disability=user_data.get('disability', None),
+                application=user_data.get('application', None),
+                dob=user_data.get('dob', None),
+                exam_session=user_data.get('exam_session', None),
+                tool_session_id=product_session_id.get('id', None),
+                input_fields=user_data.get('input_fields', None),
+                result_predictions=user_data.get('result_predictions', None),
+                additional_info=user_data.get('additional_info', None)
+            )
+            user_tracking.save()
+            return user_tracking.id
+
     # def calculate_percentile(self, score, max_score):
     #     """
     #     Calculate percentile from score
