@@ -58,7 +58,8 @@ PROJECT_APPS = [
     "users",
 	"rank_predictor",
 	"tools",
-	"college_compare"
+	"college_compare",
+	"college_amenities"
 ]
 
 if not DEBUG:
@@ -253,7 +254,7 @@ LOGGING = {
 	},
 	'loggers': {
 		'django': {
-			'handlers': ['console','mail_admins'],
+			'handlers': ['console','mail_admins','file'],
 			'level': 'DEBUG',
 			'propagate': True,
 		},

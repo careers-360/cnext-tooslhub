@@ -33,9 +33,9 @@ urlpatterns = [
     name='ranking-accreditation-comparison'),
 
 
-    path(f'{compare_prefix}resultPage/ranking-accreditation-combined-comparison/',
+    path(f'{compare_prefix}resultPage/ranking-accreditation-ai-insights/',
     comparison_result_page_controllers.RankingAccreditationCombinedComparisonView.as_view(),
-    name='ranking-accreditation-combined-comparison'),
+    name='ranking-accreditation-ai-insights'),
 
     path(f'{compare_prefix}resultPage/ranking-insights-graph/',
     comparison_result_page_controllers.RankingGraphInsightsView.as_view(),
@@ -46,6 +46,11 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/placement-stats-comparison/',
     comparison_result_page_controllers.PlacementStatsComparisonView.as_view(),
     name='placement-stats-comparison'),
+
+
+    path(f'{compare_prefix}resultPage/placement-ai-insights/',
+    comparison_result_page_controllers.PlacementStatsAIinsightsComparisonView.as_view(),
+    name='placement-ai-insights'),
 
 
     path(f'{compare_prefix}resultPage/placement-graph-insights/',
@@ -64,6 +69,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/fees-comparison/',
         comparison_result_page_controllers.FeesComparisonView.as_view(),
         name='fees-comparison'),
+
+    path(f'{compare_prefix}resultPage/fees-ai-insights/',
+        comparison_result_page_controllers.FeesAIinsightsComparisonView.as_view(),
+        name='fees-ai-insights'),
 
     path(f'{compare_prefix}resultPage/fees-insights-graph/',
     comparison_result_page_controllers.FeesGraphInsightsView.as_view(),
@@ -93,6 +102,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/college-reviews-comparison/',
         comparison_result_page_controllers.CollegeReviewsComparisonView.as_view(),
         name='college-reviews-comparison'),
+
+    path(f'{compare_prefix}resultPage/college-reviews-ai-insights/',
+        comparison_result_page_controllers.CollegeReviewsAIinsightsView.as_view(),
+        name='college-reviews-ai-insights'),
     
     path(f'{compare_prefix}resultPage/college-recent-reviews/',
         comparison_result_page_controllers.SingleCollegeReviewsView.as_view(),
