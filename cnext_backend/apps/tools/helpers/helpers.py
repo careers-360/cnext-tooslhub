@@ -225,8 +225,8 @@ class ToolsHelper():
                 structured_data['smart_registration_flow'] = prepared_data
             return structured_data
         except Exception as e:
-            print(str(e))
             return str(e)
+        
     def add_edit_basic_detail(self, *args,**kwargs):
         bulk_create_data = []
         bulk_update_data = []
@@ -237,12 +237,7 @@ class ToolsHelper():
         # Updating request data to handle created_by in update case
         if instance:
             request_data['created_by'] = instance.created_by
-            image_fields = ['image', 'secondary_image']
-            for field in image_fields:
-                if field in request_data:
-                    field_data = request_data.get(field)
-                    if isinstance(field_data, str):
-                        request_data[field] = getattr(instance, field)
+            request_data = self.get_binary_image(request_data, instance)
 
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
@@ -289,7 +284,20 @@ class ToolsHelper():
             return True, {'product_id':product_id}
         else:
             return False, serializer.errors
-    
+        
+    #To handle various image type  
+    def get_binary_image(self, request_data, instance):
+        image_fields = ['image', 'secondary_image','gif']
+        for field in image_fields:
+            if request_data.get(field):
+                field_data = request_data.get(field)
+                if field_data:
+                    if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
+                        request_data[field] = getattr(instance, field)
+                else: # Check if the field data is None (explicitly removing the image)
+                    request_data[field] = None
+        return request_data
+
     def prepare_meta_data(self, request_data, instance, **kwargs):
         url_alias = request_data.get('url_alias')
         tool_type = request_data.get('type')
@@ -342,19 +350,25 @@ class ToolsHelper():
         update_data = {}
         update_data['listing_desc'] = request_data.get('listing_description')
         update_data['exam_other_content'] = request_data.get('exam_other_content')
-        if request_data.get('display_name_type') == 2:
-            update_data['alias'] = request_data.get('alias')
+        update_by = request_data.get('updated_by')
+        display_name_type = int(request_data.get('display_name_type'))
+        if display_name_type == 2:
+            update_data.update({
+                'alias': request_data.get('alias'),
+                'updated_by': update_by,
+                'display_name_type':display_name_type
+            })
         else:
             custom_exam_name = request_data.get('custom_exam_name')
             custom_flow_type = request_data.get('custom_flow_type')
             custom_year = request_data.get('custom_year')
-            update_by = request_data.get('updated_by')
             update_data.update({
                 'alias': f"{custom_exam_name} {custom_flow_type} {custom_year}",
                 'custom_exam_name': custom_exam_name,
                 'custom_flow_type': custom_flow_type,
                 'custom_year': custom_year,
-                'updated_by': update_by
+                'updated_by': update_by,
+                'display_name_type':display_name_type
             })
 
         incoming_header_section = request_data.get('header_section', [])
@@ -407,13 +421,23 @@ class ToolsHelper():
                 if section_id:
                     try:
                         content_section = RpContentSection.objects.get(id=section_id)
+                        # to handle the case when the request has image in url format
+                        if isinstance(image_web, str):
+                            image_web = content_section.image_web
+                        if isinstance(image_wap, str):
+                            image_wap = content_section.image_wap
+
+                        # Handle `null` explicitly passed in the request data
+                        if image_web is None:
+                            image_web = None
+                        if image_wap is None:
+                            image_wap = None
+
                         content_section.heading = item.get('heading', content_section.heading)
                         content_section.content = item.get('content', content_section.content)
                         content_section.updated_by = item.get('updated_by', content_section.updated_by)
-                        if image_web:
-                            content_section.image_web = image_web
-                        if image_wap:
-                            content_section.image_wap = image_wap
+                        content_section.image_web = image_web
+                        content_section.image_wap = image_wap
                         content_section.save()
 
                         updated_sections.append({
