@@ -10,7 +10,6 @@ def upload_sheet(instance, filename):
 
 class RpMeritSheet(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     file_name = models.FileField(upload_to = upload_sheet,null=True, blank=True)
     to_graph = models.BooleanField(default=False)
@@ -27,7 +26,6 @@ class RpMeritSheet(models.Model):
 
 class TempRpMeritSheet(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     file_name = models.FileField(upload_to = upload_sheet,null=True, blank=True)
     to_graph = models.BooleanField(default=False)
@@ -45,7 +43,6 @@ class TempRpMeritSheet(models.Model):
 
 class RpSmartRegistration(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     field = models.IntegerField(null=True, blank=True)
     peak_season = models.BooleanField(default=False)
     non_peak_season = models.BooleanField(default=False)
@@ -79,7 +76,6 @@ class RpInputFlowMaster(models.Model):
 
 class RpMeanSd(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     # input_flow_type = models.IntegerField(null=True, blank=True)
     input_flow_type = models.ForeignKey(RpInputFlowMaster, on_delete=models.DO_NOTHING, db_column="input_flow_type", null=True, blank=True)
@@ -100,7 +96,6 @@ class RpMeanSd(models.Model):
 
 class TempRpMeanSd(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     # input_flow_type = models.IntegerField(null=True, blank=True)
     input_flow_type = models.ForeignKey(RpInputFlowMaster, on_delete=models.DO_NOTHING, db_column="input_flow_type", null=True, blank=True)
@@ -184,7 +179,6 @@ class RpResultFlowMaster(models.Model):
 
 class RpContentSection(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     heading = models.CharField(max_length=255, null=True, blank=True)
     content = models.TextField(null=True, blank=True)
     image_web = models.ImageField(upload_to = upload_to, blank=True, null=True)
@@ -203,7 +197,6 @@ class RpContentSection(models.Model):
 
 class RpFormField(models.Model):
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     field_type = models.IntegerField(null=True, blank=True)
     input_flow_type = models.IntegerField(null=True, blank=True)
     display_name = models.CharField(max_length=255, null=True, blank=True)
@@ -257,7 +250,6 @@ class CnextRpVariationFactor(models.Model):
     )
 
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     result_flow_type = models.ForeignKey(RpResultFlowMaster, db_column="result_flow_type", on_delete=models.DO_NOTHING, default=None)
     lower_val = models.IntegerField(null=True, blank=True)
     upper_val = models.IntegerField(null=True, blank=True)
@@ -291,7 +283,6 @@ class CnextRpSession(models.Model):
     )
     
     product_id = models.IntegerField(null=True, blank=True)
-    product_type = models.IntegerField(null=True, blank=True)
     year = models.IntegerField(null=True, blank=True)
     session_date = models.DateTimeField(null=True, blank=True)
     session_shift = models.IntegerField(choices=SHIFT_ENUM, null=True, blank=True)
@@ -312,7 +303,6 @@ class CnextRpSession(models.Model):
 class RPStudentAppeared(models.Model):
     # product_id =  models.IntegerField(null=True, blank=True)
     exam_id =  models.IntegerField(null=False, blank=True)
-    product_type = models.IntegerField()
     year = models.IntegerField()
     student_type = models.IntegerField(null=False, blank=False)
     category = models.IntegerField()
