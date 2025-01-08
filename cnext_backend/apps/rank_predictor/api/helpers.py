@@ -753,6 +753,15 @@ class RPCmsHelper:
                 field_type = data.get('field_type')
                 data['field_type'] = {'id':field_type,'label':RP_FIELD_TYPE.get(field_type)}
 
+            if data.get('input_flow_type'):
+                input_flow_type = data.get('input_flow_type')
+                master_result_flow_type_dict = {
+                    item['id']: item['input_process_type'] #TODO OPtimize this 
+                    for item in RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type")
+                }
+                data['input_flow_type'] = {'id':input_flow_type,'label':master_result_flow_type_dict.get(input_flow_type)}
+
+
         return True, resp
 
     
