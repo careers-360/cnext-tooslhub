@@ -149,7 +149,7 @@ class CMSToolsFaqAPI(APIView):
             faqs = ToolsFAQ.objects.filter(product_id=product_id).values(
                 "id", "question", "answer", "status"
             )
-            return SuccessResponse({"reponse": list(faqs)})
+            return SuccessResponse({"response": list(faqs)})
 
         except Exception as e:
             return ErrorResponse({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

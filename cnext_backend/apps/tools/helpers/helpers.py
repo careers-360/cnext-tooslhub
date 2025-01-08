@@ -350,19 +350,25 @@ class ToolsHelper():
         update_data = {}
         update_data['listing_desc'] = request_data.get('listing_description')
         update_data['exam_other_content'] = request_data.get('exam_other_content')
-        if request_data.get('display_name_type') == 2:
-            update_data['alias'] = request_data.get('alias')
+        update_by = request_data.get('updated_by')
+        display_name_type = int(request_data.get('display_name_type'))
+        if display_name_type == 2:
+            update_data.update({
+                'alias': request_data.get('alias'),
+                'updated_by': update_by,
+                'display_name_type':display_name_type
+            })
         else:
             custom_exam_name = request_data.get('custom_exam_name')
             custom_flow_type = request_data.get('custom_flow_type')
             custom_year = request_data.get('custom_year')
-            update_by = request_data.get('updated_by')
             update_data.update({
                 'alias': f"{custom_exam_name} {custom_flow_type} {custom_year}",
                 'custom_exam_name': custom_exam_name,
                 'custom_flow_type': custom_flow_type,
                 'custom_year': custom_year,
-                'updated_by': update_by
+                'updated_by': update_by,
+                'display_name_type':display_name_type
             })
 
         incoming_header_section = request_data.get('header_section', [])
