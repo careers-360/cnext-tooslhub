@@ -4,6 +4,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from django.core.exceptions import ValidationError
 import logging
+from utils.helpers.custom_permission import ApiKeyPermission
 
 from college_compare.api.serializers.compare_college_page_serializers import CollegeCompareSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class CollegeDropdownView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get College Dropdown",
         description="Retrieve a list of colleges for the dropdown, with optional search input and UID.",
@@ -57,6 +59,7 @@ class CollegeDropdownView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DegreeDropdownView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Degree Dropdown",
         description="Retrieve a list of degrees available in a specific college.",
@@ -87,6 +90,7 @@ class DegreeDropdownView(APIView):
 
 
 class CourseDropdownView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Course Dropdown",
         description="Retrieve a list of courses available in a specific college for a degree.",
@@ -119,6 +123,7 @@ class CourseDropdownView(APIView):
 
 
 class SummaryComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Summary Comparison",
         description="Retrieve summary comparison for given colleges and courses.",
@@ -157,6 +162,7 @@ class SummaryComparisonView(APIView):
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class QuickFactsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Quick Facts",
         description="Retrieve quick facts for given colleges and courses.",
@@ -196,6 +202,7 @@ class QuickFactsView(APIView):
 
 
 class CardDisplayServiceView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Card Display Details",
         description="Retrieve card display details for colleges and courses, including social media links.",
@@ -231,6 +238,7 @@ class CardDisplayServiceView(APIView):
 
 
 class CollegeCompareController(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Save Comparison Data",
         description="Save the comparison data for colleges and courses.",

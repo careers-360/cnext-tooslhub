@@ -6,6 +6,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiRespon
 from django.core.exceptions import ValidationError
 import logging
 import traceback
+from utils.helpers.custom_permission import ApiKeyPermission
 
 
 
@@ -21,7 +22,7 @@ class AllComparisonsView(APIView):
     """
     All types of comparisons (degree_branch, degree, domain, college)
     """
-    
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get All Popular Comparisons",
         description="Retrieve popular course comparisons for all types: degree_branch, degree, domain, and college.",
