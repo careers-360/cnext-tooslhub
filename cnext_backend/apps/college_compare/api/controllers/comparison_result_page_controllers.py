@@ -4,6 +4,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from django.core.exceptions import ValidationError
 import logging
+from utils.helpers.custom_permission import ApiKeyPermission
 
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
@@ -27,6 +28,7 @@ current_year = time.localtime().tm_year
 
 
 class RankingAccreditationComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Ranking and Accreditation Comparison",
         description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year. Accepts a comma-separated list of selected domains.",
@@ -86,6 +88,7 @@ class RankingAccreditationComparisonView(APIView):
 
 
 class RankingAccreditationCombinedComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Ranking and Accreditation Comparison",
         description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year, and includes combined and multi-year data.",
@@ -135,10 +138,10 @@ class RankingAccreditationCombinedComparisonView(APIView):
             if not combined_ranking_data_previous_year:
                 raise NoDataAvailableError("No combined ranking data available for the previous year.")
             
-            print(year)
+            
 
             years = [year - i for i in range(5)]
-            print(years,"--------")
+            
             
             multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domains_dict, years)
             if not multi_year_ranking_data:
@@ -171,6 +174,7 @@ class RankingAccreditationCombinedComparisonView(APIView):
 
 
 class RankingGraphInsightsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Ranking Graph Insights",
         description="Retrieve ranking graph insights (overall and domain-specific) for given colleges over a specified year range.",
@@ -250,6 +254,7 @@ class RankingGraphInsightsView(APIView):
 
 
 class PlacementStatsComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Placement Stats Comparison",
         description="Retrieve placement stats comparison for given colleges and courses, allowing different domains per college.",
@@ -300,6 +305,7 @@ class PlacementStatsComparisonView(APIView):
 
 
 class PlacementStatsAIinsightsComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Placement Stats AI insights Comparison",
         description="Retrieve placement stats comparison for given colleges and courses, allowing different domains per college.",
@@ -353,6 +359,7 @@ class PlacementStatsAIinsightsComparisonView(APIView):
 
 
 class PlacementGraphInsightsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Placement Graph Insights",
         description="Retrieve placement insights including placement percentages, salary data, and recruiter information for given colleges, allowing different domains per college.",
@@ -408,6 +415,7 @@ class PlacementGraphInsightsView(APIView):
 
 
 class CourseFeeComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Course Fee Comparison",
         description="Retrieve course fee comparison for given colleges and courses.",
@@ -446,6 +454,7 @@ class CourseFeeComparisonView(APIView):
 
 
 class FeesComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Fees Comparison",
         description="Retrieve Fees comparison data for given colleges and courses.",
@@ -492,6 +501,7 @@ class FeesComparisonView(APIView):
         
 
 class FeesAIinsightsComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Fees ai insights Comparison",
         description="Retrieve Fees comparison data for given colleges and courses.",
@@ -541,6 +551,7 @@ class FeesAIinsightsComparisonView(APIView):
 
 
 class FeesGraphInsightsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Fees Graph Insights",
         description="Retrieve fee graph insights for given course IDs.",
@@ -614,6 +625,7 @@ class FeesGraphInsightsView(APIView):
 
 
 class ClassProfileComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Class Profile Comparison",
         description="Retrieve class profile comparison data for given colleges",
@@ -684,6 +696,7 @@ class ClassProfileComparisonView(APIView):
 
 
 class ProfileInsightsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Profile Insights",
         description="Retrieve comprehensive profile insights including student-faculty ratio, demographics, and gender diversity for given colleges.",
@@ -795,6 +808,7 @@ class ProfileInsightsView(APIView):
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CollegeFacilitiesComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get College Facilities Comparison",
         description="Retrieve  college facilities comparison data for given colleges",
@@ -827,6 +841,7 @@ class CollegeFacilitiesComparisonView(APIView):
 
 
 class CollegeAmenitiesComparisonView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get College Amenities Comparison",
         description="Retrieve college amenities comparison data for given colleges",
@@ -869,6 +884,7 @@ class CollegeReviewsComparisonView(APIView):
     API view for comparing reviews across multiple colleges.
     Provides both detailed review summaries and recent reviews.
     """
+    permission_classes = [ApiKeyPermission]
     
     def __init__(self, **kwargs):
         """
@@ -992,6 +1008,7 @@ class CollegeReviewsAIinsightsView(APIView):
     API view for comparing reviews across multiple colleges.
     Provides both detailed review summaries and recent reviews.
     """
+    permission_classes = [ApiKeyPermission]
     
     def __init__(self, **kwargs):
         """
@@ -1106,6 +1123,7 @@ class CollegeReviewsAIinsightsView(APIView):
 
 
 class SingleCollegeReviewsView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Single College Reviews",
         description="Retrieve detailed reviews for a single college",
@@ -1173,6 +1191,7 @@ class CollegeReviewRatingGraphView(APIView):
     API view for generating and retrieving college review rating graphs.
     Provides both raw rating data and classified insights.
     """
+    permission_classes = [ApiKeyPermission]
 
     @extend_schema(
         summary="Get College Review Rating Graph",
@@ -1247,6 +1266,7 @@ class CollegeReviewRatingGraphView(APIView):
             )
 
 class ExamCutoffView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Exam Cutoff Comparison",
         description="Retrieve exam cutoff comparison data for given colleges, including opening/closing ranks and counselling rounds.",

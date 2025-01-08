@@ -7,10 +7,12 @@ from college_compare.api.services.landing_page_services import (PeerComparisonSe
 from django.core.exceptions import ValidationError
 import logging
 import traceback
+from utils.helpers.custom_permission import ApiKeyPermission
 
 logger = logging.getLogger(__name__)
 
 class PeerComparisonCollegesView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Peer Comparison of Colleges",
         description="Retrieve peer comparison details for colleges with optional user-specific context.",
@@ -23,10 +25,12 @@ class PeerComparisonCollegesView(APIView):
             500: OpenApiResponse(description='Internal server error')
         }
     )
+   
     def get(self, request):
         """
         Handle peer comparison retrieval with optional user context.
         """
+        
         uid = request.query_params.get('uid')
 
         try:
@@ -49,6 +53,7 @@ class PeerComparisonCollegesView(APIView):
 
 
 class TopCollegesCoursesView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Top Colleges and Courses",
         description="Retrieve top colleges and courses with optional user-specific context.",
