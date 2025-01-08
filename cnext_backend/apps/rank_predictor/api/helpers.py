@@ -135,7 +135,7 @@ class RPCmsHelper:
         # Fetch input flow type from database based on rp_id
         input_flow_type_data = []
         if input_id:
-            input_flow_type_data = list(RpInputFlowMaster.objects.filter(id=input_id, status=1).values("id","input_flow_type", "input_type", "input_process_type").first())
+            input_flow_type_data = RpInputFlowMaster.objects.filter(id=input_id, status=1).values("id","input_flow_type", "input_type", "input_process_type").first()
         
         elif detail_input_id: #TODO COnfirm with ayush sir - removed.first
             input_flow_type_data = RpInputFlowMaster.objects.filter(id=detail_input_id, status=1).values("id","input_flow_type", "input_type", "input_process_type")
