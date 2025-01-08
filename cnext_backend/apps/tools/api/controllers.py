@@ -264,7 +264,7 @@ class CMSToolsResultPageAPI(APIView):
             response = CPProductCampaign.objects.filter(id=pk).values('rp_disclaimer','cp_cta_name', 'cp_destination_url', \
                                                                     'cp_pitch', 'mapped_product_title', 'mapped_product_cta_label',
                                                                     'mapped_product_destination_url','mapped_product_pitch',\
-                                                                    'promotion_banner_web','promotion_banner_wap').first()  
+                                                                    'promotion_banner_web','promotion_banner_wap', 'banner_destination').first()  #TODO can change banner_destination column name 
 
             if response is None:
                 return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
