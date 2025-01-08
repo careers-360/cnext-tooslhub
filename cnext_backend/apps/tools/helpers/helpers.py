@@ -225,8 +225,8 @@ class ToolsHelper():
                 structured_data['smart_registration_flow'] = prepared_data
             return structured_data
         except Exception as e:
-            print(str(e))
             return str(e)
+        
     def add_edit_basic_detail(self, *args,**kwargs):
         bulk_create_data = []
         bulk_update_data = []
@@ -237,14 +237,15 @@ class ToolsHelper():
         # Updating request data to handle created_by in update case
         if instance:
             request_data['created_by'] = instance.created_by
-            image_fields = ['image', 'secondary_image']
+            image_fields = ['image', 'secondary_image','gif']
             for field in image_fields:
-                field_data = request_data.get(field)
-                if field_data:
-                    if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
-                        request_data[field] = getattr(instance, field)
-                else:                              # Check if the field data is None (explicitly removing the image)
-                    request_data[field] = None
+                if request_data.get(field):
+                    field_data = request_data.get(field)
+                    if field_data:
+                        if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
+                            request_data[field] = getattr(instance, field)
+                    else:                              # Check if the field data is None (explicitly removing the image)
+                        request_data[field] = None
 
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():

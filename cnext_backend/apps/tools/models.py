@@ -138,7 +138,7 @@ class CPProductCampaign(models.Model):
     free_on_app = models.IntegerField(default=0, null=False, blank=True)
     #new fields are added below
     display_preference = models.IntegerField(null=True, blank=True)
-    gif = models.CharField(max_length=255, null=True, blank=True)
+    gif = models.FileField(upload_to='tools/gif', blank=True, null=True)
     video = models.CharField(max_length=255, null=True, blank=True)
     secondary_image = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
     exam = models.IntegerField(null=True, blank=True)
