@@ -239,10 +239,12 @@ class ToolsHelper():
             request_data['created_by'] = instance.created_by
             image_fields = ['image', 'secondary_image']
             for field in image_fields:
-                if field in request_data:
-                    field_data = request_data.get(field)
-                    if isinstance(field_data, str):
+                field_data = request_data.get(field)
+                if field_data:
+                    if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
                         request_data[field] = getattr(instance, field)
+                else:                              # Check if the field data is None (explicitly removing the image)
+                    request_data[field] = None
 
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
@@ -407,13 +409,23 @@ class ToolsHelper():
                 if section_id:
                     try:
                         content_section = RpContentSection.objects.get(id=section_id)
+                        # to handle the case when the request has image in url format
+                        if isinstance(image_web, str):
+                            image_web = content_section.image_web
+                        if isinstance(image_wap, str):
+                            image_wap = content_section.image_wap
+
+                        # Handle `null` explicitly passed in the request data
+                        if image_web is None:
+                            image_web = None
+                        if image_wap is None:
+                            image_wap = None
+
                         content_section.heading = item.get('heading', content_section.heading)
                         content_section.content = item.get('content', content_section.content)
                         content_section.updated_by = item.get('updated_by', content_section.updated_by)
-                        if image_web:
-                            content_section.image_web = image_web
-                        if image_wap:
-                            content_section.image_wap = image_wap
+                        content_section.image_web = image_web
+                        content_section.image_wap = image_wap
                         content_section.save()
 
                         updated_sections.append({
