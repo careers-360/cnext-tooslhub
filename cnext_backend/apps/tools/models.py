@@ -166,7 +166,7 @@ class CPProductCampaign(models.Model):
     promotion_banner_wap = models.ImageField('Images', upload_to='tools/', blank=True, null=True)
     banner_destination = models.CharField(max_length=255, null=True, blank=True)
     enable_cp_pitch_for_rp = models.BooleanField(default=False)
-    cp_pitch_for_rp = models.CharField(max_length=200, null=False, blank=False)
+    cp_pitch_for_rp = models.CharField(max_length=200, null=True, blank=True)
     smart_registration = models.BooleanField(default=False)
     status = models.BooleanField(default=True)
 
