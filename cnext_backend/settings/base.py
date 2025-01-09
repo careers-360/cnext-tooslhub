@@ -232,6 +232,11 @@ LOGGING = {
 			'level': 'ERROR',
 			'class': 'django.utils.log.AdminEmailHandler'
 		},
+		'file': {
+	            'level': 'INFO',
+	            'class': 'logging.FileHandler',
+	            'filename': '/var/log/gunicorn/debug.log',
+	        },
 		# 'gunicorn': {
 		# 	'level': 'DEBUG',
 		# 	'class': 'logging.handlers.RotatingFileHandler',
