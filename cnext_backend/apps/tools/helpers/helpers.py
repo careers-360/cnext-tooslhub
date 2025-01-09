@@ -227,6 +227,22 @@ class ToolsHelper():
         except Exception as e:
             return str(e)
         
+    def add_edit_result_page(self, **kwargs):
+
+        instance = kwargs.get('instance')
+        request_data = kwargs.get('request_data')
+        user_id = request_data.get('user_id')
+        if instance:
+            request_data = self.get_binary_image(request_data, instance)
+
+        # Update fields
+        serializer = ToolBasicDetailSerializer(instance=instance,data=request_data, partial=True)
+        if serializer.is_valid():
+            serializer.save(updated_by=user_id)
+            return True, {"message": "Tool updated successfully"}
+        else:
+            return False, {"error": serializer.errors}
+
     def add_edit_basic_detail(self, *args,**kwargs):
         bulk_create_data = []
         bulk_update_data = []
@@ -287,15 +303,17 @@ class ToolsHelper():
         
     #To handle various image type  
     def get_binary_image(self, request_data, instance):
-        image_fields = ['image', 'secondary_image','gif']
+        image_fields = ['image', 'secondary_image','gif','promotion_banner_web','promotion_banner_wap']
         for field in image_fields:
             if request_data.get(field):
                 field_data = request_data.get(field)
                 if field_data:
                     if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
                         request_data[field] = getattr(instance, field)
-                else: # Check if the field data is None (explicitly removing the image)
+                else:
                     request_data[field] = None
+            else: # Check if the field data is None (explicitly removing the image)
+                request_data[field] = None
         return request_data
 
     def prepare_meta_data(self, request_data, instance, **kwargs):
