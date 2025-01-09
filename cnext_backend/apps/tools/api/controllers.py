@@ -264,7 +264,8 @@ class CMSToolsResultPageAPI(APIView):
             response = CPProductCampaign.objects.filter(id=pk).values('rp_disclaimer','cp_cta_name', 'cp_destination_url', \
                                                                     'cp_pitch', 'mapped_product_title', 'mapped_product_cta_label',
                                                                     'mapped_product_destination_url','mapped_product_pitch',\
-                                                                    'promotion_banner_web','promotion_banner_wap', 'banner_destination').first()  #TODO can change banner_destination column name 
+                                                                    'promotion_banner_web','promotion_banner_wap', 'banner_destination',\
+                                                                    'enable_cp_pitch_for_rp', 'cp_pitch_for_rp').first()  #TODO can change banner_destination column name 
 
             if response is None:
                 return ErrorResponse(f'Tool with id: {pk} does not exist.', status=status.HTTP_404_NOT_FOUND)
@@ -278,27 +279,25 @@ class CMSToolsResultPageAPI(APIView):
         
 
     def post(self, request, version, format=None, **kwargs):
-        try:
-            pk = request.data.get('product_id')
-            user_id = request.data.get('user_id')
-                        
-            if not pk:
-                return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+    
+        product_id = request.data.get('product_id')
+                    
+        if not product_id:
+            return ErrorResponse({"error": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Fetch the object using .get() to ensure it exists
-            instance = CPProductCampaign.objects.get(id=pk)
-            
-            # Update fields
-            serializer = ToolBasicDetailSerializer(instance=instance,data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save(updated_by=user_id)
-                return SuccessResponse({"message": "Tool updated successfully"}, status=status.HTTP_200_OK)
-            else:
-                return ErrorResponse({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-        except CPProductCampaign.DoesNotExist:
+        # Fetch the object using .get() to ensure it exists
+        instance = self.get_object(pk=product_id)
+        if not instance:
             return ErrorResponse({"error": "Tool does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return ErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        request_data = request.data.dict()
+        helper = ToolsHelper()
+        resp, data = helper.add_edit_result_page(instance = instance, request_data = request_data)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # class CMSToolsContentAPI(APIView):
