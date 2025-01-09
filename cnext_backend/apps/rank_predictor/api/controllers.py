@@ -295,110 +295,219 @@ class ProductFromAliasAPI(APIView):
         return SuccessResponse( product_exam_id, status=status.HTTP_200_OK)
     
     
-# class RankCalculatorAPI(APIView):
-#     """
-#     API for Rank and Percentile Calculation
-#     Endpoint: api/<int:version>/rank-predictor/rank-calculation
-#     Params:
-#         - score (optional)
-#         - percentile (optional)
-#         - max_score (required)
-#         - total_candidates (required)
-#         - caste (optional)
-#         - disability (optional)
-#         - slot (optional)
-#         - difficulty_level (optional)
-#         - year (optional)
-#     """
-#     permission_classes = [ApiKeyPermission]
+class RankPredictorAPI(APIView):
+    """
+    API for Rank Predictor Workflow and Rank Calculation.
+    Endpoint: api/<int:version>/rank-predictor
+    Params:
+      - flow_type: To determine rank calculation or predictor workflow.
+      - Additional parameters based on the flow type.
+    """
 
-#     def post(self, request, version, **kwargs):
-#         # Parse input data
-#         score = request.data.get("score")
-#         percentile = request.data.get("percentile")
-#         max_score = request.GET.get("max_score")
-#         total_candidates = request.GET.get("total_candidates")
-#         caste = request.data.get("caste", None)
-#         disability = request.data.get("disability", None)
-#         slot = request.data.get("slot", None)
-#         difficulty_level = request.data.get("difficulty_level", None)
-#         year = request.data.get("year", None)
+    permission_classes = [ApiKeyPermission]
 
-#         # Ensure max_score and total_candidates are provided
-#         if not max_score or not total_candidates:
-#             return CustomErrorResponse(
-#                 {"message": "max_score and total_candidates are required fields."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
+    def get(self, request, version, **kwargs):
+        try:
+            flow_type = int(request.GET.get("flow_type"))
+            if flow_type == 3:
+                return self.rank_calculation(request)
+            else:
+                return self.rank_predictor_workflow(request)
+        except Exception as e:
+            return CustomErrorResponse(
+                {"message": f"Error occurred: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-#         try:
-#             # Convert max_score and total_candidates to the correct data types
-#             max_score = float(max_score)
-#             total_candidates = int(total_candidates)
+    def rank_calculation(self, request):
+        """
+        Handles rank calculation for flow_type = 3.
+        """
+        try:
+            exam_id = int(request.GET.get("exam_id"))
+            percentile = float(request.GET.get("percentile"))
+            category_id = request.GET.get("category_id")
+            disability_id = request.GET.get("disability_id")
 
-#             # Ensure max_score and total_candidates are positive
-#             if max_score <= 0 or total_candidates <= 0:
-#                 raise ValueError("max_score and total_candidates must be greater than 0.")
-#         except ValueError as e:
-#             return CustomErrorResponse(
-#                 {"message": str(e)},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
+            rp_helper = RPHelper()
+            rank_data = rp_helper.calculate_rank(
+                exam_id=exam_id,
+                percentile=percentile,
+                category_id=category_id,
+                disability_id=disability_id,
+            )
 
-#         rp_helper = RPHelper()
+            formatted_data = {
+                "exam_id": exam_id,
+                "percentile": percentile,
+                "rank_data": rank_data.get("data"),
+            }
 
-#         # Case 1: If the user provides score, calculate percentile
-#         if score is not None:
-#             try:
-#                 # Convert score to float and validate
-#                 score = float(score)
-#                 if score < 0 or score > max_score:
-#                     raise ValueError(f"Score must be between 0 and {max_score}.")
-#             except ValueError as e:
-#                 return CustomErrorResponse(
-#                     {"message": str(e)},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
+            return SuccessResponse(
+                formatted_data,
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return CustomErrorResponse(
+                {"message": f"Error occurred while calculating rank: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-#             # Calculate percentile based on score
-#             percentile = rp_helper.calculate_percentile(score, max_score)
+    def rank_predictor_workflow(self, request):
+        """
+        Handles the rank predictor workflow for other flow types.
+        """
+        try:
+            # Extract parameters
+            
+        
+            CATEGORY_MAP = {
+                2: "General", 
+                3: "OBC", 
+                4: "SC", 
+                5: "ST", 
+                6: "SEBC", 
+                7: "NA", 
+                8: "OE", 
+                9: "EWS"
+            }
+            DISABILITY_MAP = {
+                1: "PWD",  # Person with disability
+                2: "N.A.", # No disability
+                3: "PHV",
+                4: "PHH",
+                5: "PHO",
+                6: "CA",
+                7: "TP",
+                8: "PH1",
+                9: "PH2",
+                10: "PH-AI"
+            }
+            product_id = request.GET.get('product_id')
+            record_id = request.GET.get('id')
+            caste = request.GET.get('category_id', 'General')
+            disability = request.GET.get('disability_id', 'N.A.').lower()
+            slot = request.GET.get('slot', None)
+            score = request.GET.get('score')
 
-#             # Return percentile score
-#             return SuccessResponse(
-#                 {"percentile_score": percentile},
-#                 status=status.HTTP_200_OK
-#             )
+            if not product_id or not product_id.isdigit() or not record_id or not record_id.isdigit():
+                return CustomErrorResponse(
+                    {"message": "product_id and id are required and must be integers"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-#         # Case 2: If the user provides percentile, calculate rank
-#         if percentile is not None:
-#             try:
-#                 # Convert percentile to float and validate
-#                 percentile = float(percentile)
-#                 if percentile < 0 or percentile > 100:
-#                     raise ValueError("Percentile must be between 0 and 100.")
-#             except ValueError as e:
-#                 return CustomErrorResponse(
-#                     {"message": str(e)},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
+            if not score or not score.isdigit():
+                return CustomErrorResponse(
+                    {"message": "score is required and must be an integer"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-#             # Calculate rank based on percentile
-#             rank_data = rp_helper.calculate_category_rank(
-#                 percentile=percentile,
-#                 total_candidates=total_candidates,
-#                 caste=caste,
-#                 disability=disability,
-#                 slot=slot,
-#                 difficulty_level=difficulty_level,
-#                 year=year,
-#             )
+            product_id = int(product_id)
+            record_id = int(record_id)
+            score = float(score)
 
-#             # Add percentile score to the response
-#             rank_data["percentile_score"] = percentile
-#             return SuccessResponse(rank_data, status=status.HTTP_200_OK)
+            rp_helper = RPHelper()
 
-#         # If neither score nor percentile is provided
-#         return CustomErrorResponse(
-#             {"message": "Either score or percentile must be provided."},
-#             status=status.HTTP_400_BAD_REQUEST,
-#         )
+            # Step 1: Fetch session data
+            session_data = rp_helper.get_session_data(product_id, record_id)
+            if not session_data:
+                return SuccessResponse(
+                    f"No session data found for product_id {product_id} and id {record_id}",
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            difficulty = session_data["difficulty"]
+            year = session_data["year"]
+            
+
+            # Step 2: Fetch Input Flow Types
+            input_flow_results = rp_helper.get_input_flow_type(caste, disability, slot, difficulty, year)
+            if not input_flow_results:
+                return SuccessResponse(
+                    {"message": "No input flow type found for the given parameters."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Step 3: Process Input Flow Types to Fetch Mean and SD
+            for result in input_flow_results:
+                combination = result.get("combination", {})
+                product_id = combination.get("product_id")
+                year = combination.get("year")
+                input_flow_type = combination.get("input_flow_type")
+
+                if input_flow_type:
+                    mean, sd = rp_helper.get_mean_sd(product_id, year, input_flow_type)
+                    result.update({"mean": mean, "sd": sd})
+
+            # Step 4: Calculate Z-Score and Fetch Closest Results
+            for result in input_flow_results:
+                mean = result.get("mean")
+                sd = result.get("sd")
+                z_score, closest_result = rp_helper.calculate_z_score_and_fetch_result(score, mean, sd, year)
+                result.update({"z_score": z_score, "closest_result": closest_result})
+
+            # Step 5: Fetch Factors for Closest Results
+            for result in input_flow_results:
+                closest_result = result.get("closest_result")
+                if closest_result:
+                    result_value = closest_result.get("result_value")
+                    result_flow_type = closest_result.get("result_flow_type")
+                    factors = rp_helper.get_factors(product_id, result_flow_type, result_value)
+                    result.update({"factors": factors})
+
+            # Step 6: Fetch Result Details for Input Flow Types
+            for result in input_flow_results:
+                result_flow_type = result.get("closest_result", {}).get("result_flow_type")
+                if result_flow_type:
+                    result_details = rp_helper.get_result_details(result_flow_type)
+                    result.update({"result_details": result_details})
+
+            return SuccessResponse(
+                {"message": "Rank Predictor Workflow executed successfully.", "data": input_flow_results},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return CustomErrorResponse(
+                {"message": f"Error occurred while executing rank predictor workflow: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class FaqSectionAPI(APIView):
+    """
+    API for fetching FAQ section for Result Predictor's input pages.
+    Endpoint : api/<int:version>/rank-predictor/faqs
+    Params : product_id
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse(
+                {"message": "product_id is required and should be an integer value"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        product_id = int(product_id)
+
+        # Fetch FAQ data using the helper
+        rp_helper = RPHelper()
+        faq_data = rp_helper._get_faq_section(product_id=product_id)
+
+        if faq_data:
+            response = {
+                "product_id": product_id,
+                "section_heading": f"{faq_data['display_name']} FAQs",
+                "faqs": faq_data["faqs"],
+            }
+            return SuccessResponse(response, status=status.HTTP_200_OK)
+
+        # No FAQs found for the product
+        return SuccessResponse(
+            {"message": f"No FAQs found for product_id {product_id}"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+        
