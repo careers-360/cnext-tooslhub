@@ -26,14 +26,12 @@ from django.contrib.postgres.aggregates import ArrayAgg
 from multiprocessing import Pool,cpu_count
 
 
-
-
 class PeerComparisonService:
     @classmethod
     def get_peer_comparisons(cls, uid=None):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "peerComparison", user_context.get('domain_id'), user_context.get('education_level')
+            "Peers_Comparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         cached_result = cache.get(cache_key)
         if cached_result:
@@ -64,7 +62,7 @@ class PeerComparisonService:
                         output_field=IntegerField()
                     ),
                     domain_id=F('course_1__collegedomain_course__domain')
-                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 15
+                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 31
             )
 
             num_processes = min(cpu_count(), len(domain_level_combinations))
@@ -103,13 +101,17 @@ class PeerComparisonService:
                 comparison_obj = {
                     "college_1": {
                         "name": college_1.name,
+                        "short_name": college_1.short_name,
                         "logo": CollegeDataHelper.get_college_logo(college_1.id),
-                        "location": CollegeDataHelper.get_location_string(college_1.location)
+                        "location": CollegeDataHelper.get_location_string(college_1.location),
+                        'college_id': comparison['college_id_1']
                     },
                     "college_2": {
                         "name": college_2.name,
+                        "short_name": college_2.short_name,
                         "logo": CollegeDataHelper.get_college_logo(college_2.id),
-                        "location": CollegeDataHelper.get_location_string(college_2.location)
+                        "location": CollegeDataHelper.get_location_string(college_2.location),
+                        "college_id": comparison['college_id_2']
                     },
                     "compare_count": comparison['compare_count'],
                     "college_ids": f"{comparison['college_id_1']},{comparison['college_id_2']}"
@@ -126,7 +128,7 @@ class PeerComparisonService:
                 "Undergraduate": result["Undergraduate"]
             } if user_context.get('education_level') == 2 else result
 
-            cache.set(cache_key, prioritized_result, timeout=3600 * 24 *7)
+            cache.set(cache_key, prioritized_result, timeout=3600 * 24 * 7)
             return prioritized_result
 
         except Exception as e:
@@ -137,6 +139,7 @@ class PeerComparisonService:
                     "exception_type": str(type(e).__name__)
                 }
             }
+
     @staticmethod
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids):
         domain_id = combo['domain_id']
@@ -174,15 +177,8 @@ class PeerComparisonService:
             .order_by('-compare_count')[:10]
         )
 
-        cache.set(cache_key, comparisons, timeout=3600 * 24 * 7)
+        cache.set(cache_key, comparisons, timeout=3600 * 24 * 31)
         return comparisons
-    
-   
-
-
-
-
-
 
 
 

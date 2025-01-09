@@ -15,9 +15,11 @@ urlpatterns = [
     path("api/<int:version>/rank-predictor/related-products", rp_controller.RelatedProductsAPI.as_view(), name='related_products'),
     path("api/<int:version>/rank-predictor/form-submit", rp_controller.UserTrackingAPI.as_view(), name='user_tracking'),
     path("api/<int:version>/rank-predictor", rp_controller.ProductFromAliasAPI.as_view(), name='product_id from alias'),
-    # path(
-    #     "api/<int:version>/rank-predictor/rank-calculation",
-    #     rp_controller.RankCalculatorAPI.as_view(),
-    #     name="rank_calculation",
-    # ),
+    path("api/<int:version>/rank-predictor/rank-predictor", rp_controller.RankPredictorAPI.as_view(), name="rank_predictor"),
+    path(
+        "api/<int:version>/rank-predictor/faqs", 
+        rp_controller.FaqSectionAPI.as_view(), 
+        name="faq_section"
+    ),
+    
 ]
