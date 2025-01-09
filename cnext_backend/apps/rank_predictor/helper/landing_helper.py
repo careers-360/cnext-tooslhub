@@ -1,7 +1,7 @@
 from tools.models import CPProductCampaign, ToolsFAQ
 from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 from django.utils import timezone
@@ -216,26 +216,39 @@ class RPHelper:
         
         exam_domain_education_level = Exam.objects.filter(id=exam_dict['exam']).values('domain_id', 'preferred_education_level_id').first()
 
-        exam_ids_and_logos = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id'])[:4].values('id', 'ecb_logo')
+        ## Limiting for 4 elements
+        exam_ids_and_logos_domain = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id'])[:4].values('id', 'ecb_logo', 'domain')
 
-        # print(f"exam ids {exam_ids_and_logos} type {type(exam_ids_and_logos)} value {[exam['id'] for exam in exam_ids_and_logos]}")
-        exam_logo_mapping = {}
+        # print(f"exam ids {exam_ids_and_logos_domain} type {type(exam_ids_and_logos_domain)} value {[{ 'id': exam['id'] , 'logo': exam['ecb_logo'], 'domain': exam['domain'] } for exam in exam_ids_and_logos_domain]}")
 
-        for exam in exam_ids_and_logos:
-            exam_logo_mapping[exam['id']] = exam['ecb_logo']
-
-        # print(f"exam mapping {exam_logo_mapping}")
-
-        exam_list = [exam['id'] for exam in exam_ids_and_logos]
         product_list = []
+        exam_list = [{ 'id': exam['id'] , 'logo': exam['ecb_logo'], 'domain': exam['domain'] } for exam in exam_ids_and_logos_domain]
 
-        for exam_id in exam_list:
-            # print(f"data {exam_id}")
-            product = CPProductCampaign.objects.filter(exam=exam_id).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year").first()
-            # print(f"product data {product}")
+        for exam in exam_list:
+            ## iteration for only 4 elements 
+            ## TODO: Collect list of ids and get in single query
+            product = CPProductCampaign.objects.filter(exam=exam['id']).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year", "alias").first()
 
             if product != None:
-                product['logo'] = self.exam_logo_base_url+exam_logo_mapping.get(product['exam'], '')
+                product_id = product['id']
+                source = f"result-predictor/{product_id}"
+
+            try:
+                alias = UrlAlias.objects.filter(source=source).first().alias
+            except:
+                print(f"no alias present for alias : {alias}")
+
+            domain_id = exam.get('domain', '')
+
+            if domain_id != None:
+                domain = Domain.objects.filter(id=exam['domain']).first().old_domain_name
+
+            url = f"https://{domain}/{alias}"
+
+            # print(f"product data {product}")
+            if product != None:
+                product['logo'] = self.exam_logo_base_url+exam['logo']
+                product['url'] = url
 
             # print(f"product data {product}")
             product_list.append(product)
