@@ -232,13 +232,13 @@ LOGGING = {
 			'level': 'ERROR',
 			'class': 'django.utils.log.AdminEmailHandler'
 		},
-		'gunicorn': {
-			'level': 'DEBUG',
-			'class': 'logging.handlers.RotatingFileHandler',
-			'formatter': 'verbose',
-			'filename': '/var/log/gunicorn/debug.log',
-			'maxBytes': 1024 * 1024 * 200,  # 100 mb
-		}
+		# 'gunicorn': {
+		# 	'level': 'DEBUG',
+		# 	'class': 'logging.handlers.RotatingFileHandler',
+		# 	'formatter': 'verbose',
+		# 	'filename': '/var/log/gunicorn/debug.log',
+		# 	'maxBytes': 1024 * 1024 * 200,  # 100 mb
+		# }
 	},
 	'loggers': {
 		'django': {
@@ -247,7 +247,7 @@ LOGGING = {
 			'propagate': True,
 		},
 		'custom': {
-			'handlers': ['console','gunicorn'],
+			'handlers': ['console'],
 			'level': 'DEBUG',
 			'propagate': True,
 		},
