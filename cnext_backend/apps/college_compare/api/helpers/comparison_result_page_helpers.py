@@ -2558,7 +2558,7 @@ class ProfileInsightsHelper:
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student_faculty_ratio', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student___faculty__ratio', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
@@ -2581,11 +2581,10 @@ class ProfileInsightsHelper:
                     College.objects.filter(id=college_id)
                     .annotate(
                         students=Coalesce(
-                            Sum(
+                            Max(
                                 Case(
                                     When(
                                         Q(collegeplacement__intake_year=intake_year) &
-                                        Q(collegeplacement__year=latest_year) &
                                         Q(collegeplacement__stream_id=domain_id),
                                         then='collegeplacement__total_students'
                                     ),
@@ -2607,7 +2606,7 @@ class ProfileInsightsHelper:
                 total_faculty += sum(data['faculty'] for data in result)
 
             # Calculate the average student-faculty ratio
-            average_ratio = (total_students / total_faculty * 100) if total_faculty else 0
+            average_ratio = (total_faculty / total_students * 100) if total_students else 0
 
             import time
             current_year = time.localtime().tm_year
@@ -2616,7 +2615,7 @@ class ProfileInsightsHelper:
 
             for idx, data in enumerate(query_result, 1):
                 if data['faculty'] > 0 and data['students'] > 0:
-                    ratio = (data['students'] / data['faculty']) * 100
+                    ratio = (data['faculty'] / data['students']) * 100
                 else:
                     ratio = None
                     visualization_type = "tabular"
@@ -2649,7 +2648,7 @@ class ProfileInsightsHelper:
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student___demographics______', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student____demographics______', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
@@ -2669,13 +2668,12 @@ class ProfileInsightsHelper:
                     CollegePlacement.objects.filter(
                         college_id=college_id,
                         intake_year=intake_year,
-                        year=latest_year,
                         stream_id=domain_id
                     )
                     .values('college_id')
                     .annotate(
-                        total_students=Coalesce(Sum('total_students'), Value(0, output_field=IntegerField())),
-                        outside_state=Coalesce(Sum('outside_state'), Value(0, output_field=IntegerField()))
+                        total_students=Coalesce(Max('total_students'), Value(0, output_field=IntegerField())),
+                        outside_state=Coalesce(Max('outside_state'), Value(0, output_field=IntegerField()))
                     )
                 )
 
@@ -2727,7 +2725,7 @@ class ProfileInsightsHelper:
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'Gender___diversity', '-'.join(map(str, college_ids)), year, intake_year, level
+            'Gender____Diversity', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
@@ -2754,13 +2752,12 @@ class ProfileInsightsHelper:
                     CollegePlacement.objects.filter(
                         college_id=college_id,
                         intake_year=intake_year,
-                        year=latest_year,
                         stream_id=domain_id
                     )
                     .values('college_id')
                     .annotate(
-                        male_students=Coalesce(Sum('male_students'), Value(0, output_field=IntegerField())),
-                        female_students=Coalesce(Sum('female_students'), Value(0, output_field=IntegerField())),
+                        male_students=Coalesce(Max('male_students'), Value(0, output_field=IntegerField())),
+                        female_students=Coalesce(Max('female_students'), Value(0, output_field=IntegerField())),
                         total_students=F('male_students') + F('female_students')
                     )
                 )
@@ -2839,17 +2836,7 @@ class ProfileInsightsHelper:
             result["type"] = visualization_type
             return result
 
-        return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
-
-        
-    
-
-
-
-  
-
-  
-
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 *7)
 
     @staticmethod
     def prepare_profile_insights(
@@ -3122,6 +3109,130 @@ class CollegeAmenitiesHelper:
 
 
 
+
+class ClassProfileAiInsightHelper:
+    API_URL = "https://z7u9qtbmcl.execute-api.ap-south-1.amazonaws.com/DEV/class_profile_insights"
+    
+    @staticmethod
+    def get_cache_key(profile_data: Dict) -> str:
+        """
+        Generate a unique cache key based on the input profile data.
+        
+        Args:
+            profile_data (Dict): Dictionary containing class profile data
+            
+        Returns:
+            str: Unique cache key
+        """
+        data_str = json.dumps(profile_data, sort_keys=True)
+        return f"class_profile_insights_{hash(data_str)}"
+    
+    @staticmethod
+    def get_profile_insights(
+                           data: Dict) -> Optional[Dict]:
+        """
+        Fetch and process class profile insights from the API.
+        
+        Args:
+            year (int): Current year
+            intake_year (int): Year of intake
+            level (int): Level of study
+            data (Dict): Dictionary containing metrics data
+            college_details (list): List of college information
+            
+        Returns:
+            Optional[Dict]: Processed profile insights or None if there's an error
+        """
+        try:
+            # Prepare payload
+            payload = {
+                "p_data": data
+            }
+            
+            # Check cache first
+            cache_key = ClassProfileAiInsightHelper.get_cache_key(payload)
+            cached_result = cache.get(cache_key)
+            
+            if cached_result:
+                return cached_result
+        
+
+
+            headers = {'Content-Type': 'application/json'}
+            
+        
+            response = requests.request(
+                method="GET",
+                url=ClassProfileAiInsightHelper.API_URL,
+                headers=headers,
+                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            )
+            
+            
+            raw_content = response.content.decode('utf-8')
+            response_data = json.loads(raw_content)
+            
+            if not response_data.get("body"):
+                return None
+            
+        
+            if isinstance(response_data["body"], str):
+                body_data = json.loads(response_data["body"])
+            else:
+                body_data = response_data["body"]
+            
+    
+            insights = {
+                "student_faculty_ownership_ratio_difference_from_avg": 
+                    body_data.get("student_faculty_ownership_ratio_difference_from_avg"),
+                "type_of_institute_gender_diversity_difference_from_avg": 
+                    body_data.get("type_of_institute_gender_diversity_difference_from_avg"),
+                "ownership_gender_diversity_difference": 
+                    body_data.get("ownership_gender_diversity_difference")
+            }
+            
+        
+            insights = {k: v if v is not None else "No data available" 
+                      for k, v in insights.items()}
+            
+            cache.set(cache_key, insights, timeout=3600 * 24 * 7)
+            return insights
+            
+        except Exception as e:
+            logger.error(f"Error in get_profile_insights: {str(e)}")
+            return None
+    
+    @staticmethod
+    def format_percentage(value: float) -> str:
+        """
+        Format percentage values consistently.
+        
+        Args:
+            value (float): Percentage value
+            
+        Returns:
+            str: Formatted percentage string
+        """
+        try:
+            return f"{float(value):.2f}%" if value is not None else "NA"
+        except (ValueError, TypeError):
+            return "NA"
+    
+    @staticmethod
+    def format_ratio(value: float) -> str:
+        """
+        Format ratio values consistently.
+        
+        Args:
+            value (float): Ratio value
+            
+        Returns:
+            str: Formatted ratio string
+        """
+        try:
+            return f"{float(value):.2f}" if value is not None else "NA"
+        except (ValueError, TypeError):
+            return "NA"
 
 
 class CollegeReviewsHelper:
