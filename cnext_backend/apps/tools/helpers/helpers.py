@@ -258,11 +258,12 @@ class ToolsHelper():
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
             obj = serializer.save()
+            #TODO verify by sahil
+            product_id = obj.id
+
             if smart_registration:
-                product_id = obj.id
                 created_by = obj.created_by
                 updated_by = obj.updated_by
-
                 existing_records = RpSmartRegistration.objects.filter(product_id=product_id)
                 existing_lookup = {record.field: record for record in existing_records}
 

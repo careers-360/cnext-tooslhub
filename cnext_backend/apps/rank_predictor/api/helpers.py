@@ -1174,6 +1174,9 @@ class RPCmsHelper:
             if not product_id:
                 return False, 'product_id is required'
             
+            if not year:
+                year = datetime.now().year
+
             queryset = TempRpMeritList.objects.filter(
                 product_id=product_id, year=year
             ).values(
@@ -1207,6 +1210,7 @@ class RPCmsHelper:
                     item['result_flow_type'] = result_flow_dict.get(item['result_flow_type'], item['result_flow_type'])
             paginated_data = paginator.get_paginated_response(paginated_results)
             paginated_data['to_graph'] = TempRpMeritSheet.objects.filter(product_id=product_id,year=year).values_list('to_graph',flat=True).first()
+            paginated_data['filtered_year'] = year
             return True, paginated_data
 
         except Exception as e:
