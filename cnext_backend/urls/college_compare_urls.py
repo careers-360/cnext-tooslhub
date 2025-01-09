@@ -89,6 +89,12 @@ urlpatterns = [
         comparison_result_page_controllers.ProfileInsightsView.as_view(),
         name='class-profile-insights-graph'),
 
+    
+    path(f'{compare_prefix}resultPage/class-profile-ai-insights/',
+        comparison_result_page_controllers.classProfileAIInsightsView.as_view(),
+        name='class-profile-ai-insights'),
+
+
 
     path(f'{compare_prefix}resultPage/college-facilities-comparison/',
         comparison_result_page_controllers.CollegeFacilitiesComparisonView.as_view(),
