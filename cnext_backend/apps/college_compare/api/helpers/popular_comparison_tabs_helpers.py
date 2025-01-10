@@ -11,10 +11,6 @@ from django.db import connection, connections
 import hashlib
 import logging
 import time
-import cProfile
-import pstats
-import io
-import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -54,7 +50,7 @@ class BaseComparisonHelper:
 
     @staticmethod
     def _get_base_comparison_query_raw(filter_condition: Q, cache_burst: int = 0) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("base_comparison_query_raw", str(filter_condition))
+        cache_key = CacheHelper.get_cache_key("base_comparison_query", str(filter_condition))
 
         def compute_query():
             sql, params = CollegeCompareData.objects.filter(filter_condition).values(
@@ -121,7 +117,7 @@ class BaseComparisonHelper:
                                     college_id: Optional[int] = None,
                                     cache_burst: int = 0) -> Optional[Dict[str, Any]]:
         cache_key = CacheHelper.get_cache_key(
-            "comparison_data_optimized",
+            "comparison_data",
             comparison['course_1'],
             comparison['course_2'],
             str(extra_data) if extra_data else "",
