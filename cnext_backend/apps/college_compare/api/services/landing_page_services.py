@@ -1,6 +1,4 @@
 
-#landing_page_services.py
-
 from django.db.models import (
     Q, Count, F, Case, When, Value, IntegerField, Avg, Window, Prefetch, 
     FloatField, CharField, Sum, OuterRef, Subquery
@@ -26,16 +24,37 @@ from django.contrib.postgres.aggregates import ArrayAgg
 from multiprocessing import Pool,cpu_count
 
 
+
+class CacheHelper:
+    @staticmethod
+    def get_cache_key(*args):
+        key = '_'.join(str(arg) for arg in args)
+        return hashlib.md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def get_or_set(key, callback, timeout=3600):
+        result = cache.get(key)
+        if result is None:
+            result = callback()
+            cache.set(key, result, timeout)
+        return result
+
+
+
+
+
+
 class PeerComparisonService:
     @classmethod
     def get_peer_comparisons(cls, uid=None):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "Peers_Comparison", user_context.get('domain_id'), user_context.get('education_level')
+            "Peer___Comparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         cached_result = cache.get(cache_key)
         if cached_result:
             return cached_result
+
 
         result = {"Undergraduate": {}, "Postgraduate": {}}
         try:
@@ -43,11 +62,13 @@ class PeerComparisonService:
             user_domain_id = user_context.get('domain_id')
             ordered_domains = sorted(valid_domains, key=lambda domain: domain.id != user_domain_id)
 
+
             valid_course_ids = CacheHelper.get_or_set(
                 "valid_course_ids", lambda: CollegeDomain.objects.filter(
                     status=True, domain__in=valid_domains
                 ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 31
             )
+
 
             domain_level_combinations = CacheHelper.get_or_set(
                 "domain_level_combinations",
@@ -65,6 +86,7 @@ class PeerComparisonService:
                 ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 31
             )
 
+
             num_processes = min(cpu_count(), len(domain_level_combinations))
             with Pool(processes=num_processes) as pool:
                 all_comparisons = pool.map(
@@ -72,22 +94,28 @@ class PeerComparisonService:
                     domain_level_combinations
                 )
 
+
             all_comparisons = [comp for sublist in all_comparisons for comp in sublist]
+
 
             college_ids = {comp['college_id_1'] for comp in all_comparisons}
             college_ids.update(comp['college_id_2'] for comp in all_comparisons)
 
+
             colleges = College.objects.filter(id__in=college_ids, published='published').select_related('location')
             colleges_dict = {college.id: college for college in colleges}
+
 
             domain_names = {
                 domain.id: DomainHelper.format_domain_name(domain.old_domain_name)
                 for domain in ordered_domains
             }
 
+
             for level in ["Undergraduate", "Postgraduate"]:
                 for domain in domain_names.values():
                     result[level][domain] = []
+
 
             for comparison in all_comparisons:
                 domain_name = domain_names.get(comparison['domain_id'])
@@ -120,16 +148,20 @@ class PeerComparisonService:
                     if not any(c['college_ids'] == comparison_obj['college_ids'] for c in result[level_str][domain_name]):
                         result[level_str][domain_name].append(comparison_obj)
 
+
             for level in ["Undergraduate", "Postgraduate"]:
                 result[level] = {domain: comparisons for domain, comparisons in result[level].items() if comparisons}
+
 
             prioritized_result = {
                 "Postgraduate": result["Postgraduate"],
                 "Undergraduate": result["Undergraduate"]
             } if user_context.get('education_level') == 2 else result
 
-            cache.set(cache_key, prioritized_result, timeout=3600 * 24 * 7)
+
+            cache.set(cache_key, prioritized_result, timeout=3600 * 24 * 31)
             return prioritized_result
+
 
         except Exception as e:
             logger.error(f"Error occurred: {str(e)}", exc_info=True)
@@ -140,6 +172,7 @@ class PeerComparisonService:
                 }
             }
 
+
     @staticmethod
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids):
         domain_id = combo['domain_id']
@@ -148,6 +181,7 @@ class PeerComparisonService:
         cached_result = cache.get(cache_key)
         if cached_result:
             return cached_result
+
 
         comparisons = list(
             CollegeCompareData.objects.filter(
@@ -177,8 +211,13 @@ class PeerComparisonService:
             .order_by('-compare_count')[:10]
         )
 
+
         cache.set(cache_key, comparisons, timeout=3600 * 24 * 31)
         return comparisons
+
+
+
+
 
 
 
