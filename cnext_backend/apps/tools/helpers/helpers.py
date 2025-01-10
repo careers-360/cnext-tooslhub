@@ -116,7 +116,7 @@ class ToolsHelper():
         self.current_timestamp = int(time.mktime(t.strptime(t.today().strftime('%d/%m/%Y, %I:%M:%S'), "%d/%m/%Y, %I:%M:%S").timetuple()))
 
     def get_manage_predictor_tools_filter(self):
-        id =  self.request.query_params.get('name')
+        id =  self.request.query_params.get('tools_name')
         domain = self.request.query_params.get('domain')
         tool_type = self.request.query_params.get('tool_type') 
         consumption_type = self.request.query_params.get('consumption_type')
