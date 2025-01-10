@@ -391,5 +391,5 @@ class CMSToolContentAPI(APIView):
             return ErrorResponse("Data not found", status=400)
         instance = self.get_object(product_id)
         helper = ToolsHelper()
-        data = helper.edit_tool_content(img_data = img_data, instance = instance, request_data = data)
+        data = helper.edit_tool_content(img_data = img_data, instance = instance, request_data = data, request = request.data)
         return SuccessResponse(data, status=status.HTTP_200_OK)

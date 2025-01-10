@@ -415,6 +415,7 @@ class ToolsHelper():
             ]
 
     def edit_tool_content(self, *args, **kwargs):
+        request = kwargs.get('request')
         request_data = kwargs.get('request_data')
         instance = kwargs.get('instance')
         img_data = kwargs.get('img_data')
@@ -430,7 +431,12 @@ class ToolsHelper():
                 incoming_ids.add(section_id)
 
                 image_web = img_data.get(f'image_web_{index}')
+                if not image_web:
+                    image_web = request.get(f'image_web_{index}')
+                    
                 image_wap = img_data.get(f'image_wap_{index}')
+                if not image_wap:
+                    image_wap = request.get(f'image_wap_{index}')
 
                 if isinstance(image_web, list) and image_web:
                     image_web = image_web[0]
