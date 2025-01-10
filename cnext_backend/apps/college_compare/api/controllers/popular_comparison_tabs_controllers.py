@@ -18,19 +18,24 @@ logger = logging.getLogger(__name__)
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+
+
 class AllComparisonsView(APIView):
     """
-    All types of comparisons (degree_branch, degree, domain, college)
+    All types of comparisons (degree_branch, degree, domain, college) with cache burst support
     """
     permission_classes = [ApiKeyPermission]
+    
     @extend_schema(
         summary="Get All Popular Comparisons",
         description="Retrieve popular course comparisons for all types: degree_branch, degree, domain, and college.",
         parameters=[
-            OpenApiParameter(name='degree_id', type=int, description='Degree ID (required for degree_branch, degree)', required=False),
-            OpenApiParameter(name='branch_id', type=int, description='Branch ID (required for degree_branch)', required=False),
-            OpenApiParameter(name='domain_id', type=int, description='Domain ID (required for domain comparisons)', required=False),
-            OpenApiParameter(name='college_id', type=int, description='College ID (required for college comparisons)', required=False),
+            OpenApiParameter(name='degree_id', type=int, description='Degree ID (required for degree_branch, degree)', required=True),
+            OpenApiParameter(name='branch_id', type=int, description='Branch ID (required for degree_branch)', required=True),
+            OpenApiParameter(name='domain_id', type=int, description='Domain ID (required for domain comparisons)', required=True),
+            OpenApiParameter(name='college_id', type=int, description='College ID (required for college comparisons)', required=True),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 1 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successful comparison retrieval'),
@@ -41,18 +46,23 @@ class AllComparisonsView(APIView):
     def get(self, request):
         """
         Handle retrieval of popular comparisons for all types.
+        Supports cache bursting via cache_burst parameter.
         """
         try:
+            # Parse query parameters
             degree_id = request.query_params.get('degree_id')
             branch_id = request.query_params.get('branch_id')
             domain_id = request.query_params.get('domain_id')
             college_id = request.query_params.get('college_id')
+            cache_burst = request.query_params.get('cache_burst')
 
+            # Validate and convert parameters
             params = {
                 'degree_id': int(degree_id) if degree_id and degree_id.isdigit() else None,
                 'branch_id': int(branch_id) if branch_id and branch_id.isdigit() else None,
                 'domain_id': int(domain_id) if domain_id and domain_id.isdigit() else None,
                 'college_id': int(college_id) if college_id and college_id.isdigit() else None,
+                'cache_burst': int(cache_burst) if cache_burst and cache_burst.isdigit() else 0
             }
 
             helper = ComparisonHelper()
@@ -60,23 +70,34 @@ class AllComparisonsView(APIView):
             def fetch_comparisons(key, **kwargs):
                 """
                 Helper function to fetch comparisons based on the key.
+                Includes cache_burst parameter in the kwargs.
                 """
-                return key, helper.get_popular_comparisons(key, **kwargs)
+                return key, helper.get_popular_comparisons(
+                    key, 
+                    cache_burst=kwargs.pop('cache_burst', 0),
+                    **kwargs
+                )
 
-          
+            # Initialize thread pool for parallel execution
             tasks = []
             with ThreadPoolExecutor() as executor:
                 if params['degree_id'] and params['branch_id']:
                     tasks.append(executor.submit(fetch_comparisons, 'degree_branch', **params))
-                if params['degree_id'] and params['branch_id']:
                     tasks.append(executor.submit(fetch_comparisons, 'degree', **params))
                 if params['domain_id']:
                     tasks.append(executor.submit(fetch_comparisons, 'domain', **params))
                 if params['college_id']:
                     tasks.append(executor.submit(fetch_comparisons, 'college', **params))
 
-            
-                results = {key: [] for key in ['degree_branch_comparisons', 'degree_comparisons', 'domain_comparisons', 'college_comparisons']}
+                # Initialize results dictionary with empty lists
+                results = {
+                    'degree_branch_comparisons': [],
+                    'degree_comparisons': [],
+                    'domain_comparisons': [],
+                    'college_comparisons': []
+                }
+                
+                # Collect results as they complete
                 for future in as_completed(tasks):
                     key, data = future.result()
                     results[f"{key}_comparisons"] = data

@@ -136,6 +136,7 @@ DATABASES = {
             'PORT': '3306',  # Set to empty string for default.
 			 'OPTIONS': {
             'sql_mode': 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,ONLY_FULL_GROUP_BY',
+			'MAX_CONNECTIONS': 100,
 			
         },
         },
