@@ -22,4 +22,10 @@ urlpatterns = [
         name="faq_section"
     ),
     
+    path(
+    "api/<int:version>/product/details", 
+    rp_controller.ProductDetailsAPI.as_view(), 
+    name="product_details"
+    ),
+    
 ]
