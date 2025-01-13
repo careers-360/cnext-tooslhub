@@ -4,7 +4,7 @@ from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rank_predictor.api.helpers import InputPageStaticHelper
-from rank_predictor.helper.landing_helper import RPHelper
+from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
 
 class HealthCheck(APIView):
 
@@ -511,3 +511,37 @@ class FaqSectionAPI(APIView):
             status=status.HTTP_404_NOT_FOUND,
         )
         
+
+
+class ProductDetailsAPI(APIView):
+    """
+    API for fetching product details from CPProductCampaign table.
+    Endpoint: api/<int:version>/product/details
+    Params: product_id
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse(
+                {"message": "product_id is required and should be an integer value"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        product_id = int(product_id)
+
+        # Fetch product details using helper function
+        product_helper = ProductHelper()
+        product_data = product_helper.get_product_details(product_id=product_id)
+
+        if product_data:
+            return SuccessResponse(product_data, status=status.HTTP_200_OK)
+
+        # No data found for the product
+        return SuccessResponse(
+            {"message": f"No details found for product_id {product_id}"},
+            status=status.HTTP_404_NOT_FOUND,
+        )

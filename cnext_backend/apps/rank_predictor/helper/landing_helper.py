@@ -1,3 +1,4 @@
+from venv import logger
 from tools.models import CPProductCampaign, ToolsFAQ
 from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster
 from wsgiref import validate
@@ -618,3 +619,39 @@ class RPHelper:
 
 
     
+class ProductHelper:
+    def get_product_details(self, product_id=None):
+        """
+        Fetch product details for a specific product ID from CPProductCampaign table.
+
+        :param product_id: ID of the product
+        :return: A dictionary containing product details
+        """
+        if not product_id:
+            return None
+
+        # Fetch product details
+        try:
+            product = CPProductCampaign.objects.filter(id=product_id).values(
+                # "header_section",
+                # "disclaimer",
+                "cp_cta_name",
+                "cp_destination_url",
+                "cp_pitch",
+                "mapped_product_title",
+                "mapped_product_cta_label",
+                "mapped_product_destination_url",
+                "mapped_product_pitch",
+                "promotion_banner_web",
+                "promotion_banner_wap",
+                "banner_destination",
+            ).first()
+
+            if product:
+                return product
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching product details: {e}")
+            return None
+
