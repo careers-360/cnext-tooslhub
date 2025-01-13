@@ -11,6 +11,9 @@ from django.db import connection, connections
 import hashlib
 import logging
 import time
+import cProfile
+import io
+import pstats
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
