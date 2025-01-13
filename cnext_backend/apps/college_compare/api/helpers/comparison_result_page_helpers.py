@@ -1506,7 +1506,7 @@ class FeesHelper:
             logger.error("Invalid course_ids or college_ids provided: course_ids=%s, college_ids=%s", course_ids, college_ids)
             raise ValueError("course_ids and college_ids must be flat lists of integers or strings.")
 
-        cache_key = FeesHelper.get_cache_key('fees____comparisons', '-'.join(map(str, course_ids)), intake_year)
+        cache_key = FeesHelper.get_cache_key('fees_____comparisons', '-'.join(map(str, course_ids)), intake_year)
         def fetch_data():
             try:
                 fee_details = (
