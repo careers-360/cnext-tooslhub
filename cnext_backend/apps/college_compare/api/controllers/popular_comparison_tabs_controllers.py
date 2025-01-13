@@ -32,6 +32,7 @@ class AllComparisonsView(APIView):
         description="Retrieve popular course comparisons for all types: degree_branch, degree, domain, and college.",
         parameters=[
             OpenApiParameter(name='degree_id', type=int, description='Degree ID (required for degree_branch, degree)', required=True),
+            OpenApiParameter(name='course_id', type=int, description='course ID (required for degree_branch)', required=True),
             OpenApiParameter(name='branch_id', type=int, description='Branch ID (required for degree_branch)', required=True),
             OpenApiParameter(name='domain_id', type=int, description='Domain ID (required for domain comparisons)', required=True),
             OpenApiParameter(name='college_id', type=int, description='College ID (required for college comparisons)', required=True),
@@ -51,6 +52,7 @@ class AllComparisonsView(APIView):
         try:
             # Parse query parameters
             degree_id = request.query_params.get('degree_id')
+            course_id = request.query_params.get('course_id')
             branch_id = request.query_params.get('branch_id')
             domain_id = request.query_params.get('domain_id')
             college_id = request.query_params.get('college_id')
@@ -59,6 +61,7 @@ class AllComparisonsView(APIView):
             # Validate and convert parameters
             params = {
                 'degree_id': int(degree_id) if degree_id and degree_id.isdigit() else None,
+                'course_id': int(course_id) if course_id and course_id.isdigit() else None,
                 'branch_id': int(branch_id) if branch_id and branch_id.isdigit() else None,
                 'domain_id': int(domain_id) if domain_id and domain_id.isdigit() else None,
                 'college_id': int(college_id) if college_id and college_id.isdigit() else None,

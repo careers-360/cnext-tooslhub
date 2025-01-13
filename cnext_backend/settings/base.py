@@ -217,14 +217,26 @@ ADMINS = (
 
 MANAGERS = ADMINS
 
-CACHES = {
-	'default': {
-		'BACKEND': 'django_redis.cache.RedisCache',
-		'LOCATION': 'redis://'+ os.getenv('REDIS_HOST','localhost') +':6379',
-		'OPTIONS': {
-			'DB': 2
-		},
-	},
+# CACHES = {
+# 	'default': {
+# 		'BACKEND': 'django_redis.cache.RedisCache',
+# 		'LOCATION': 'redis://'+ os.getenv('REDIS_HOST','localhost') +':6379',
+# 		'OPTIONS': {
+# 			'DB': 2
+# 		},
+# 	},
+# }
+
+CACHES={
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": 'redis://'+ os.getenv('REDIS_HOST','localhost') +':6379',
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+			'DB':2
+        }
+    }
 }
 
 LOGGING = {

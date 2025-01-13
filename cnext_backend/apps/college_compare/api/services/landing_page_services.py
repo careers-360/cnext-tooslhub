@@ -1,7 +1,8 @@
 
+
 from django.db.models import (
     Q, Count, F, Case, When, Value, IntegerField, Avg, Window, Prefetch, 
-    FloatField, CharField, Sum, OuterRef, Subquery
+    FloatField, CharField, Sum, OuterRef, Subquery,Exists
 )
 from django.db.models.functions import Coalesce, RowNumber
 from django.db.models.functions import Coalesce, RowNumber, Concat, Upper, Lower, Substr
@@ -23,6 +24,12 @@ from django.contrib.postgres.aggregates import ArrayAgg
 
 from multiprocessing import Pool,cpu_count
 
+from collections import defaultdict
+from functools import partial
+import hashlib
+from django.conf import settings
+from django.db import connection
+import multiprocessing
 
 
 class CacheHelper:
@@ -38,6 +45,11 @@ class CacheHelper:
             result = callback()
             cache.set(key, result, timeout)
         return result
+
+
+
+
+
 
 
 
@@ -66,7 +78,7 @@ class PeerComparisonService:
             valid_course_ids = CacheHelper.get_or_set(
                 "valid_course_ids", lambda: CollegeDomain.objects.filter(
                     status=True, domain__in=valid_domains
-                ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 31
+                ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 31 *6
             )
 
 
@@ -83,7 +95,7 @@ class PeerComparisonService:
                         output_field=IntegerField()
                     ),
                     domain_id=F('course_1__collegedomain_course__domain')
-                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 31
+                ).values('domain_id', 'level').distinct(), timeout=3600 * 24 * 31 *6
             )
 
 
@@ -210,10 +222,13 @@ class PeerComparisonService:
             .annotate(compare_count=Count('id'))
             .order_by('-compare_count')[:10]
         )
-
-
+        
+        
         cache.set(cache_key, comparisons, timeout=3600 * 24 * 31)
         return comparisons
+
+
+
 
 
 
