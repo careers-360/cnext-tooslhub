@@ -175,14 +175,22 @@ class ComparisonHelper(BaseComparisonHelper):
         elif comparison_type == 'college':
             return Q(course_1__college_id=kwargs['college_id']) | Q(course_2__college_id=kwargs['college_id'])
         return Q()
+    
     def _get_extra_data(self, comparison_type: str, course: Course, **kwargs) -> Dict[str, Any]:
+        
         if comparison_type == 'degree_branch':
+        
             return {
                 "degree_name": course.degree.name if hasattr(course, 'degree') else None,
                 "degree_id": kwargs['degree_id'],
                 "branch_id": kwargs['branch_id'],
                 "branch_name": course.branch.name if hasattr(course, 'branch') else None,
+                "course_name":course.course_name if hasattr(course, 'course_name') else None,
+                
+    
+    
             }
+        
         elif comparison_type == 'degree':
             return {
                 "degree_name": course.degree.name if hasattr(course, 'degree') else None,
