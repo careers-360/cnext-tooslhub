@@ -1956,7 +1956,7 @@ class ClassProfileHelper:
         logger.debug(f"Fetching class profiles for college_ids: {college_ids} with selected domains: {selected_domains}")
 
         cache_key = ClassProfileHelper.get_cache_key(
-            'Class_Profiles', '-'.join(map(str, sorted(college_ids))), year, intake_year, level,selected_domains
+            'Class_____Profiles_new', '-'.join(map(str, sorted(college_ids))), year, intake_year, level,selected_domains
         )
 
         def fetch_data():
@@ -1976,7 +1976,7 @@ class ClassProfileHelper:
                         female_students=Coalesce(Max('collegeplacement__female_students'), Value(0, output_field=IntegerField())),
                         students_outside_state=Coalesce(Max('collegeplacement__outside_state'), Value(0, output_field=IntegerField())),
                         outside_country_student=Coalesce(Max('collegeplacement__outside_country'), Value(0, output_field=IntegerField())),
-                        total_faculty=Coalesce(Sum('total_faculty'), Value(0, output_field=IntegerField())),
+                        total_faculty=Coalesce(Max('total_faculty'), Value(0, output_field=IntegerField())),
                         intake_year=F('collegeplacement__intake_year')
                     )
                 )
@@ -2054,7 +2054,7 @@ class ProfileInsightsHelper:
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student___faculty__ratio', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student___faculty___new', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
@@ -2074,7 +2074,7 @@ class ProfileInsightsHelper:
                     continue
 
                 result = (
-                    College.objects.filter(id=college_id)
+                    College.objects.filter(id=college_id, collegeplacement__levels=level)
                     .annotate(
                         students=Coalesce(
                             Max(
@@ -2090,9 +2090,9 @@ class ProfileInsightsHelper:
                             Value(0, output_field=IntegerField())
                         ),
                         faculty=Coalesce(
-                            F('total_faculty'),
-                            Value(0, output_field=IntegerField())
-                        ),
+                        Max('total_faculty'),  # Added Max() here
+                        Value(0, output_field=IntegerField())
+                    ),
                     )
                     .values('id', 'students', 'faculty')
                 )
@@ -2144,7 +2144,7 @@ class ProfileInsightsHelper:
         ProfileInsightsHelper.validate_selected_domains(selected_domains)
 
         cache_key = ProfileInsightsHelper.get_cache_key(
-            'student____demographics______', '-'.join(map(str, college_ids)), year, intake_year, level
+            'student____demographics_new', '-'.join(map(str, college_ids)), year, intake_year, level
         )
 
         def fetch_data():
@@ -2164,7 +2164,8 @@ class ProfileInsightsHelper:
                     CollegePlacement.objects.filter(
                         college_id=college_id,
                         intake_year=intake_year,
-                        stream_id=domain_id
+                        stream_id=domain_id,
+                      levels=level,
                     )
                     .values('college_id')
                     .annotate(
@@ -2248,7 +2249,8 @@ class ProfileInsightsHelper:
                     CollegePlacement.objects.filter(
                         college_id=college_id,
                         intake_year=intake_year,
-                        stream_id=domain_id
+                        stream_id=domain_id,
+                        levels=level
                     )
                     .values('college_id')
                     .annotate(
