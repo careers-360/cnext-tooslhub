@@ -7,6 +7,7 @@ from django.core.cache import cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 from typing import List, Dict, Any
+from ..helpers.landing_page_helpers import DomainHelper
 
 
 class CacheHelper:
@@ -167,10 +168,13 @@ class NoDataAvailableError(Exception):
     pass
 
 
+
+
 class SummaryComparisonService:
+
     @staticmethod
-    def get_summary_comparison(college_ids: List[int], course_ids: List[int]) -> List[Dict]:
-        cache_key = CacheHelper.get_cache_key("Summary_h1_tag", college_ids, course_ids)
+    def get_summary_comparison(college_ids: List[int], course_ids: List[int]) -> Dict:
+        cache_key = CacheHelper.get_cache_key("summary_h1_tag", college_ids, course_ids)
 
         def fetch_data():
             results = list(Course.objects.filter(
@@ -178,28 +182,36 @@ class SummaryComparisonService:
                 id__in=course_ids,
                 status=True
             ).select_related(
-                'college__data'
+                'college__data',
+                'college',
+                'degree',
+                "degree_domain"
             ).values(
                 'id',
                 'course_name',
                 college_name=F('college__name'),
                 rating=F('college__data__rating'),
                 total_reviews=F('college__data__total_review'),
-                college_id_alias=F('college_id')
+                college_id_alias=F('college_id'),
+                college_short_name=F('college__short_name'),
+                degree_name=F('degree__name'),
+                degree_domain_name=F('degree_domain__name')
             ))
 
-        
             if not results:
                 raise NoDataAvailableError("No data available for the provided college IDs and course IDs.")
 
             college_data = {
                 college.get('college_id_alias'): {
                     "course_name": college.get('course_name', 'NA'),
-                    "rating": college.get('rating', 'NA'),
-                    "total_reviews": college.get('total_reviews', 'NA'),
+                    "rating": college.get('rating', 'NA').split("/")[0].strip() if college.get('rating', 'NA') != 'NA' else 'NA',
+                    "total_reviews": college.get('total_reviews', 'NA').split("Reviews")[0].strip() if college.get('total_reviews', 'NA') != 'NA' else 'NA',
                     "college_name": college.get('college_name', 'NA'),
                     "course_id": college.get('id', 'NA'),
-                    "college_id": college.get('college_id_alias', 'NA')
+                    "college_id": college.get('college_id_alias', 'NA'),
+                    "college_short_name": college.get('college_short_name', 'NA'),
+                    "degree_name": college.get('degree_name', 'NA'),
+                    "domain_name": DomainHelper.format_domain_name(college.get('degree_domain_name', 'NA'))
                 }
                 for college in results
             }
@@ -216,13 +228,49 @@ class SummaryComparisonService:
                         "total_reviews": "NA",
                         "college_name": "NA",
                         "course_id": "NA",
-                        "college_id": college_id
+                        "college_id": college_id,
+                        "college_short_name": "NA",
+                        "degree_name": "NA",
+                        "domain_name": "NA"
                     }
 
-            return result_dict
+            comparison_string = ""
+            h1_tag = ""
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400 *7)
+            college_count = len(college_ids)
+            if college_count >= 2:
+                college1 = result_dict.get("college_1",{})
+                college2 = result_dict.get("college_2",{})
+                college3 = result_dict.get("college_3",{})
 
+                if college_count == 2 and college1 and college2:
+                    h1_tag = f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} and {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} on the basis of their Fees, Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by {college1.get('total_reviews', 'NA')} genuine verified students while {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by {college2.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all course parameters and download free information on  Admission details, Placement report, Eligibility criteria, etc."
+                    comparison_string = f"{college1.get('college_short_name', 'NA')} vs {college2.get('college_short_name', 'NA')}"
+                elif college_count == 3 and college1 and college2 and college3:
+                    h1_tag = f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')}, {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} and {college3.get('college_short_name', 'NA')} {college3.get('course_name', 'NA')} on the basis of their Fees, Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by {college1.get('total_reviews', 'NA')} genuine verified students, {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by {college2.get('total_reviews', 'NA')} students and {college3.get('college_short_name', 'NA')} {college3.get('course_name', 'NA')} is rated {college3.get('rating', 'NA')} out of 5 by {college3.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all course parameters and download free information on Admission details, Placement report, Eligibility criteria, etc."
+                    comparison_string = f"{college1.get('college_short_name', 'NA')} vs {college2.get('college_short_name', 'NA')} vs {college3.get('college_short_name', 'NA')}"
+                else:
+                     h1_tag = "NA"
+                     comparison_string = "NA"
+
+            elif college_count == 1:
+                college1 = result_dict.get("college_1",{})
+                if college1:
+                    h1_tag = f"{college1.get('college_name', 'NA')} {college1.get('course_name', 'NA')} details"
+                    comparison_string = f"{college1.get('college_short_name', 'NA')}"
+                else:
+                     h1_tag = "NA"
+                     comparison_string = "NA"
+            else:
+                h1_tag = "NA"
+                comparison_string = "NA"
+
+            return {
+                "h1_tag": h1_tag,
+                "comparison_string": comparison_string,
+            }
+
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400 * 7)
 
 
 
