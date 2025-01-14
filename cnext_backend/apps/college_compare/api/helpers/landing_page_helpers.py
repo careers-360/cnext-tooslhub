@@ -12,6 +12,7 @@ from django.core.cache import cache
 from django.db.models import Prefetch
 from functools import lru_cache
 import hashlib
+from typing import Optional
 
 
 class CacheHelper:
@@ -43,6 +44,25 @@ class CollegeDataHelper:
                 return 'https://cache.careers360.mobi/media/default_logo.jpg'
         
         return CacheHelper.get_or_set(cache_key, fetch_logo, 86400)  
+    
+
+    @staticmethod
+    def get_college_name(college_id: int, cache_burst: int = 0) -> Optional[str]:
+        """Get college name with caching."""
+        cache_key = CacheHelper.get_cache_key("college__short_name", college_id)
+        
+        def fetch_college_name():
+            try:
+                college = College.objects.only('short_name').get(id=college_id)
+                return college.short_name
+            except College.DoesNotExist:
+                return None
+        
+        return CacheHelper.get_or_set(
+            key=cache_key,
+            callback=fetch_college_name,
+            timeout=3600 * 24 * 7,  # Cache for 7 days
+        )
 
     @staticmethod
     def get_college_details(college_ids):
