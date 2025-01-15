@@ -306,15 +306,13 @@ class ToolsHelper():
     def get_binary_image(self, request_data, instance):
         image_fields = ['image', 'secondary_image','gif','promotion_banner_web','promotion_banner_wap']
         for field in image_fields:
-            if request_data.get(field):
+            if field in request_data:
                 field_data = request_data.get(field)
                 if field_data:
                     if isinstance(field_data, str):# Check if the field data contains url and replace it with image field
                         request_data[field] = getattr(instance, field)
                 else:
                     request_data[field] = None
-            # else: # Check if the field data is None (explicitly removing the image)
-            #     request_data[field] = None
         return request_data
 
     def prepare_meta_data(self, request_data, instance, **kwargs):
