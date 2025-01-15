@@ -1,6 +1,3 @@
-
-
-
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from django.db.models import QuerySet, Count, Q, Prefetch, F
 from django.core.cache import cache
@@ -15,17 +12,18 @@ import cProfile
 import io
 import pstats
 from concurrent.futures import ThreadPoolExecutor
-
+from functools import lru_cache
 logger = logging.getLogger(__name__)
-
 
 
 class CacheHelper:
     """Helper class to manage caching."""
+
     @staticmethod
     def get_cache_key(*args: Any) -> str:
         key = '_'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
+
     @staticmethod
     def get_or_set(key: str, callback: Callable[[], Any], timeout: int = 3600, cache_burst: int = 0) -> Any:
         """Get or set cached value."""
@@ -44,12 +42,11 @@ class CacheHelper:
             return result
         except Exception:
             return callback()
- 
 
 
 class BaseComparisonHelper:
     """Base class for comparison helpers."""
-
+    
     @staticmethod
     def _get_base_comparison_query_raw(filter_condition: Q, cache_burst: int = 0, **kwargs) -> List[Dict]:
         """Get base comparison query results. Added **kwargs to handle extra parameters."""
@@ -62,18 +59,18 @@ class BaseComparisonHelper:
                 compare_count=Count('id'),
                 course_1_college_id=F('course_1__college_id'),
                 course_2_college_id=F('course_2__college_id'),
-            ).order_by('-compare_count')[:200].query.sql_with_params()
+            ).order_by('-compare_count')[:20].query.sql_with_params()
             with connections['default'].cursor() as cursor:
                 cursor.execute(sql, params)
                 columns = [col[0] for col in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        return CacheHelper.get_or_set(key=cache_key, callback=compute_query, timeout=3600*24*7, cache_burst=cache_burst)
 
+        return CacheHelper.get_or_set(key=cache_key, callback=compute_query, timeout=3600*24*7, cache_burst=cache_burst)
 
     @staticmethod
     def _get_course_data(course: Course, cache_burst: int = 0) -> Dict[str, Any]:
         cache_key = CacheHelper.get_cache_key("course_data", course.id)
+
         def compute_data():
             return {
                 "name": course.college.name,
@@ -84,22 +81,25 @@ class BaseComparisonHelper:
                 "course_id": course.id,
                 "short_name": course.college.short_name or 'NA',
                 "degree_id": course.degree_id,
-                "degree_name": course.degree.name,
+                "degree_name": getattr(course.degree, 'name', None),
                 "level": course.level,
                 "domain_id": course.degree_domain.id if hasattr(course, 'degree_domain') and course.degree_domain else None,
                 "branch_id": course.branch_id
             }
-        return CacheHelper.get_or_set(cache_key, compute_data, cache_burst=cache_burst)
+        return CacheHelper.get_or_set(cache_key, compute_data,timeout=3600*24*7)
+
     @staticmethod
     def _prepare_course_data_bulk(courses: QuerySet, cache_burst: int = 0) -> Dict[int, Dict[str, Any]]:
         """Prepares course data in bulk."""
         course_data = {}
         for course in courses:
-            course_data[course.id] = BaseComparisonHelper._get_course_data(course, cache_burst)
+            course_data[course.id] = BaseComparisonHelper._get_course_data(course)
         return course_data
+
     @staticmethod
     def _get_courses_by_ids(course_ids: Set[int], cache_burst: int = 0) -> Dict[int, Course]:
         cache_key = CacheHelper.get_cache_key("courses_by_ids_optimized", "_".join(map(str, sorted(course_ids))))
+
         def fetch_courses():
             courses = Course.objects.filter(id__in=course_ids).select_related(
                 'degree', 'branch', 'college', 'college__location', 'degree_domain'
@@ -108,7 +108,9 @@ class BaseComparisonHelper:
                 'college__name', 'college__short_name', 'college__id', 'college__location', 'degree_domain__id', 'degree_domain__name'
             )
             return {course.id: course for course in courses}
-        return CacheHelper.get_or_set(cache_key, fetch_courses, cache_burst=cache_burst, timeout=300)
+
+        return CacheHelper.get_or_set(cache_key, fetch_courses, timeout=3600*24*7)
+
     @classmethod
     def _transform_comparison_data(cls, comparison: Dict, course_map: Dict[int, Course],
                                     course_data_map: Dict[int, Dict[str, Any]],
@@ -122,6 +124,7 @@ class BaseComparisonHelper:
             str(extra_data) if extra_data else "",
             str(college_id) if college_id else ""
         )
+
         def compute_data():
             course_1 = course_map.get(comparison['course_1'])
             course_2 = course_map.get(comparison['course_2'])
@@ -134,11 +137,11 @@ class BaseComparisonHelper:
                 if course_1.college.id != college_id:
                     college_data_1, college_data_2 = college_data_2, college_data_1
                     course_1, course_2 = course_2, course_1
-                
+
                 elif course_2.college.id == college_id:
                     college_data_2, college_data_1 = college_data_1, college_data_2
                     course_2, course_1 = course_1, course_2
-            
+
             result = {
                 "college_1": college_data_1,
                 "college_2": college_data_2,
@@ -149,7 +152,9 @@ class BaseComparisonHelper:
             if extra_data:
                 result.update(extra_data)
             return result
-        return CacheHelper.get_or_set(cache_key, compute_data, cache_burst=cache_burst, timeout=3600*24*7)
+
+        return CacheHelper.get_or_set(cache_key, compute_data, timeout=3600*24*7)
+
 
 class ComparisonHelper(BaseComparisonHelper):
     COMPARISON_TYPES = {
@@ -158,12 +163,13 @@ class ComparisonHelper(BaseComparisonHelper):
         'domain': 'domain_comparisons',
         'college': 'college_comparisons'
     }
+    @lru_cache(maxsize=1028)
     def _filter_condition(self, comparison_type: str, **kwargs) -> Q:
         if comparison_type == 'degree_branch':
             return (
-                Q(course_1__degree__id=kwargs['degree_id']) &
-                    Q(course_1__branch__id=kwargs['branch_id']) &
-                    Q(course_2__branch__id=kwargs['branch_id']) & Q(course_1__id=kwargs['course_id'])  )
+                Q(course_1__degree__id=kwargs['degree_id']) & Q(course_2__degree__id=kwargs['degree_id']) &
+                Q(course_1__branch__id=kwargs['branch_id']) &
+                Q(course_2__branch__id=kwargs['branch_id']) & Q(course_1__id=kwargs['course_id']))
         elif comparison_type == 'domain':
             return (Q(course_1__degree_domain__id=kwargs['domain_id']) &
                     Q(course_2__degree_domain__id=kwargs['domain_id']) &
@@ -175,22 +181,19 @@ class ComparisonHelper(BaseComparisonHelper):
         elif comparison_type == 'college':
             return Q(course_1__college_id=kwargs['college_id']) | Q(course_2__college_id=kwargs['college_id'])
         return Q()
-    
+
+    @lru_cache(maxsize=1028)
     def _get_extra_data(self, comparison_type: str, course: Course, **kwargs) -> Dict[str, Any]:
-        
+
         if comparison_type == 'degree_branch':
-        
             return {
                 "degree_name": course.degree.name if hasattr(course, 'degree') else None,
                 "degree_id": kwargs['degree_id'],
                 "branch_id": kwargs['branch_id'],
                 "branch_name": course.branch.name if hasattr(course, 'branch') else None,
-                "course_name":course.course_name if hasattr(course, 'course_name') else None,
-                
-    
-    
+                "course_name": course.course_name if hasattr(course, 'course_name') else None,
             }
-        
+
         elif comparison_type == 'degree':
             return {
                 "degree_name": course.degree.name if hasattr(course, 'degree') else None,
@@ -202,7 +205,6 @@ class ComparisonHelper(BaseComparisonHelper):
                 "domain_id": kwargs['domain_id'],
             }
         elif comparison_type == 'college':
-
             if college_id := kwargs.get('college_id'):
                 try:
                     college_name = CollegeDataHelper.get_college_name(college_id)
@@ -210,7 +212,7 @@ class ComparisonHelper(BaseComparisonHelper):
                 except College.DoesNotExist:
                     logger.error(f"College with id {college_id} not found")
                     return {"college_name": None}
-            
+
         return {}
     def _process_comparison(self, comparison: Dict, course_map: Dict[int, Course],
                                     course_data_map: Dict[int, Dict[str, Any]],
@@ -223,12 +225,11 @@ class ComparisonHelper(BaseComparisonHelper):
             return None
         return self._transform_comparison_data(comparison, course_map, course_data_map, extra_data,
                                                 college_id=college_id, cache_burst=cache_burst)
-    
 
     def get_popular_comparisons(self, comparison_type: str, cache_burst: int = 0, **kwargs) -> List[Dict[str, Any]]:
         if comparison_type not in self.COMPARISON_TYPES:
             return []
-        
+
         cache_key = CacheHelper.get_cache_key(
             self.COMPARISON_TYPES[comparison_type],
             *[str(value) for value in kwargs.values()]
@@ -239,23 +240,21 @@ class ComparisonHelper(BaseComparisonHelper):
             pr.enable()
             start_time = time.time()
 
-        
             cached_result = cache.get(cache_key)
             if cached_result:
                 logger.info(f"get_popular_comparisons - Cache hit for key: {cache_key}")
                 return cached_result
 
-      
             filter_condition = self._filter_condition(comparison_type, **kwargs)
-           
-            query_kwargs = {'cache_burst': cache_burst} 
+
+            query_kwargs = {'cache_burst': cache_burst}
             compare_data = self._get_base_comparison_query_raw(filter_condition, **query_kwargs)
 
             if not compare_data:
                 logger.info(f"get_popular_comparisons - No compare data found.")
                 return []
 
-            # Process course IDs and get course data
+
             course_ids = set()
             for comp in compare_data:
                 course_ids.add(comp['course_1'])
@@ -265,7 +264,7 @@ class ComparisonHelper(BaseComparisonHelper):
             courses = [course for course_id, course in course_map.items()]
             course_data_map = self._prepare_course_data_bulk(courses, cache_burst=cache_burst)
 
-            # Process comparisons
+
             results = []
             processed_pairs = set()
             comparison_args = []
@@ -277,23 +276,22 @@ class ComparisonHelper(BaseComparisonHelper):
                 processed_pairs.add(pair_key)
                 extra_data = self._get_extra_data(comparison_type, course_map.get(comparison['course_1']), **kwargs)
                 comparison_args.append((comparison, course_map, course_data_map, extra_data, kwargs.get('college_id'), cache_burst))
-            
-            # Use ThreadPoolExecutor for parallel processing
+
+
             num_comparisons = len(comparison_args)
-            max_workers = min(32, num_comparisons or 1)
+            max_workers = min(32, num_comparisons or 8)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 processed_results = list(executor.map(lambda args: self._process_comparison(*args), comparison_args))
-            
-            # Filter and limit results
+
             results = [result for result in processed_results if result][:10]
 
-            # Log performance metrics and cache results
+
             end_time = time.time()
             logger.info(f"get_popular_comparisons - Total time: {end_time - start_time:.4f} seconds")
-            cache.set(cache_key, results, timeout=300)
+            cache.set(cache_key, results, timeout=3600*24*7)
             logger.info(f"get_popular_comparisons - Cached result for key: {cache_key}")
 
-            # Profile results
+
             pr.disable()
             s = io.StringIO()
             sortby = pstats.SortKey.CUMULATIVE
@@ -303,4 +301,4 @@ class ComparisonHelper(BaseComparisonHelper):
 
             return results
 
-        return CacheHelper.get_or_set(cache_key, fetch_comparisons, timeout=3600 * 24, cache_burst=cache_burst)
+        return CacheHelper.get_or_set(cache_key, fetch_comparisons, timeout=3600 * 24*7, cache_burst=cache_burst)

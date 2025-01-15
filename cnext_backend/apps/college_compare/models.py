@@ -387,7 +387,8 @@ class Course(models.Model):
         indexes = [
             models.Index(fields=['degree', 'branch', 'college', 'status']),
             models.Index(fields=['degree_domain']),
-            models.Index(fields=['degree_domain','level'])
+            models.Index(fields=['degree_domain','level']),
+            
         ]
 
     def __str__(self):
