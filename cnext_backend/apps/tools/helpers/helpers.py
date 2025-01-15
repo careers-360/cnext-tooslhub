@@ -313,8 +313,8 @@ class ToolsHelper():
                         request_data[field] = getattr(instance, field)
                 else:
                     request_data[field] = None
-            else: # Check if the field data is None (explicitly removing the image)
-                request_data[field] = None
+            # else: # Check if the field data is None (explicitly removing the image)
+            #     request_data[field] = None
         return request_data
 
     def prepare_meta_data(self, request_data, instance, **kwargs):
