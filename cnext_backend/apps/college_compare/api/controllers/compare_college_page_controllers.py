@@ -24,6 +24,7 @@ class CollegeDropdownView(APIView):
             OpenApiParameter(name='search_input', type=str, description='Search string to filter colleges', required=False),
             OpenApiParameter(name='uid', type=int, description='User ID to fetch domain-specific college data', required=False),
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=False),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved colleges dropdown'),
@@ -34,6 +35,7 @@ class CollegeDropdownView(APIView):
         search_input = request.query_params.get('search_input')
         uid = request.query_params.get('uid')
         college_ids = request.query_params.get('college_ids')
+        cache_burst = request.query_params.get('cache_burst')
 
         uid = int(uid) if uid else None
 
@@ -51,7 +53,8 @@ class CollegeDropdownView(APIView):
                 search_input=search_input, 
                 country_id=1, 
                 uid=uid, 
-                college_ids=college_ids_list
+                college_ids=college_ids_list,
+                cache_burst=int(cache_burst)
             )
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except Exception as e:
@@ -65,6 +68,7 @@ class DegreeDropdownView(APIView):
         description="Retrieve a list of degrees available in a specific college.",
         parameters=[
             OpenApiParameter(name='college_id', type=int, description='ID of the college', required=True),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved degrees dropdown'),
@@ -74,12 +78,13 @@ class DegreeDropdownView(APIView):
     )
     def get(self, request):
         college_id = request.query_params.get('college_id')
+        cache_burst = request.query_params.get('cache_burst')
 
         try:
             if not college_id or not college_id.isdigit():
                 raise ValidationError("Invalid college_id parameter")
 
-            result = DropdownService.get_degrees_dropdown(int(college_id))
+            result = DropdownService.get_degrees_dropdown(int(college_id),int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -97,6 +102,7 @@ class CourseDropdownView(APIView):
         parameters=[
             OpenApiParameter(name='college_id', type=int, description='ID of the college', required=True),
             OpenApiParameter(name='degree_id', type=int, description='ID of the degree', required=True),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved courses dropdown'),
@@ -107,12 +113,13 @@ class CourseDropdownView(APIView):
     def get(self, request):
         college_id = request.query_params.get('college_id')
         degree_id = request.query_params.get('degree_id')
+        cache_burst = request.query_params.get('cache_burst')
 
         try:
             if not college_id or not college_id.isdigit() or not degree_id or not degree_id.isdigit():
                 raise ValidationError("Invalid college_id or degree_id parameter")
 
-            result = DropdownService.get_courses_dropdown(int(college_id), int(degree_id))
+            result = DropdownService.get_courses_dropdown(int(college_id), int(degree_id),int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -130,6 +137,7 @@ class SummaryComparisonView(APIView):
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs', required=True),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved summary comparison'),
@@ -141,6 +149,7 @@ class SummaryComparisonView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
+        cache_burst = request.query_params.get('cache_burst')
 
         try:
             if not college_ids or not course_ids:
@@ -149,7 +158,7 @@ class SummaryComparisonView(APIView):
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
             course_ids_list = [int(csid) for csid in course_ids.split(',')]
 
-            result = SummaryComparisonService.get_summary_comparison(college_ids_list, course_ids_list)
+            result = SummaryComparisonService.get_summary_comparison(college_ids_list, course_ids_list,int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -169,6 +178,7 @@ class QuickFactsView(APIView):
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs', required=True),
+             OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved quick facts'),
@@ -180,6 +190,7 @@ class QuickFactsView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
+        cache_burst = request.query_params.get('cache_burst')
 
         try:
             if not college_ids or not course_ids:
@@ -188,7 +199,7 @@ class QuickFactsView(APIView):
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
             course_ids_list = [int(csid) for csid in course_ids.split(',')]
 
-            result = QuickFactsService.get_quick_facts(college_ids_list, course_ids_list)
+            result = QuickFactsService.get_quick_facts(college_ids_list, course_ids_list,int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -209,6 +220,7 @@ class CardDisplayServiceView(APIView):
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs', required=True),
+             OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved card display details'),
@@ -219,6 +231,7 @@ class CardDisplayServiceView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
+        cache_burst = request.query_params.get('cache_burst')
 
         try:
             if not college_ids or not course_ids:
@@ -227,7 +240,7 @@ class CardDisplayServiceView(APIView):
             college_ids_list = list(map(int, college_ids.split(',')))
             course_ids_list = list(map(int, course_ids.split(',')))
 
-            result = CardDisplayService.get_card_display_details(college_ids_list, course_ids_list)
+            result = CardDisplayService.get_card_display_details(college_ids_list, course_ids_list,int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")

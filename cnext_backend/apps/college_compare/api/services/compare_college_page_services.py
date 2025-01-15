@@ -1,12 +1,14 @@
+
+
 from functools import lru_cache
-from college_compare.models import College, Degree, Course, Branch, SocialMediaGallery
+from college_compare.models import College, Degree, Course, Branch, SocialMediaGallery,Domain
 from college_compare.api.helpers.landing_page_helpers  import UserContextHelper
 from django.db.models import Q, F, Count, Value, CharField
 from django.db.models.functions import Concat
 from django.core.cache import cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from ..helpers.landing_page_helpers import DomainHelper
 
 
@@ -14,25 +16,37 @@ class CacheHelper:
     CACHE_VERSION = 1
 
     @staticmethod
-    def get_cache_key(*args, prefix=""):
+    def get_cache_key(*args: Any, prefix: str = "") -> str:
         """Optimized cache key generation with versioning"""
         key = f"{prefix}_v{CacheHelper.CACHE_VERSION}_" + '_'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
-    @lru_cache(maxsize=100)
-    def get_or_set(key: str, callback, timeout=3600):
-        result = cache.get(key)
-        if result is None:
-            result = callback()
-            cache.set(key, result, timeout)
-        return result
+    def get_or_set(key: str, callback: Callable[[], Any], timeout: int = 3600, cache_burst: int = 0) -> Any:
+        """Get or set cached value."""
+        try:
+            if cache_burst == 1:
+                cache.delete(key)
+                result = callback()
+                if result is not None:
+                    cache.set(key, result, timeout)
+                return result
+
+            result = cache.get(key)
+            if result is None:
+                result = callback()
+                if result is not None:
+                    cache.set(key, result, timeout)
+            return result
+        except Exception:
+            return callback()
+
 
 class DropdownService:
     PUBLISHED_FILTER = Q(published='published', status=True)
 
     @staticmethod
-    def get_colleges_dropdown(search_input: str = None, country_id: int = 1, uid: int = None, college_ids: List[int] = None) -> List[Dict]:
+    def get_colleges_dropdown(search_input: str = None, country_id: int = 1, uid: int = None, college_ids: List[int] = None, cache_burst: int = 0) -> List[Dict]:
         print(f"DropdownService Input: search_input={search_input}, country_id={country_id}, uid={uid}, college_ids={college_ids}")
 
         if college_ids is not None and not isinstance(college_ids, list):
@@ -79,7 +93,6 @@ class DropdownService:
 
             return UserContextHelper.get_top_compared_colleges(1, 1)
 
-       
         prefix = "DropDown_Default_" 
         if search_input and uid and college_ids:
             prefix = f"Dropdown_search_{search_input}_Exclude__{'_'.join(map(str, college_ids))}"
@@ -95,11 +108,11 @@ class DropdownService:
             prefix = f"DropDown_Colleges_{'_'.join(map(str, college_ids))}"
 
         cache_key = CacheHelper.get_cache_key("colleges__v1__", country_id, prefix=prefix)
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400, cache_burst=cache_burst)
    
 
     @staticmethod
-    def get_degrees_dropdown(college_id: int, country_id: int = 1) -> List[Dict]:
+    def get_degrees_dropdown(college_id: int, country_id: int = 1, cache_burst: int = 0) -> List[Dict]:
         """Fetch degrees for dropdown with caching."""
         cache_key = CacheHelper.get_cache_key("degree", college_id, country_id, prefix="dropdown")
 
@@ -110,10 +123,10 @@ class DropdownService:
                 published='published'  
             ).distinct().only('id', 'name').values('id', 'name'))
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400, cache_burst=cache_burst)
 
     @staticmethod
-    def get_courses_dropdown(college_id: int, degree_id: int) -> List[Dict]:
+    def get_courses_dropdown(college_id: int, degree_id: int, cache_burst: int = 0) -> List[Dict]:
         """
         Retrieve a dropdown list of courses with relevant details.
 
@@ -136,8 +149,7 @@ class DropdownService:
             .values('id', 'course_name', 'branch_id', 'level', 'degree_domain')
             )
 
-       
-        courses = CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400)
+        courses = CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400, cache_burst=cache_burst)
         
         return courses
 
@@ -158,23 +170,16 @@ class ParallelService:
         return results
 
 
-
-
-
-
-
 class NoDataAvailableError(Exception):
     """Custom exception to indicate no data is available."""
     pass
 
 
-
-
 class SummaryComparisonService:
-
     @staticmethod
-    def get_summary_comparison(college_ids: List[int], course_ids: List[int]) -> Dict:
-        cache_key = CacheHelper.get_cache_key("summary_h1_tag", college_ids, course_ids)
+    def get_summary_comparison(college_ids: List[int], course_ids: List[int], cache_burst: int = 0) -> Dict:
+        cache_key = CacheHelper.get_cache_key("summary__h1_tag", college_ids, course_ids)
+        print(cache_burst)
 
         def fetch_data():
             results = list(Course.objects.filter(
@@ -189,98 +194,112 @@ class SummaryComparisonService:
             ).values(
                 'id',
                 'course_name',
-                college_name=F('college__name'),
-                rating=F('college__data__rating'),
-                total_reviews=F('college__data__total_review'),
-                college_id_alias=F('college_id'),
-                college_short_name=F('college__short_name'),
-                degree_name=F('degree__name'),
-                degree_domain_name=F('degree_domain__name')
+                'college__name',
+                'college__data__rating',
+                'college__data__total_review',
+                'college_id',
+                'college__short_name',
+                'degree__name',
+                'degree_domain__name'
             ))
 
             if not results:
                 raise NoDataAvailableError("No data available for the provided college IDs and course IDs.")
 
             college_data = {
-                college.get('college_id_alias'): {
+                college['college_id']: {
                     "course_name": college.get('course_name', 'NA'),
-                    "rating": college.get('rating', 'NA').split("/")[0].strip() if college.get('rating', 'NA') != 'NA' else 'NA',
-                    "total_reviews": college.get('total_reviews', 'NA').split("Reviews")[0].strip() if college.get('total_reviews', 'NA') != 'NA' else 'NA',
-                    "college_name": college.get('college_name', 'NA'),
+                    "rating": college.get('college__data__rating', 'NA').split("/")[0].strip() if college.get('college__data__rating', 'NA') != 'NA' else 'NA',
+                    "total_reviews": college.get('college__data__total_review', 'NA').split("Reviews")[0].strip() if college.get('college__data__total_review', 'NA') != 'NA' else 'NA',
+                    "college_name": college.get('college__name', 'NA'),
                     "course_id": college.get('id', 'NA'),
-                    "college_id": college.get('college_id_alias', 'NA'),
-                    "college_short_name": college.get('college_short_name', 'NA'),
-                    "degree_name": college.get('degree_name', 'NA'),
-                    "domain_name": DomainHelper.format_domain_name(college.get('degree_domain_name', 'NA'))
+                    "college_id": college.get('college_id', 'NA'),
+                    "college_short_name": college.get('college__short_name', 'NA'),
+                    "degree_name": college.get('degree__name', 'NA'),
+                    "domain_name": DomainHelper.format_domain_name(college.get('degree_domain__name', 'NA'))
                 }
                 for college in results
             }
 
-            result_dict = {}
-            for i, college_id in enumerate(college_ids, 1):
-                key = f"college_{i}"
-                if college_id in college_data:
-                    result_dict[key] = college_data[college_id]
-                else:
-                    result_dict[key] = {
-                        "course_name": "NA",
-                        "rating": "NA",
-                        "total_reviews": "NA",
-                        "college_name": "NA",
-                        "course_id": "NA",
-                        "college_id": college_id,
-                        "college_short_name": "NA",
-                        "degree_name": "NA",
-                        "domain_name": "NA"
-                    }
-
-            comparison_string = ""
-            h1_tag = ""
+            result_dict = {
+                f"college_{i}": college_data.get(college_id, {
+                    "course_name": "NA",
+                    "rating": "NA",
+                    "total_reviews": "NA",
+                    "college_name": "NA",
+                    "course_id": "NA",
+                    "college_id": college_id,
+                    "college_short_name": "NA",
+                    "degree_name": "NA",
+                    "domain_name": "NA"
+                })
+                for i, college_id in enumerate(college_ids, 1)
+            }
 
             college_count = len(college_ids)
+            h1_tag = "NA"
+            comparison_string = "NA"
+
             if college_count >= 2:
-                college1 = result_dict.get("college_1",{})
-                college2 = result_dict.get("college_2",{})
-                college3 = result_dict.get("college_3",{})
+                college1 = result_dict.get("college_1", {})
+                college2 = result_dict.get("college_2", {})
+                college3 = result_dict.get("college_3", {})
 
                 if college_count == 2 and college1 and college2:
-                    h1_tag = f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} and {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} on the basis of their Fees, Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by {college1.get('total_reviews', 'NA')} genuine verified students while {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by {college2.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all course parameters and download free information on  Admission details, Placement report, Eligibility criteria, etc."
+                    h1_tag = (
+                        f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} and "
+                        f"{college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} on the basis of their Fees, "
+                        f"Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} "
+                        f"{college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by "
+                        f"{college1.get('total_reviews', 'NA')} genuine verified students while {college2.get('college_short_name', 'NA')} "
+                        f"{college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by "
+                        f"{college2.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all "
+                        f"course parameters and download free information on  Admission details, Placement report, Eligibility criteria, etc."
+                    )
                     comparison_string = f"{college1.get('college_short_name', 'NA')} vs {college2.get('college_short_name', 'NA')}"
+
                 elif college_count == 3 and college1 and college2 and college3:
-                    h1_tag = f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')}, {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} and {college3.get('college_short_name', 'NA')} {college3.get('course_name', 'NA')} on the basis of their Fees, Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by {college1.get('total_reviews', 'NA')} genuine verified students, {college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by {college2.get('total_reviews', 'NA')} students and {college3.get('college_short_name', 'NA')} {college3.get('course_name', 'NA')} is rated {college3.get('rating', 'NA')} out of 5 by {college3.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all course parameters and download free information on Admission details, Placement report, Eligibility criteria, etc."
+                    h1_tag = (
+                        f"Compare {college1.get('college_short_name', 'NA')} {college1.get('course_name', 'NA')}, "
+                        f"{college2.get('college_short_name', 'NA')} {college2.get('course_name', 'NA')} and "
+                        f"{college3.get('college_short_name', 'NA')} {college3.get('course_name', 'NA')} on the basis of their Fees, "
+                        f"Placements, Cut Off, Reviews, Seats, Courses, and other details. {college1.get('college_short_name', 'NA')} "
+                        f"{college1.get('course_name', 'NA')} is rated {college1.get('rating', 'NA')} out of 5 by "
+                        f"{college1.get('total_reviews', 'NA')} genuine verified students, {college2.get('college_short_name', 'NA')} "
+                        f"{college2.get('course_name', 'NA')} is rated {college2.get('rating', 'NA')} out of 5 by "
+                        f"{college2.get('total_reviews', 'NA')} students and {college3.get('college_short_name', 'NA')} "
+                        f"{college3.get('course_name', 'NA')} is rated {college3.get('rating', 'NA')} out of 5 by "
+                        f"{college3.get('total_reviews', 'NA')} students at Careers360. Explore Careers360 for detailed comparison on all "
+                        f"course parameters and download free information on Admission details, Placement report, Eligibility criteria, etc."
+                    )
                     comparison_string = f"{college1.get('college_short_name', 'NA')} vs {college2.get('college_short_name', 'NA')} vs {college3.get('college_short_name', 'NA')}"
-                else:
-                     h1_tag = "NA"
-                     comparison_string = "NA"
 
             elif college_count == 1:
-                college1 = result_dict.get("college_1",{})
+                college1 = result_dict.get("college_1", {})
                 if college1:
                     h1_tag = f"{college1.get('college_name', 'NA')} {college1.get('course_name', 'NA')} details"
                     comparison_string = f"{college1.get('college_short_name', 'NA')}"
-                else:
-                     h1_tag = "NA"
-                     comparison_string = "NA"
-            else:
-                h1_tag = "NA"
-                comparison_string = "NA"
 
             return {
                 "h1_tag": h1_tag,
                 "comparison_string": comparison_string,
             }
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400 * 7)
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=86400 * 7, cache_burst=cache_burst)
+
+
+
 
 
 
 class QuickFactsService:
     @staticmethod
-    def get_quick_facts(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
+    def get_quick_facts(college_ids: List[int], course_ids: List[int], cache_burst: int = 0) -> Dict[str, Dict]:
         cache_key = CacheHelper.get_cache_key("quick_facts", college_ids, course_ids)
 
         def fetch_data():
             try:
+                # Fetch courses and related data
                 courses = Course.objects.filter(
                     college_id__in=college_ids,
                     id__in=course_ids,
@@ -299,27 +318,32 @@ class QuickFactsService:
                     'college__entity_reference__short_name'
                 )
 
+                # Create a dictionary for faster lookups
+                course_map = {course.college_id: course for course in courses}
+
+                # Fetch course counts
                 course_counts = {}
                 counts = Course.objects.filter(
                     college_id__in=college_ids,
                     status=True
                 ).values('college_id', 'degree_id').annotate(count=Count('id'))
+
                 for count in counts:
                     key = (count['college_id'], count['degree_id'])
                     course_counts[key] = count['count']
 
                 results = {}
-                all_na = True  
+                all_na = True
 
                 for idx, college_id in enumerate(college_ids, start=1):
-                    matching_course = next(
-                        (course for course in courses if course.college_id == college_id), None
-                    )
                     key = f"college_{idx}"
+                    matching_course = course_map.get(college_id)
+
                     if matching_course:
-                        all_na = False  
+                        all_na = False
                         college = matching_course.college
                         count_key = (college.id, matching_course.degree_id)
+
                         results[key] = {
                             'college_id': college.id,
                             'college_name': college.name,
@@ -352,25 +376,26 @@ class QuickFactsService:
                             'total_courses_offered': 0
                         }
 
-                if all_na: 
+                if all_na:
                     raise NoDataAvailableError("No data available for the provided college IDs.")
 
                 return results
 
             except NoDataAvailableError as e:
                 print(f"Error: {e}")
-                raise  
+                raise
 
             except Exception as e:
                 print(f"Error in fetching quick facts: {e}")
                 return {}
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600*24*7)
-
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600 * 24 * 7, cache_burst=cache_burst)
+    
+    
 class CardDisplayService:
     @staticmethod
-    def get_card_display_details(college_ids: List[int], course_ids: List[int]) -> Dict[str, Dict]:
-        cache_key = CacheHelper.get_cache_key("cards_display_v1", college_ids, course_ids)
+    def get_card_display_details(college_ids: List[int], course_ids: List[int], cache_burst: int = 0) -> Dict[str, Dict]:
+        cache_key = CacheHelper.get_cache_key("cards_display_v4", college_ids, course_ids)
 
         def fetch_logo(college_id):
             """Fetch logo for a single college."""
@@ -422,4 +447,5 @@ class CardDisplayService:
                     }
             return results
 
-        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600)
+        return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600, cache_burst=cache_burst)
+
