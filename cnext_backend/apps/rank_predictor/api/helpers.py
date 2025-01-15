@@ -1,5 +1,6 @@
 import csv
 import requests
+import chardet
 import io
 import threading
 from collections import defaultdict
@@ -973,22 +974,20 @@ class RPCmsHelper:
         selected_year = request.POST.get('year')
         product_id = request.POST.get('product_id')
         user_id = request.POST.get('uid')
+
         if not file:
             return False, {"error": "No file provided"}
-        
         if not selected_year:
             return False, {"error": "year key is missing in params"}
-        
         if not product_id:
             return False, {"error": "product_id key is missing in params"}
-    
         if not user_id:
             return False, {"error": "uid key is missing in params"}
 
         # File validation
         file_extension = file.name.split('.')[-1].lower()
         if file_extension != 'csv':
-            return  False, {"error": "Unsupported file format. Only .csv is allowed."}
+            return False, {"error": "Unsupported file format. Only .csv is allowed."}
 
         expected_columns = [
             'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
@@ -996,39 +995,45 @@ class RPCmsHelper:
         ]
 
         try:
-            # Read and process the CSV file
-            decoded_file = file.read().decode('utf-8').splitlines()
+            # Detect file encoding
+            raw_data = file.read()
+            detected_encoding = chardet.detect(raw_data)['encoding']
+            if not detected_encoding:
+                return False, {"error": "Unable to detect file encoding. Please save the file in UTF-8 format."}
+
+            # Decode file content
+            decoded_file = raw_data.decode(detected_encoding).splitlines()
             reader = csv.reader(decoded_file)
             rows = list(reader)
             headers = [header.strip() for header in rows[0]]
+
+            # Normalize headers (fix issues like +AF8- to _)
+            headers = [header.replace('+AF8-', '_') for header in headers]
 
             # Validate required columns
             missing_columns = [col for col in expected_columns if col not in headers]
             if missing_columns:
                 return False, {"error": f"Missing columns: {', '.join(missing_columns)}"}
 
-            # Validate year column
-            year_index = headers.index('year')
-            product_id_index = headers.index('product_id')
-            # Validate 'year' column matches selected year and is unique
-            year_values = []
-            product_id_values = []
-            for row in rows[1:]:
-                if len(row) > year_index:
-                    year_value = str(row[year_index]).strip()
-                    year_values.append(year_value)
-                    if year_value != str(selected_year):
-                        return False, {"error": "Sheet year does not match the selected year."}
-            
-                if len(row) > product_id_index:
-                    product_id_value = str(row[product_id_index]).strip()
-                    product_id_values.append(product_id_value)
-                    if product_id_value != str(product_id):
-                        return False, {"error": "Sheet Product ID does not match the selected Product ID."}
+            # Validate rows
+            for index, row in enumerate(rows[1:], start=2):
+                if len(row) < len(headers):
+                    return False, {"error": f"Row {index} has missing values."}
+                row_data = dict(zip(headers, row))
 
-            if len(set(year_values)) > 1:
-                return False, {"error": "Year is not unique in the merit list."}
-            TempRpMeritSheet.objects.filter(product_id = product_id,year = selected_year).delete()
+                # Check mandatory fields
+                for field in ['product_id','input_flow_type', 'input', 'result', 'result_flow_type', 'year']:
+                    if not row_data.get(field):
+                        return False, {"error": f"Missing value for '{field}' in row {index}."}
+
+                # Validate year and product_id
+                if row_data['year'].strip() != str(selected_year):
+                    return False, {"error": f"Row {index}: Year does not match the selected year."}
+                if row_data['product_id'].strip() != str(product_id):
+                    return False, {"error": f"Row {index}: Product ID does not match the selected Product ID."}
+
+            TempRpMeritSheet.objects.filter(product_id=product_id, year=selected_year).delete()
+
             # Save metadata in TempRpMeritSheet
             TempRpMeritSheet.objects.create(
                 product_id=product_id,
@@ -1037,14 +1042,14 @@ class RPCmsHelper:
                 created_by=user_id,
                 updated_by=user_id,
                 created=now(),
-                updated=now()  # TODO remove it later 
+                updated=now()  # TODO remove it later
             )
 
             return True, "File validated and uploaded successfully."
 
         except Exception as e:
-            return False, str(e)
-        
+            return False, {"error": f"An error occurred: {str(e)}"}
+
     def upload_merit_list(self, request):
         product_id = request.data.get('product_id')
         year = request.data.get('year')
