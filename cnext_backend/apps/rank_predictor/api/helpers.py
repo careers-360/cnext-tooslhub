@@ -1009,14 +1009,22 @@ class RPCmsHelper:
 
             # Validate year column
             year_index = headers.index('year')
+            product_id_index = headers.index('product_id')
             # Validate 'year' column matches selected year and is unique
             year_values = []
+            product_id_values = []
             for row in rows[1:]:
                 if len(row) > year_index:
                     year_value = str(row[year_index]).strip()
                     year_values.append(year_value)
                     if year_value != str(selected_year):
                         return False, {"error": "Sheet year does not match the selected year."}
+            
+                if len(row) > product_id_index:
+                    product_id_value = str(row[product_id_index]).strip()
+                    product_id_values.append(product_id_value)
+                    if product_id_value != str(product_id):
+                        return False, {"error": "Sheet Product ID does not match the selected Product ID."}
 
             if len(set(year_values)) > 1:
                 return False, {"error": "Year is not unique in the merit list."}
