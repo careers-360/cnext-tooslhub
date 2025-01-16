@@ -1077,9 +1077,6 @@ class RPCmsHelper:
             # Delete existing records for the product_id and year
             TempRpMeritList.objects.filter(product_id=product_id, year=year).delete()
 
-            # Fetch all input_flow_type instances to map them
-            input_flow_type_map = {str(obj.id): obj for obj in RpInputFlowMaster.objects.all()}
-
             # Group data by input_flow_type
             input_data = defaultdict(list)
             for row in reader:
@@ -1103,14 +1100,13 @@ class RPCmsHelper:
 
             # Insert data into TempRpMeanSd
             for input_flow_type, stats in stats_data.items():
-                input_flow_type_instance = input_flow_type_map.get(input_flow_type)
-                if not input_flow_type_instance:
+                if not input_flow_type:
                     return False, f"Invalid input_flow_type: {input_flow_type}."
 
                 TempRpMeanSd.objects.update_or_create(
                     product_id=product_id,
                     year=year,
-                    input_flow_type=input_flow_type_instance,
+                    input_flow_type_id=input_flow_type,
                     defaults={
                         'sheet_mean': stats['mean'],
                         'sheet_sd': stats['sd'],
