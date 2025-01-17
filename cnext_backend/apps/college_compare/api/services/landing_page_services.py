@@ -32,6 +32,8 @@ from django.db import connection
 import multiprocessing
 
 
+
+
 class CacheHelper:
     @staticmethod
     def get_cache_key(*args):
@@ -237,7 +239,7 @@ class PeerComparisonService:
 
 
 class TopCollegesCoursesService:
-    BATCH_SIZE = 5000
+    BATCH_SIZE = 1000
     CACHE_TIMEOUT = 3600 * 168
     MAX_WORKERS = 10
 
@@ -246,7 +248,7 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v8_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v14_{user_context.get('domain_id')}"
 
             if cached := cache.get(cache_key):
                 return cached
@@ -276,7 +278,7 @@ class TopCollegesCoursesService:
             domain_id = user_context.get('domain_id')
             
         
-            cache_key = f"top_colleges_v7_{domain_id}"
+            cache_key = f"top_colleges_v14_{domain_id}"
 
             if cached := cache.get(cache_key):
                 return cached
@@ -332,7 +334,7 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v7_{domain_id}"
+            cache_key = f"top_courses_v14_{domain_id}"
 
             if cached := cache.get(cache_key):
                 return cached
@@ -401,6 +403,7 @@ class TopCollegesCoursesService:
         except Exception as e:
             logger.error(f"Error processing college {college.id}: {str(e)}")
             return {}
+
 
     @staticmethod
     def _process_course(course: Course) -> Dict:
