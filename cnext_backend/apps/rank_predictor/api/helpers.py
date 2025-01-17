@@ -1023,7 +1023,8 @@ class RPCmsHelper:
 
                 # Check mandatory fields
                 for field in ['product_id','input_flow_type', 'input', 'result', 'result_flow_type', 'year']:
-                    if not row_data.get(field):
+                    value = row_data.get(field)
+                    if value is None or str(value).strip() == "":
                         return False, {"error": f"Missing value for '{field}' in row {index}."}
 
                 # Validate data types
@@ -1204,15 +1205,16 @@ class RPCmsHelper:
             items_on_page = int(request.query_params.get('page_size', 30))
             product_id = request.query_params.get('product_id')
             year = request.query_params.get('year')
-            queryset = TempRpMeritList.objects.filter(product_id=product_id)
 
             if not product_id:
                 return False, 'product_id is required'
             
             if not year:
-                year = queryset.aggregate(latest_year=Max('year'))['latest_year']
+                year = datetime.now().year
 
-            queryset = queryset.filter(year=year).values(
+            queryset = TempRpMeritList.objects.filter(
+                product_id=product_id, year=year
+            ).values(
                 'caste', 'disability', 'slot', 'difficulty_level', 
                 'input_flow_type', 'input_value', 'z_score', 
                 'result_flow_type', 'result_value', 'year'
