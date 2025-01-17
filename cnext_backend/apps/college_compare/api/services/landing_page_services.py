@@ -417,7 +417,10 @@ class TopCollegesCoursesService:
                 'college_logo':  CollegeDataHelper.get_college_logo(course.college.id),
                 'total_comparisons': course.total_comparisons,
                 'degree_name': course.degree.name if course.degree else 'NA',
-                'degree_id': course.degree.id if course.degree else None
+                'degree_id': course.degree.id if course.degree else None,
+                "level":course.level,
+                "degree_domain":course.degree_domain.id if course.degree_domain else 'NA'
+
             }
         except Exception as e:
             logger.error(f"Error processing course {course.id}: {str(e)}")
