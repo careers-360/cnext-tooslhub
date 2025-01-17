@@ -1033,8 +1033,12 @@ class RPCmsHelper:
                         'input_flow_type', 'input', 'result_flow_type', 'year'
                     ]
                     for field in int_fields:
-                        if field in row_data and row_data[field].strip():
-                            int(row_data[field])  # Check if it can be converted to int
+                        try:
+                            if field in row_data and row_data[field].strip():
+                                int(row_data[field])  # Check if it can be converted to int
+                        except ValueError:
+                            raise ValueError(f"Invalid value for '{field}' in row {index}: {row_data[field]}")
+
 
                     if 'result' in row_data and row_data['result'].strip():
                         # Check if result can be float or int
