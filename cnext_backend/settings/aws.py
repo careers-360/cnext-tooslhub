@@ -12,7 +12,7 @@ AWS_HEADERS = {  # see http://developer.yahoo.com/performance/rules.html#expires
 }
 
 AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=6912000',
+    'CacheControl': 'no-cache, no-store, must-revalidate',
 }
 #AWS_QUERYSTRING_AUTH = False
 #AWS_S3_SECURE_URLS = True
