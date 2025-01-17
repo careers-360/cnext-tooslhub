@@ -21,12 +21,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 
+
 class AllComparisonsView(APIView):
     """
     All types of comparisons (degree_branch, degree, domain, college) with cache burst support
     """
     permission_classes = [ApiKeyPermission]
-    
+
     @extend_schema(
         summary="Get All Popular Comparisons",
         description="Retrieve popular course comparisons for all types: degree_branch, degree, domain, and college.",
@@ -36,7 +37,7 @@ class AllComparisonsView(APIView):
             OpenApiParameter(name='branch_id', type=int, description='Branch ID (required for degree_branch)', required=True),
             OpenApiParameter(name='domain_id', type=int, description='Domain ID (required for domain comparisons)', required=True),
             OpenApiParameter(name='college_id', type=int, description='College ID (required for college comparisons)', required=True),
-            OpenApiParameter(name='cache_burst', type=int, description='Set to 1 to bypass cache and recompute results', required=False),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successful comparison retrieval'),
@@ -50,7 +51,7 @@ class AllComparisonsView(APIView):
         Supports cache bursting via cache_burst parameter.
         """
         try:
-            # Parse query parameters
+            
             degree_id = request.query_params.get('degree_id')
             course_id = request.query_params.get('course_id')
             branch_id = request.query_params.get('branch_id')
@@ -58,7 +59,6 @@ class AllComparisonsView(APIView):
             college_id = request.query_params.get('college_id')
             cache_burst = request.query_params.get('cache_burst')
 
-            # Validate and convert parameters
             params = {
                 'degree_id': int(degree_id) if degree_id and degree_id.isdigit() else None,
                 'course_id': int(course_id) if course_id and course_id.isdigit() else None,
@@ -76,12 +76,12 @@ class AllComparisonsView(APIView):
                 Includes cache_burst parameter in the kwargs.
                 """
                 return key, helper.get_popular_comparisons(
-                    key, 
+                    key,
                     cache_burst=kwargs.pop('cache_burst', 0),
                     **kwargs
                 )
 
-            # Initialize thread pool for parallel execution
+
             tasks = []
             with ThreadPoolExecutor() as executor:
                 if params['degree_id'] and params['branch_id']:
@@ -92,18 +92,23 @@ class AllComparisonsView(APIView):
                 if params['college_id']:
                     tasks.append(executor.submit(fetch_comparisons, 'college', **params))
 
-                # Initialize results dictionary with empty lists
-                results = {
-                    'degree_branch_comparisons': [],
-                    'degree_comparisons': [],
-                    'domain_comparisons': [],
-                    'college_comparisons': []
-                }
-                
-                # Collect results as they complete
+  
+                results = {}
+
                 for future in as_completed(tasks):
                     key, data = future.result()
-                    results[f"{key}_comparisons"] = data
+                    
+                    if data and isinstance(data, list) and len(data) > 0:
+                        if key == 'degree_branch':
+                            results[data[0].get('course_name', 'unknown_course')] = data
+                        elif key == 'degree':
+                            results[data[0].get('degree_name', 'unknown_degree')] = data
+                        elif key == 'domain':
+                            results[data[0].get('domain_name', 'unknown_domain')] = data
+                        elif key == 'college':
+                             results[data[0].get('college_name', 'unknown_college')] = data
+                    else:
+                        results[f"unknown_{key}_comparisons"] = data  
 
             return SuccessResponse(results, status=status.HTTP_200_OK)
 

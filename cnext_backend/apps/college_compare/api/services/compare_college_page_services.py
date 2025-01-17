@@ -417,7 +417,7 @@ class CardDisplayService:
                 id__in=course_ids,
                 status=True
             ).values(
-                'id', 'course_name', 'college_id', 'college__name'
+                'id', 'course_name', 'college_id', 'college__name',"college__short_name"
             )
 
             # Prepare results in the order of college_ids
@@ -434,7 +434,8 @@ class CardDisplayService:
                         'course_name': matching_course['course_name'],
                         'college_id': matching_course['college_id'],
                         'college_name': matching_course['college__name'],
-                        'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else ''
+                        'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else '',
+                        "college_short_name":matching_course['college__short_name'],
                     }
                 else:
                 
@@ -443,7 +444,8 @@ class CardDisplayService:
                         'course_name': 'NA',
                         'college_id': college_id,
                         'college_name': 'NA',
-                        'logo': ''
+                        'logo': 'NA',
+                        "college_short_name":'NA'
                     }
             return results
 
