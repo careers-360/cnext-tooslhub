@@ -35,7 +35,7 @@ class CollegeDropdownView(APIView):
         search_input = request.query_params.get('search_input')
         uid = request.query_params.get('uid')
         college_ids = request.query_params.get('college_ids')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         uid = int(uid) if uid else None
 
@@ -78,7 +78,7 @@ class DegreeDropdownView(APIView):
     )
     def get(self, request):
         college_id = request.query_params.get('college_id')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
             if not college_id or not college_id.isdigit():
@@ -113,7 +113,7 @@ class CourseDropdownView(APIView):
     def get(self, request):
         college_id = request.query_params.get('college_id')
         degree_id = request.query_params.get('degree_id')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
             if not college_id or not college_id.isdigit() or not degree_id or not degree_id.isdigit():
@@ -149,7 +149,7 @@ class SummaryComparisonView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
             if not college_ids or not course_ids:
@@ -190,7 +190,7 @@ class QuickFactsView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
             if not college_ids or not course_ids:
@@ -231,7 +231,7 @@ class CardDisplayServiceView(APIView):
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
         course_ids = request.query_params.get('course_ids')
-        cache_burst = request.query_params.get('cache_burst')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
             if not college_ids or not course_ids:

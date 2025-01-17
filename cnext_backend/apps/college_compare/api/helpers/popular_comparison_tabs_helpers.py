@@ -163,24 +163,49 @@ class ComparisonHelper(BaseComparisonHelper):
         'domain': 'domain_comparisons',
         'college': 'college_comparisons'
     }
+
+
     @lru_cache(maxsize=1028)
+        
     def _filter_condition(self, comparison_type: str, **kwargs) -> Q:
         if comparison_type == 'degree_branch':
-            return (
-                Q(course_1__degree__id=kwargs['degree_id']) & Q(course_2__degree__id=kwargs['degree_id']) &
-                Q(course_1__branch__id=kwargs['branch_id']) &
-                Q(course_2__branch__id=kwargs['branch_id']) & Q(course_1__id=kwargs['course_id']))
+            exact_course_condition = Q(course_1__id=kwargs['course_id'])
+
+            # Count exact matches
+            exact_match_count = CollegeCompareData.objects.filter(exact_course_condition).count()
+
+            # If exact matches are sufficient, return only the exact condition
+            if exact_match_count >= 10:
+                return exact_course_condition
+
+            # Otherwise, include the fallback condition
+            fallback_condition = (
+                Q(course_1__id=kwargs['course_id']) |  # Either match the exact course
+                (
+                    Q(course_1__degree__id=kwargs['degree_id']) & 
+                    Q(course_2__degree__id=kwargs['degree_id']) &
+                    Q(course_1__branch__id=kwargs['branch_id']) &
+                    Q(course_2__branch__id=kwargs['branch_id'])
+                )
+            )
+            return fallback_condition
+
         elif comparison_type == 'domain':
             return (Q(course_1__degree_domain__id=kwargs['domain_id']) &
                     Q(course_2__degree_domain__id=kwargs['domain_id']) &
                     ~Q(course_1__degree__id=kwargs.get('degree_id', 0)) &
                     ~Q(course_2__degree__id=kwargs.get('degree_id', 0)))
+
         elif comparison_type == 'degree':
             return Q(course_1__degree__id=kwargs['degree_id']) & Q(course_2__degree__id=kwargs['degree_id']) & \
-                   ~Q(course_1__branch__id=kwargs.get('branch_id', 0)) & ~Q(course_2__branch__id=kwargs.get('branch_id', 0))
+                ~Q(course_1__branch__id=kwargs.get('branch_id', 0)) & ~Q(course_2__branch__id=kwargs.get('branch_id', 0))
+
         elif comparison_type == 'college':
             return Q(course_1__college_id=kwargs['college_id']) | Q(course_2__college_id=kwargs['college_id'])
+
         return Q()
+
+  
 
     @lru_cache(maxsize=1028)
     def _get_extra_data(self, comparison_type: str, course: Course, **kwargs) -> Dict[str, Any]:
@@ -298,6 +323,8 @@ class ComparisonHelper(BaseComparisonHelper):
             ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
             ps.print_stats()
             logger.info(f"Profiling Results:\n{s.getvalue()}")
+
+            
 
             return results
 
