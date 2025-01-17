@@ -1026,6 +1026,27 @@ class RPCmsHelper:
                     if not row_data.get(field):
                         return False, {"error": f"Missing value for '{field}' in row {index}."}
 
+                # Validate data types
+                try:
+                    int_fields = [
+                        'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
+                        'input_flow_type', 'input', 'result_flow_type', 'year'
+                    ]
+                    for field in int_fields:
+                        if field in row_data and row_data[field].strip():
+                            int(row_data[field])  # Check if it can be converted to int
+
+                    if 'result' in row_data and row_data['result'].strip():
+                        # Check if result can be float or int
+                        try:
+                            float(row_data['result'])  # Attempt to convert to float
+                        except ValueError:
+                            raise ValueError(f"Invalid value for 'result' in row {index}: {row_data['result']}")
+
+                except ValueError as e:
+                    return False, {"error": f"Row {index}: Invalid data type for field. {str(e)}"}
+
+
                 # Validate year and product_id
                 if row_data['year'].strip() != str(selected_year):
                     return False, {"error": f"Row {index}: Year does not match the selected year."}
