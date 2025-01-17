@@ -1026,6 +1026,31 @@ class RPCmsHelper:
                     if not row_data.get(field):
                         return False, {"error": f"Missing value for '{field}' in row {index}."}
 
+                # Validate data types
+                try:
+                    int_fields = [
+                        'product_id', 'caste', 'disability', 'slot', 'difficulty_level',
+                        'input_flow_type', 'input', 'result_flow_type', 'year'
+                    ]
+                    for field in int_fields:
+                        try:
+                            if field in row_data and row_data[field].strip():
+                                int(row_data[field])  # Check if it can be converted to int
+                        except ValueError:
+                            raise ValueError(f"Invalid value for '{field}' in row {index}: {row_data[field]}")
+
+
+                    if 'result' in row_data and row_data['result'].strip():
+                        # Check if result can be float or int
+                        try:
+                            float(row_data['result'])  # Attempt to convert to float
+                        except ValueError:
+                            raise ValueError(f"Invalid value for 'result' in row {index}: {row_data['result']}")
+
+                except ValueError as e:
+                    return False, {"error": f"Row {index}: Invalid data type for field. {str(e)}"}
+
+
                 # Validate year and product_id
                 if row_data['year'].strip() != str(selected_year):
                     return False, {"error": f"Row {index}: Year does not match the selected year."}
@@ -1138,10 +1163,10 @@ class RPCmsHelper:
                 merit_list_entries.append(TempRpMeritList(
                     product_id=row['product_id'],
                     year=row['year'],
-                    caste=row.get('caste'),
-                    disability=row.get('disability'),
-                    slot=row.get('slot'),
-                    difficulty_level=row.get('difficulty_level'),
+                    caste=row.get('caste') if row.get('caste') and row.get('caste').strip() else None,
+                    disability=row.get('disability') if row.get('disability') and row.get('disability').strip() else None,
+                    slot=row.get('slot') if row.get('slot') and row.get('slot').strip() else None,
+                    difficulty_level=row.get('difficulty_level') if row.get('difficulty_level') and row.get('difficulty_level').strip() else None,
                     input_flow_type=input_flow_type,
                     input_value=input_value,
                     z_score=zscore,
