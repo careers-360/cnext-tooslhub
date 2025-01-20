@@ -1213,7 +1213,7 @@ class RPCmsHelper:
             if not year:
                 year = queryset.aggregate(latest_year=Max('year'))['latest_year']
 
-            queryset = TempRpMeritList.objects.filter(year=year).values(
+            queryset = queryset.filter(year=year).values(
                 'caste', 'disability', 'slot', 'difficulty_level', 
                 'input_flow_type', 'input_value', 'z_score', 
                 'result_flow_type', 'result_value', 'year'
