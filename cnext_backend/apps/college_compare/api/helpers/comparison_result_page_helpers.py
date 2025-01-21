@@ -1877,44 +1877,175 @@ class FeesHelper:
 
 
 
-class FeesAiInsightHelper:
-    def __init__(self):
-        """Initialize the FeesInsightHelper with Bedrock client configuration."""
-        self.client = boto3.client(
-            "bedrock-runtime",
-            region_name="us-east-1",
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
+# class FeesAiInsightHelper:
+#     def __init__(self):
+#         """Initialize the FeesInsightHelper with Bedrock client configuration."""
+#         self.client = boto3.client(
+#             "bedrock-runtime",
+#             region_name="us-east-1",
+#             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+#             aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
           
-        )
-        self.model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+#         )
+#         self.model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
+#     @staticmethod
+#     def get_cache_key(fees_data: Dict) -> str:
+#         """Generate a unique cache key based on the input fees data."""
+#         data_str = json.dumps(fees_data, sort_keys=True)
+#         return f"fees_insights_{hash(data_str)}"
+
+#     @staticmethod
+#     def format_currency(amount: str) -> str:
+#         """
+#         Format currency values consistently.
+        
+#         Args:
+#             amount (str): Amount string (e.g., "₹ 5,03,200")
+            
+#         Returns:
+#             str: Formatted amount or "NA" if invalid
+#         """
+#         try:
+#             if amount == "NA" or not amount:
+#                 return "NA"
+            
+#             # Remove currency symbol and spaces, then parse
+#             clean_amount = amount.replace("₹", "").replace(" ", "").replace(",", "")
+#             value = float(clean_amount)
+            
+#             # Format with Indian number system
+#             if value >= 10000000:  # 1 crore
+#                 return f"₹ {value/10000000:.2f} Cr"
+#             elif value >= 100000:  # 1 lakh
+#                 return f"₹ {value/100000:.2f} L"
+#             else:
+#                 return f"₹ {value:,.2f}"
+            
+#         except (ValueError, TypeError):
+#             return "NA"
+
+#     def create_fees_insights(self, prompt: str) -> str:
+#         """
+#         Generate insights using Bedrock model based on the given prompt.
+#         """
+#         try:
+#             native_request = {
+#                 "anthropic_version": "bedrock-2023-05-31",
+#                 "max_tokens": 4096,
+#                 "temperature": 0.6,
+#                 "messages": [
+#                     {
+#                         "role": "user",
+#                         "content": [{"type": "text", "text": prompt}],
+#                     }
+#                 ],
+#             }
+#             request = json.dumps(native_request, ensure_ascii=False)
+#             response = self.client.invoke_model(
+#                 modelId=self.model_id, 
+#                 body=request.encode('utf-8')
+#             )
+#             model_response = json.loads(response["body"].read().decode('utf-8'))
+#             return model_response["content"][0]["text"]
+#         except Exception as e:
+#             logger.error(f"Error in create_fees_insights: {str(e)}")
+#             raise
+
+#     def format_fees_insights(self, raw_insights: str) -> Dict:
+#         """
+#         Format the raw insights into structured format.
+#         """
+#         try:
+#             insights_dict = json.loads(raw_insights)
+#             formatted_insights = {
+#                 "highest_tuition_fees": insights_dict.get("highest_tuition_fees", "NA"),
+#                 "highest_fees_element": insights_dict.get("highest_fees_element", "NA"),
+#                 "scholarships_available": insights_dict.get("scholarships_available", "NA"),
+#                 "scholarship_granting_authority": insights_dict.get("scholarship_granting_authority", "NA")
+#             }
+#             return formatted_insights
+#         except Exception as e:
+#             logger.error(f"Error formatting insights: {str(e)}")
+#             raise
+
+#     def generate_prompt(self, fees_data: Dict) -> str:
+#         """
+#         Generate the prompt for the AI model.
+#         """
+#         return f"""
+#         The agent is provided with the fee details of atmost 3 colleges.
+#         Generate detailed fee insights comparing the provided colleges. Return the insights as a JSON object where keys represent the specific categories, and values are descriptive sentences in **plain string format** (not lists or bullet points). Use the following structure:
+#         {{
+#             "highest_tuition_fees": "Analyze ONLY the direct fee fields (gn_fees, obc_fees, sc_fees, nq_fees, st_fees). Provide a detailed sentence comparing colleges in descending order based on their general category fees. Include specific fee amounts where available and explicitly mention if data is missing. Start each college reference with the institution's name.",
+#             "highest_fees_element": "Analyze the total fee fields (total_tuition_fee_general, total_tuition_fee_sc, total_tuition_fee_st, total_tuition_fee_obc). Format the response as: 'For general category, [Institution Name] charges the highest at ₹X, followed by [Institution Name] at ₹Y, and [Institution Name] at ₹Z. The SC, ST, and OBC category fees vary significantly, with [mention specific variations or missing data].' Maintain strictly descending order by category fees. Include all three institutions. Do not use the words,'total' 'tuition' in the response.",
+#             "scholarships_available": "[fetch data from 'scholarship_available' it denotes the number of students] write a descriptive sentence or paragraph summarizing the number of students availing scholarship for each college, or mentioning missing data if applicable.",
+#             "scholarship_granting_authority": "A descriptive sentence or paragraph summarizing the authority granting scholarships at each college, highlighting any missing or incomplete information."
+#         }}
+#         Fees Data: {json.dumps(fees_data, ensure_ascii=False, indent=2)}
+#         """
+
+#     def get_fees_insights(self, fees_data: Dict) -> Optional[Dict]:
+#         """
+#         Generate and process fees insights locally without API call.
+        
+#         Args:
+#             fees_data (Dict): Dictionary containing fees information for colleges
+            
+#         Returns:
+#             Optional[Dict]: Processed fees insights or None if there's an error
+#         """
+#         try:
+#             # Generate the prompt
+#             prompt = self.generate_prompt(fees_data)
+            
+#             # Get raw insights from the model
+#             raw_insights = self.create_fees_insights(prompt)
+            
+#             # Format the insights
+#             insights = self.format_fees_insights(raw_insights)
+            
+#             # Format currency values in the insights
+#             for key in insights:
+#                 if isinstance(insights[key], str) and "₹" in insights[key]:
+#                     # Extract amounts and format them
+#                     text = insights[key]
+#                     amounts = [s for s in text.split() if "₹" in s]
+#                     for amount in amounts:
+#                         formatted_amount = self.format_currency(amount)
+#                         text = text.replace(amount, formatted_amount)
+#                     insights[key] = text
+            
+#             return insights
+            
+#         except Exception as e:
+#             logger.error(f"Error in get_fees_insights: {str(e)}")
+#             return None
+
+
+class FeesAiInsightHelper:
+    # Class-level constants similar to RankingAiInsightHelper
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_ACCESS_SECRET_KEY")
+    REGION_NAME = 'us-east-1'
+    MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 
     @staticmethod
     def get_cache_key(fees_data: Dict) -> str:
         """Generate a unique cache key based on the input fees data."""
         data_str = json.dumps(fees_data, sort_keys=True)
-        return f"fees_insights_{hash(data_str)}"
+        return f"fees_ai_insights_{hash(data_str)}"
 
     @staticmethod
     def format_currency(amount: str) -> str:
-        """
-        Format currency values consistently.
-        
-        Args:
-            amount (str): Amount string (e.g., "₹ 5,03,200")
-            
-        Returns:
-            str: Formatted amount or "NA" if invalid
-        """
+        """Format currency values consistently."""
         try:
             if amount == "NA" or not amount:
                 return "NA"
             
-            # Remove currency symbol and spaces, then parse
             clean_amount = amount.replace("₹", "").replace(" ", "").replace(",", "")
             value = float(clean_amount)
             
-            # Format with Indian number system
             if value >= 10000000:  # 1 crore
                 return f"₹ {value/10000000:.2f} Cr"
             elif value >= 100000:  # 1 lakh
@@ -1925,11 +2056,18 @@ class FeesAiInsightHelper:
         except (ValueError, TypeError):
             return "NA"
 
-    def create_fees_insights(self, prompt: str) -> str:
-        """
-        Generate insights using Bedrock model based on the given prompt.
-        """
+    @staticmethod
+    def create_fees_insights(prompt: str) -> str:
+        """Generate insights using Bedrock model based on the given prompt."""
         try:
+            logger.info("Creating fees insights using AWS Bedrock model.")
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=FeesAiInsightHelper.REGION_NAME,
+                aws_access_key_id=FeesAiInsightHelper.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=FeesAiInsightHelper.AWS_SECRET_ACCESS_KEY
+            )
+
             native_request = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 4096,
@@ -1941,38 +2079,65 @@ class FeesAiInsightHelper:
                     }
                 ],
             }
-            request = json.dumps(native_request, ensure_ascii=False)
-            response = self.client.invoke_model(
-                modelId=self.model_id, 
+
+            logger.debug(f"Bedrock request payload: {json.dumps(native_request, indent=2)}")
+            
+            request = json.dumps(native_request)
+            response = client.invoke_model(
+                modelId=FeesAiInsightHelper.MODEL_ID, 
                 body=request.encode('utf-8')
             )
             model_response = json.loads(response["body"].read().decode('utf-8'))
+            
+            logger.debug(f"Bedrock raw response: {model_response}")
             return model_response["content"][0]["text"]
+            
         except Exception as e:
             logger.error(f"Error in create_fees_insights: {str(e)}")
-            raise
+            return json.dumps({"error": str(e)})
 
-    def format_fees_insights(self, raw_insights: str) -> Dict:
-        """
-        Format the raw insights into structured format.
-        """
+    @staticmethod
+    def format_fees_insights(raw_insights: str) -> Dict:
+        """Format the raw insights into structured format."""
         try:
+            logger.debug(f"Raw insights before processing: {raw_insights}")
+
+            # Clean up and format the raw insights
+            if isinstance(raw_insights, str):
+                raw_insights = raw_insights.replace("\\n", "").replace("\\", "").strip()
+
             insights_dict = json.loads(raw_insights)
+            
             formatted_insights = {
                 "highest_tuition_fees": insights_dict.get("highest_tuition_fees", "NA"),
                 "highest_fees_element": insights_dict.get("highest_fees_element", "NA"),
                 "scholarships_available": insights_dict.get("scholarships_available", "NA"),
                 "scholarship_granting_authority": insights_dict.get("scholarship_granting_authority", "NA")
             }
-            return formatted_insights
-        except Exception as e:
-            logger.error(f"Error formatting insights: {str(e)}")
-            raise
 
-    def generate_prompt(self, fees_data: Dict) -> str:
-        """
-        Generate the prompt for the AI model.
-        """
+            # Format currency values in the insights
+            for key in formatted_insights:
+                if isinstance(formatted_insights[key], str) and "₹" in formatted_insights[key]:
+                    text = formatted_insights[key]
+                    amounts = [s for s in text.split() if "₹" in s]
+                    for amount in amounts:
+                        formatted_amount = FeesAiInsightHelper.format_currency(amount)
+                        text = text.replace(amount, formatted_amount)
+                    formatted_insights[key] = text
+
+            return formatted_insights
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decoding failed: {e}")
+            logger.error(f"Raw insights: {raw_insights}")
+            return {"error": f"JSON decoding failed: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Error formatting insights: {e}")
+            return {"error": f"An unexpected error occurred: {str(e)}"}
+
+    @staticmethod
+    def generate_prompt(fees_data: Dict) -> str:
+        """Generate the prompt for the AI model."""
         return f"""
         The agent is provided with the fee details of atmost 3 colleges.
         Generate detailed fee insights comparing the provided colleges. Return the insights as a JSON object where keys represent the specific categories, and values are descriptive sentences in **plain string format** (not lists or bullet points). Use the following structure:
@@ -1985,38 +2150,29 @@ class FeesAiInsightHelper:
         Fees Data: {json.dumps(fees_data, ensure_ascii=False, indent=2)}
         """
 
-    def get_fees_insights(self, fees_data: Dict) -> Optional[Dict]:
-        """
-        Generate and process fees insights locally without API call.
-        
-        Args:
-            fees_data (Dict): Dictionary containing fees information for colleges
-            
-        Returns:
-            Optional[Dict]: Processed fees insights or None if there's an error
-        """
+    @staticmethod
+    def get_fees_insights(fees_data: Dict) -> Optional[Dict]:
+        """Generate and process fees insights with caching."""
         try:
-            # Generate the prompt
-            prompt = self.generate_prompt(fees_data)
+            # Check cache first
+            cache_key = FeesAiInsightHelper.get_cache_key(fees_data)
+            cached_result = cache.get(cache_key)
+
+            if cached_result:
+                logger.info("Returning cached fees insights.")
+                return cached_result
+
+            logger.info("Generating new fees insights.")
             
-            # Get raw insights from the model
-            raw_insights = self.create_fees_insights(prompt)
+            # Generate new insights
+            prompt = FeesAiInsightHelper.generate_prompt(fees_data)
+            raw_insights = FeesAiInsightHelper.create_fees_insights(prompt)
+            formatted_insights = FeesAiInsightHelper.format_fees_insights(raw_insights)
             
-            # Format the insights
-            insights = self.format_fees_insights(raw_insights)
+            # Cache the results
+            cache.set(cache_key, formatted_insights, timeout=3600 * 24 * 7)  # Cache for 7 days
             
-            # Format currency values in the insights
-            for key in insights:
-                if isinstance(insights[key], str) and "₹" in insights[key]:
-                    # Extract amounts and format them
-                    text = insights[key]
-                    amounts = [s for s in text.split() if "₹" in s]
-                    for amount in amounts:
-                        formatted_amount = self.format_currency(amount)
-                        text = text.replace(amount, formatted_amount)
-                    insights[key] = text
-            
-            return insights
+            return formatted_insights
             
         except Exception as e:
             logger.error(f"Error in get_fees_insights: {str(e)}")
@@ -2841,43 +2997,31 @@ class CollegeAmenitiesHelper:
 
 
 
-
-
-
 class ClassProfileAiInsightHelper:
-    def __init__(self):
-        self.bedrock_client = boto3.client(
-            "bedrock-runtime",
-            region_name="us-east-1",
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
-           
-        )
-        self.model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
-    
+    # Class-level constants
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_ACCESS_SECRET_KEY")
+    REGION_NAME = 'us-east-1'
+    MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
+
     @staticmethod
     def get_cache_key(profile_data: Dict) -> str:
-        """
-        Generate a unique cache key based on the input profile data.
-        
-        Args:
-            profile_data (Dict): Dictionary containing class profile data
-            
-        Returns:
-            str: Unique cache key
-        """
+        """Generate a unique cache key based on the input profile data."""
         data_str = json.dumps(profile_data, sort_keys=True)
-        return f"class_profile_insights_{hash(data_str)}"
-    
-    def _get_college_name(self, college_id: str, college_details: list) -> str:
+        return f"class_profile_ai_insights_{hash(data_str)}"
+
+    @staticmethod
+    def _get_college_name(college_id: str, college_details: list) -> str:
         """Get college short name from college details."""
         return next((c["short_name"] for c in college_details if str(c["id"]) == str(college_id)), "Unknown")
-    
-    def _get_ownership_display(self, college_id: str, college_details: list) -> str:
+
+    @staticmethod
+    def _get_ownership_display(college_id: str, college_details: list) -> str:
         """Get college ownership display from college details."""
         return next((c["ownership_display"] for c in college_details if str(c["id"]) == str(college_id)), "Unknown")
-    
-    def _create_sorted_insights(self, data: Dict) -> Dict:
+
+    @staticmethod
+    def _create_sorted_insights(data: Dict) -> Dict:
         """Create sorted insights for different metrics."""
         sorted_insights = {
             "student_faculty_sorted": [],
@@ -2889,8 +3033,8 @@ class ClassProfileAiInsightHelper:
         colleges = [(k, v) for k, v in data["data"]["student_faculty_ratio"].items() 
                    if k.startswith("college_") and v["data_status"] == "complete"]
         for k, v in sorted(colleges, key=lambda x: x[1]["ownership_ratio_difference_from_avg"], reverse=True):
-            college_name = self._get_college_name(v["college_id"], data["college_details"])
-            ownership_display = self._get_ownership_display(v["college_id"], data["college_details"])
+            college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
+            ownership_display = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
             ratio = v["ownership_ratio_difference_from_avg"]
             ratio_text = f"lower by {abs(ratio):.2f}%" if ratio < 0 else f"higher by {ratio:.2f}%"
             sorted_insights["student_faculty_sorted"].append(
@@ -2905,7 +3049,7 @@ class ClassProfileAiInsightHelper:
             ("ownership_gender_diversity_sorted", "ownership_gender_diversity_difference")
         ]:
             for k, v in sorted(colleges, key=lambda x: x[1][sort_key], reverse=True):
-                college_name = self._get_college_name(v["college_id"], data["college_details"])
+                college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
                 if metric == "gender_diversity_sorted":
                     college_type = next((c["type_of_institute"] for c in data["college_details"] 
                                       if str(c["id"]) == str(v["college_id"])), "Unknown")
@@ -2915,7 +3059,7 @@ class ClassProfileAiInsightHelper:
                         f"{'below' if diff < 0 else 'above'} the average"
                     )
                 else:
-                    ownership = self._get_ownership_display(v["college_id"], data["college_details"])
+                    ownership = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
                     diff = v[sort_key]
                     diff_text = f"trails by {abs(diff):.2f}%" if diff < 0 else f"leads by {diff:.2f}%"
                     sorted_insights[metric].append(
@@ -2923,8 +3067,9 @@ class ClassProfileAiInsightHelper:
                     )
         
         return sorted_insights
-    
-    def _generate_prompt(self, sorted_insights: Dict) -> str:
+
+    @staticmethod
+    def _generate_prompt(sorted_insights: Dict) -> str:
         """Generate an enhanced prompt for the Bedrock model."""
         return f"""
         Create impactful and data-driven insights from the class profile metrics below. Frame the insights to be concise, 
@@ -2940,23 +3085,16 @@ class ClassProfileAiInsightHelper:
 
         Format the response as a JSON object with the following structure:
 
-
-
-         {{
+        {{
             "student_faculty_ownership_ratio_difference_from_avg": 
-          
                 {'. '.join(sorted_insights['student_faculty_sorted'])}",
             
             "type_of_institute_gender_diversity_difference_from_avg": 
-      
                 {'. '.join(sorted_insights['gender_diversity_sorted'])}",
             
             "ownership_gender_diversity_difference": 
-           
                 {'. '.join(sorted_insights['ownership_gender_diversity_sorted'])}"
         }}
-
-     
 
         Style Guidelines:
         1. Use active voice and present tense
@@ -2966,64 +3104,96 @@ class ClassProfileAiInsightHelper:
         5. Maintain clarity while being concise
         6. Focus on comparative insights
         """
-    
-    def get_profile_insights(self, data: Dict) -> Optional[Dict]:
-        """
-        Generate class profile insights using Bedrock model.
-        
-        Args:
-            data (Dict): Dictionary containing metrics data
-            
-        Returns:
-            Optional[Dict]: Processed profile insights or None if there's an error
-        """
+
+    @staticmethod
+    def create_profile_insights(prompt: str) -> str:
+        """Generate insights using Bedrock model."""
         try:
-            # Check cache first
-            cache_key = self.get_cache_key(data)
-            cached_result = cache.get(cache_key)
-            
-            if cached_result:
-                return cached_result
-            
-            # Generate sorted insights
-            sorted_insights = self._create_sorted_insights(data)
-            
-            # Prepare and send request to Bedrock
-            prompt = self._generate_prompt(sorted_insights)
+            logger.info("Creating profile insights using AWS Bedrock model.")
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=ClassProfileAiInsightHelper.REGION_NAME,
+                aws_access_key_id=ClassProfileAiInsightHelper.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=ClassProfileAiInsightHelper.AWS_SECRET_ACCESS_KEY
+            )
+
             request = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 4096,
                 "temperature": 0.6,
                 "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": prompt}],
-                    }
-                ],
+                    {"role": "user", "content": [{"type": "text", "text": prompt}]}
+                ]
             }
+
+            logger.debug(f"Bedrock request payload: {json.dumps(request, indent=2)}")
             
-            response = self.bedrock_client.invoke_model(
-                modelId=self.model_id,
+            response = client.invoke_model(
+                modelId=ClassProfileAiInsightHelper.MODEL_ID,
                 body=json.dumps(request, ensure_ascii=False).encode('utf-8')
             )
             
             response_body = json.loads(response["body"].read().decode('utf-8'))
-            raw_insights = response_body["content"][0]["text"]
+            logger.debug(f"Bedrock raw response: {response_body}")
             
-            # Clean and format insights
+            return response_body["content"][0]["text"]
+            
+        except Exception as e:
+            logger.error(f"Error in create_profile_insights: {str(e)}")
+            return json.dumps({"error": str(e)})
+
+    @staticmethod
+    def format_insights(raw_insights: str) -> Dict:
+        """Format the raw insights into structured format."""
+        try:
+            logger.debug(f"Raw insights before processing: {raw_insights}")
+
+            # Clean up JSON string if needed
             if raw_insights.startswith("```json") and raw_insights.endswith("```"):
                 raw_insights = raw_insights[7:-3].strip()
-            
+
             insights = json.loads(raw_insights)
+            return insights
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decoding failed: {e}")
+            logger.error(f"Raw insights: {raw_insights}")
+            return {"error": f"JSON decoding failed: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Error formatting insights: {e}")
+            return {"error": f"An unexpected error occurred: {str(e)}"}
+
+    @staticmethod
+    def get_profile_insights(data: Dict) -> Optional[Dict]:
+        """Generate and process profile insights with caching."""
+        try:
+            # Check cache first
+            cache_key = ClassProfileAiInsightHelper.get_cache_key(data)
+            cached_result = cache.get(cache_key)
+
+            if cached_result:
+                logger.info("Returning cached profile insights.")
+                return cached_result
+
+            logger.info("Generating new profile insights.")
+
+            # Generate sorted insights
+            sorted_insights = ClassProfileAiInsightHelper._create_sorted_insights(data)
+            
+            # Generate and process insights
+            prompt = ClassProfileAiInsightHelper._generate_prompt(sorted_insights)
+            raw_insights = ClassProfileAiInsightHelper.create_profile_insights(prompt)
+            insights = ClassProfileAiInsightHelper.format_insights(raw_insights)
             
             # Cache the results
-            cache.set(cache_key, insights, timeout=3600 * 24 * 180)
+            cache.set(cache_key, insights, timeout=3600 * 24 * 180)  # Cache for 180 days
+            
             return insights
             
         except Exception as e:
             logger.error(f"Error in get_profile_insights: {str(e)}")
             return None
-    
+
     @staticmethod
     def format_percentage(value: float) -> str:
         """Format percentage values consistently."""
@@ -3031,7 +3201,7 @@ class ClassProfileAiInsightHelper:
             return f"{float(value):.2f}%" if value is not None else "NA"
         except (ValueError, TypeError):
             return "NA"
-    
+
     @staticmethod
     def format_ratio(value: float) -> str:
         """Format ratio values consistently."""
@@ -3336,9 +3506,20 @@ class CollegeReviewsHelper:
 
 
 
-
 class CollegeReviewAiInsightHelper:
     """Helper class for generating and formatting college review insights."""
+    
+  
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_ACCESS_SECRET_KEY")
+    REGION_NAME = 'us-east-1'
+    MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+    @staticmethod
+    def get_cache_key(reviews_data: Dict) -> str:
+        """Generate a unique cache key based on the input reviews data."""
+        data_str = json.dumps(reviews_data, sort_keys=True)
+        return f"college_review_ai_insights_{hash(data_str)}"
 
     @staticmethod
     def create_reviews_insights(prompt: str) -> str:
@@ -3352,14 +3533,14 @@ class CollegeReviewAiInsightHelper:
             AI-generated insights as text.
         """
         try:
+            logger.info("Creating review insights using AWS Bedrock model.")
             client = boto3.client(
                 "bedrock-runtime",
-                region_name="us-east-1",
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
+                region_name=CollegeReviewAiInsightHelper.REGION_NAME,
+                aws_access_key_id=CollegeReviewAiInsightHelper.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=CollegeReviewAiInsightHelper.AWS_SECRET_ACCESS_KEY
             )
 
-            model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
             native_request = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 4096,
@@ -3372,14 +3553,23 @@ class CollegeReviewAiInsightHelper:
                 ],
             }
 
+            logger.debug(f"Bedrock request payload: {json.dumps(native_request, indent=2)}")
+            
             request = json.dumps(native_request)
-            response = client.invoke_model(modelId=model_id, body=request)
-            model_response = json.loads(response["body"].read())
+            response = client.invoke_model(
+                modelId=CollegeReviewAiInsightHelper.MODEL_ID,
+                body=request.encode('utf-8')
+            )
+            
+            model_response = json.loads(response["body"].read().decode('utf-8'))
+            logger.debug(f"Bedrock raw response: {model_response}")
+            
             return model_response["content"][0]["text"]
+            
         except Exception as e:
             logger.error(f"Error in create_reviews_insights: {str(e)}")
-            raise
-    
+            return json.dumps({"error": str(e)})
+
     @staticmethod
     def format_reviews_insights(raw_insights: str) -> Dict:
         """
@@ -3392,40 +3582,34 @@ class CollegeReviewAiInsightHelper:
             Dict: Formatted insights as a dictionary.
         """
         try:
-     
-            insights_dict = json.loads(raw_insights)
+            logger.debug(f"Raw insights before processing: {raw_insights}")
 
-        
+          
+            if isinstance(raw_insights, str):
+                raw_insights = raw_insights.replace("\\n", "").replace("\\", "").strip()
+            
+            insights_dict = json.loads(raw_insights)
+            
             formatted_insights = {
                 "highest_rated_aspects": insights_dict.get("highest_rated_aspects", "NA"),
                 "improvement_areas": insights_dict.get("improvement_areas", "NA"),
                 "most_discussed_attributes": insights_dict.get("most_discussed_attributes", "NA"),
             }
+
             return formatted_insights
 
         except json.JSONDecodeError as e:
-            logger.error(f"Error decoding JSON: {str(e)}. Raw insights: {raw_insights}")
-            raise ValueError("Failed to decode raw insights into valid JSON.") from e
+            logger.error(f"JSON decoding failed: {e}")
+            logger.error(f"Raw insights: {raw_insights}")
+            return {"error": f"JSON decoding failed: {str(e)}"}
         except Exception as e:
-            logger.error(f"Unexpected error formatting insights: {str(e)}")
-            raise
-
-
-   
+            logger.error(f"Error formatting insights: {e}")
+            return {"error": f"An unexpected error occurred: {str(e)}"}
 
     @staticmethod
-    def generate_reviews_insights(reviews_data: Dict) -> str:
-        """
-        Generates insights for college reviews ensuring that if no areas below 3.5 are found,
-        the improvement areas field will state that there are no areas of importance for improvement.
-
-        Args:
-            reviews_data: Dictionary containing college reviews and ratings.
-
-        Returns:
-            Formatted insights for the reviews.
-        """
-        prompt = f"""
+    def generate_prompt(reviews_data: Dict) -> str:
+        """Generate the prompt for the AI model."""
+        return f"""
         Generate detailed insights about college reviews based on the following exact JSON format:
 
         {{
@@ -3451,13 +3635,40 @@ class CollegeReviewAiInsightHelper:
         - Do not use bullet points, long paragraphs, or generic phrases. Keep it short and to the point.
         """
 
+    @staticmethod
+    def get_reviews_insights(reviews_data: Dict) -> Optional[Dict]:
+        """
+        Generate and process review insights with caching.
+        
+        Args:
+            reviews_data (Dict): Dictionary containing college reviews and ratings
+            
+        Returns:
+            Optional[Dict]: Processed review insights or None if there's an error
+        """
         try:
+          
+            cache_key = CollegeReviewAiInsightHelper.get_cache_key(reviews_data)
+            cached_result = cache.get(cache_key)
+
+            if cached_result:
+                logger.info("Returning cached review insights.")
+                return cached_result
+
+            logger.info("Generating new review insights.")
+            
+         
+            prompt = CollegeReviewAiInsightHelper.generate_prompt(reviews_data)
             raw_insights = CollegeReviewAiInsightHelper.create_reviews_insights(prompt)
             formatted_insights = CollegeReviewAiInsightHelper.format_reviews_insights(raw_insights)
+          
+            cache.set(cache_key, formatted_insights, timeout=3600 * 24 * 7)  # Cache for 7 days
+            
             return formatted_insights
+            
         except Exception as e:
-            logger.error(f"Error generating insights: {str(e)}")
-            return f"Error generating insights: {e}"
+            logger.error(f"Error in get_reviews_insights: {str(e)}")
+            return None
 
 
 

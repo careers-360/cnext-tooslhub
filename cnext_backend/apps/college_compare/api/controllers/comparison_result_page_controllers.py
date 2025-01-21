@@ -545,9 +545,9 @@ class FeesAIinsightsComparisonView(APIView):
             
 
             result = FeesHelper.fetch_fees_details(course_ids_list,college_ids_list,intake_year)
-            helper = FeesAiInsightHelper()
+            # helper = FeesAiInsightHelper()
 
-            insights=helper.get_fees_insights(result)
+            insights=FeesAiInsightHelper.get_fees_insights(fees_data=result)
             result['insights']=insights
             return SuccessResponse( result['insights'], status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
@@ -926,9 +926,9 @@ class classProfileAIInsightsView(APIView):
                 level=level,
             )
 
-            helper=ClassProfileAiInsightHelper()
+            
 
-            insights=helper.get_profile_insights(result)
+            insights=ClassProfileAiInsightHelper.get_profile_insights(data=result)
             result['insights']=insights
 
             return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
@@ -1223,7 +1223,7 @@ class CollegeReviewsAIinsightsView(APIView):
             
 
 
-            insights=CollegeReviewAiInsightHelper.generate_reviews_insights(reviews_summary)
+            insights=CollegeReviewAiInsightHelper.get_reviews_insights(reviews_summary)
 
 
             result = {
