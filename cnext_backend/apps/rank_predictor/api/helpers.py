@@ -11,7 +11,7 @@ from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
 from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
-from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Exam
+from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
 
@@ -1281,6 +1281,7 @@ class CommonDropDownHelper:
         field_name = kwargs.get('field_name')
         selected_id = kwargs.get('selected_id')
         product_id = kwargs.get('product_id')
+        product_type = kwargs.get('product_type','')
 
         internal_limit = None
         dropdown_data = {
@@ -1327,6 +1328,12 @@ class CommonDropDownHelper:
         elif field_name == "factor_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FACTOR_TYPE.items()]
 
+        elif field_name == "domain":
+            dropdown = [
+            {"id": domain.get("id"), "value": domain.get("name")}
+            for domain in Domain.objects.filter(is_stream=1).values("id", "name")
+        ]
+
         elif field_name == "category":
             dropdown = CASTE_CATEGORY
 
@@ -1339,6 +1346,8 @@ class CommonDropDownHelper:
 
         elif field_name == "tools_name":
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")
+            if product_type:
+                tools = tools.filter(type=product_type).values("id", "name").order_by("name")
             dropdown = [
                 {"id": tool["id"], "value": tool["name"], "selected": selected_id == tool["id"]}
                 for tool in tools
