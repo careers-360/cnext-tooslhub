@@ -1051,9 +1051,7 @@ class RPCmsHelper:
                 except ValueError as e:
                     return False, {"error": f"Row {index}: Invalid data type for field. {str(e)}"}
 
-                # Validate year and product_id
-                if row_data['year'].strip() != str(selected_year):
-                    return False, {"error": f"Sheet Year does not match with the selected one"}
+                # Validate product_id
                 if row_data['product_id'].strip() != str(product_id):
                     return False, {"error": f"Row {index}: Product ID does not match the selected Product ID."}
 
