@@ -120,23 +120,28 @@ class RankingAccreditationCombinedComparisonView(APIView):
                 raise ValidationError("The number of college_ids must match the number of selected_domains.")
 
             selected_domains_dict = {college_ids_list[i]: str(selected_domains[i]) for i in range(len(college_ids_list))}
+            print(selected_domains_dict)
             year = int(year_str)
 
             ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year)
-            if not ranking_data_current_year:
-                raise NoDataAvailableError("No ranking data available for the current year.")
+
+            # if not ranking_data_current_year:
+            #     raise NoDataAvailableError("No ranking data available for the current year.")
 
             ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year - 1)
-            if not ranking_data_previous_year:
-                raise NoDataAvailableError("No ranking data available for the previous year.")
+            
+            # if not ranking_data_previous_year:
+            #     raise NoDataAvailableError("No ranking data available for the previous year.")
 
             combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year)
-            if not combined_ranking_data_current_year:
-                raise NoDataAvailableError("No combined ranking data available for the current year.")
+            
+            # if not combined_ranking_data_current_year:
+            #     raise NoDataAvailableError("No combined ranking data available for the current year.")
 
             combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year - 1)
-            if not combined_ranking_data_previous_year:
-                raise NoDataAvailableError("No combined ranking data available for the previous year.")
+            
+            # if not combined_ranking_data_previous_year:
+            #     raise NoDataAvailableError("No combined ranking data available for the previous year.")
             
             
 
@@ -155,8 +160,10 @@ class RankingAccreditationCombinedComparisonView(APIView):
                 "multi_year_ranking_data": multi_year_ranking_data,
             }
 
-            insights=RankingAiInsightHelper.get_ai_insights(result)
-            result['insights']=insights
+            insights = RankingAiInsightHelper.generate_ranking_insights(result)
+            result['insights'] = insights
+
+            # Return successful response with insights
             return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
 
         except ValidationError as ve:
@@ -342,10 +349,13 @@ class PlacementStatsAIinsightsComparisonView(APIView):
             selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
             
             result = PlacementInsightHelper.fetch_placement_stats(college_ids, selected_domains, year)
+
+            ai_helper = PlacementAiInsightHelper()
+            insights = ai_helper.get_ai_insights(result)
             
-            insights = PlacementAiInsightHelper.get_ai_insights(result)
-            result['placement_insights']=insights
-            return SuccessResponse( result['placement_insights'], status=status.HTTP_200_OK)
+         
+            result['insights']=insights
+            return SuccessResponse( result['insights'], status=status.HTTP_200_OK)
 
         except NoDataAvailableError as e:
             logger.error(f"No data available for placement ai insights comparison: {str(e)}")
@@ -535,7 +545,9 @@ class FeesAIinsightsComparisonView(APIView):
             
 
             result = FeesHelper.fetch_fees_details(course_ids_list,college_ids_list,intake_year)
-            insights=FeesAiInsightHelper.get_fees_insights(result)
+            helper = FeesAiInsightHelper()
+
+            insights=helper.get_fees_insights(result)
             result['insights']=insights
             return SuccessResponse( result['insights'], status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
@@ -876,7 +888,7 @@ class classProfileAIInsightsView(APIView):
         """
         college_ids_str = request.query_params.get("college_ids")
         year_str = request.query_params.get("year") or str(current_year - 1)
-        intake_year_str = request.query_params.get("intake_year") or str(current_year - 4)
+        intake_year_str = request.query_params.get("intake_year") or str(current_year - 5)
         level = request.query_params.get("level", 1)
         domain_ids_str = request.query_params.get("selected_domains")
 
@@ -913,7 +925,10 @@ class classProfileAIInsightsView(APIView):
                 selected_domains=selected_domains,
                 level=level,
             )
-            insights=ClassProfileAiInsightHelper.get_profile_insights(result)
+
+            helper=ClassProfileAiInsightHelper()
+
+            insights=helper.get_profile_insights(result)
             result['insights']=insights
 
             return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
@@ -1208,7 +1223,7 @@ class CollegeReviewsAIinsightsView(APIView):
             
 
 
-            insights=CollegeReviewAiInsightHelper.get_review_insights(reviews_summary)
+            insights=CollegeReviewAiInsightHelper.generate_reviews_insights(reviews_summary)
 
 
             result = {
@@ -1216,7 +1231,7 @@ class CollegeReviewsAIinsightsView(APIView):
                 'insights':insights
             }
             
-            return SuccessResponse(result, status=status.HTTP_200_OK)
+            return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
             logger.error(f"No data available for college rating & reviews: {str(e)}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
