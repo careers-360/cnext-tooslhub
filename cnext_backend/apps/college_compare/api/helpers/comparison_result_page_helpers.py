@@ -36,6 +36,8 @@ warnings.filterwarnings("ignore", category=ElasticsearchWarning)
 
 from elasticsearch import Elasticsearch
 
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -364,6 +366,7 @@ def get_ordinal_suffix(num: int) -> str:
 
 
 
+
 class CollegeRankingService:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -379,7 +382,7 @@ class CollegeRankingService:
     ) -> Dict[str, Dict]:
         """
         Gets state-wise and ownership-wise ranks based on overall ranks for given college IDs.
-        Supports different domains for different colleges.
+        Supports different domains for different colleges, with a fallback query.
         
         Args:
             college_ids: List of college IDs
@@ -387,30 +390,55 @@ class CollegeRankingService:
             year: Year for ranking data
         """
         try:
-            # Generate cache key
+    
             cache_key = CollegeRankingService.get_cache_key(college_ids, selected_domains, year)
             
-            # Try fetching the result from cache
+            
             cached_result = cache.get(cache_key)
             if cached_result:
                 return cached_result
 
             result = {}
-
             domain_groups = {}
             for college_id in college_ids:
                 domain_id = selected_domains[college_id]
-                if domain_id not in domain_groups:
-                    domain_groups[domain_id] = []
-                domain_groups[domain_id].append(college_id)
+                domain_groups.setdefault(domain_id, []).append(college_id)
 
             for domain_id, domain_college_ids in domain_groups.items():
+
                 base_queryset = RankingUploadList.objects.filter(
                     ranking__ranking_stream=domain_id,
                     ranking__year=year,
                     ranking__status=1
                 ).select_related('college', 'college__location')
 
+                # Fallback query if no data found for domain-specific filtering
+
+                if not base_queryset.exists():
+                    logger.warning(f"No data found for domain_id={domain_id}. Retrying with popular_stream.")
+
+                    # Fetch the popular_stream for the current domain
+                    popular_stream = (
+                        College.objects.filter(id__in=domain_college_ids)
+                        .values_list('popular_stream', flat=True)
+                        .first()
+                    )
+
+                    if popular_stream:
+                        base_queryset = RankingUploadList.objects.filter(
+                            ranking__ranking_stream=popular_stream,
+                            ranking__year=year,
+                            ranking__status=1
+                        ).select_related('college', 'college__location')
+
+                    if not base_queryset.exists():
+                        logger.warning(f"No data found for popular_stream={popular_stream}. Retrying without domain filter.")
+                        base_queryset = RankingUploadList.objects.filter(
+                            ranking__year=year,
+                            ranking__status=1
+                        ).select_related('college', 'college__location')
+
+                # Compute totals for state and ownership
                 total_counts = base_queryset.values(
                     'college__location__state_id',
                     'college__ownership'
@@ -436,43 +464,41 @@ class CollegeRankingService:
                     overall_rank__isnull=False
                 ).order_by('overall_rank'))
 
-                if not all_ranked_colleges:
-                    raise NoDataAvailableError("No ranking data available for the provided college IDs and year.")
-
                 state_ranks = {}
                 college_details = {}
-                ownership_groups = {} 
+                ownership_groups = {}
 
                 for college in all_ranked_colleges:
-                    try:
-                        college_id = college['college_id']
-                        state_id = college['college__location__state_id']
-                        ownership = college['college__ownership']
-                        overall_rank = int(college['overall_rank'])
+                    college_id = college['college_id']
+                    state_id = college['college__location__state_id']
+                    ownership = college['college__ownership']
 
-                        if college_id in domain_college_ids:
-                            college_details[college_id] = {
-                                'state_id': state_id,
-                                'state_name': college['college__location__loc_string'],
-                                'ownership': ownership,
-                                'overall_rank': overall_rank
-                            }
+                    overall_rank_str = college['overall_rank']
 
-                        if state_id not in state_ranks:
-                            state_ranks[state_id] = {}
-                        current_rank = len(state_ranks[state_id]) + 1
-                        state_ranks[state_id][college_id] = current_rank
-
-                        if ownership not in ownership_groups:
-                            ownership_groups[ownership] = []
-                        ownership_groups[ownership].append({
-                            'college_id': college_id,
-                            'overall_rank': overall_rank
-                        })
-
-                    except ValueError as e:
-                        logger.error(f"Invalid overall_rank for college_id {college.get('college_id')}: {college.get('overall_rank')}")
+                    if overall_rank_str and overall_rank_str.isdigit():
+                        overall_rank = int(overall_rank_str)
+                    else:
+                        # Skip processing if overall_rank is invalid
+                        logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
                         continue
+
+                    if college_id in domain_college_ids:
+                        college_details[college_id] = {
+                            'state_id': state_id,
+                            'state_name': college['college__location__loc_string'],
+                            'ownership': ownership,
+                            'overall_rank': overall_rank
+                        }
+
+                    if state_id not in state_ranks:
+                        state_ranks[state_id] = {}
+                    current_rank = len(state_ranks[state_id]) + 1
+                    state_ranks[state_id][college_id] = current_rank
+
+                    ownership_groups.setdefault(ownership, []).append({
+                        'college_id': college_id,
+                        'overall_rank': overall_rank
+                    })
 
                 ownership_ranks = {}
                 for ownership, colleges in ownership_groups.items():
@@ -521,12 +547,8 @@ class CollegeRankingService:
                         ),
                     }
 
-            if not result:
-                raise NoDataAvailableError("No data available for the provided parameters.")
-
             # Cache the result for future use
             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
-
             return result
 
         except NoDataAvailableError as nde:
@@ -536,6 +558,7 @@ class CollegeRankingService:
         except Exception as e:
             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
             raise
+
 
 
 class MultiYearRankingHelper:
@@ -610,10 +633,7 @@ class MultiYearRankingHelper:
 
                     result_dict[key] = college
 
-            if not data_found:
-                raise NoDataAvailableError("No ranking or accreditation data is available for the provided college IDs and years.")
-            
-            # Cache the result for future use
+          # Cache the result for future use
             cache.set(cache_key, result_dict, timeout=3600 * 24 * 7)  # 7 days cache
 
             return result_dict
@@ -790,9 +810,18 @@ class RankingGraphHelper:
         return result_dict
 
 
-class RankingAiInsightHelper:
-    API_URL = "https://n185q1vpw7.execute-api.ap-south-1.amazonaws.com/DEV/ranking_and_accrediation_insights"
 
+
+
+class RankingAiInsightHelper:
+
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY =   os.getenv("AWS_ACCESS_SECRET_KEY")
+
+  
+    REGION_NAME = 'us-east-1'
+    MODEL_ID = 'anthropic.claude-3-sonnet-20240229-v1:0'
+    
     @staticmethod
     def get_cache_key(ranking_data: Dict) -> str:
         """
@@ -802,75 +831,151 @@ class RankingAiInsightHelper:
         return f"ranking_ai_insights_{hash(data_str)}"
 
     @staticmethod
-    def get_ai_insights(ranking_data: Dict) -> Optional[Dict]:
-        """
-        Fetches AI-based ranking insights, either from the cache or by making an API call.
-
-        Args:
-            ranking_data (Dict): Data for generating ranking insights.
-
-        Returns:
-            Optional[Dict]: The formatted AI insights or None if an error occurs.
-        """
+    def create_ranking_insights(prompt: str) -> str:
+        """Interacts with the Bedrock model to generate insights."""
         try:
+            logger.info("Creating ranking insights using AWS Bedrock model.")
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=RankingAiInsightHelper.REGION_NAME,
+                aws_access_key_id=RankingAiInsightHelper.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=RankingAiInsightHelper.AWS_SECRET_ACCESS_KEY
+            )
+
+            native_request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.3,
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": prompt}]}
+                ]
+            }
+
+            logger.debug(f"Bedrock request payload: {json.dumps(native_request, indent=2)}")
+
+            request = json.dumps(native_request)
+            response = client.invoke_model(modelId=RankingAiInsightHelper.MODEL_ID, body=request)
+            model_response = json.loads(response["body"].read())
+
+            if not isinstance(model_response.get("content"), list):
+                raise ValueError("Unexpected response structure from Bedrock")
+
+            logger.debug(f"Bedrock raw response: {model_response}")
+            return model_response["content"][0]["text"]
+
+        except Exception as e:
+            logger.error(f"Error generating insights with AWS Bedrock: {e}")
+            return json.dumps({"error": str(e)})
+
+    @staticmethod
+    def format_insights(raw_insights: str) -> dict:
+        """Formats raw insights into a proper dictionary."""
+        try:
+            logger.debug(f"Raw insights before processing: {raw_insights}")
+
+            # Clean up and format the raw insights
+            if isinstance(raw_insights, str):
+                raw_insights = raw_insights.replace("\\n", "").replace("\\", "").strip()
+
+            insights_dict = json.loads(raw_insights)
+
+            formatted_insights = {
+                key: " ".join(insights_dict.get(key, "").split())
+                for key in ["graduation_outcome", "state_specific_rankings", 
+                            "ownership_rankings", "past_year_changes", 
+                            "highest_changes", "yearly_trends"]
+            }
+
+            return formatted_insights
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decoding failed: {e}")
+            logger.error(f"Raw insights: {raw_insights}")
+            return {"error": f"JSON decoding failed: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Error formatting insights: {e}")
+            return {"error": f"An unexpected error occurred: {str(e)}"}
+
+
+
+
+    @staticmethod
+    def generate_ranking_insights(ranking_data: dict) -> str:
+        """Generates AI-based ranking insights, either from cache or by invoking Bedrock."""
+        try:
+            
             cache_key = RankingAiInsightHelper.get_cache_key(ranking_data)
             cached_result = cache.get(cache_key)
-            
+
             if cached_result:
                 logger.info("Returning cached ranking insights.")
                 return cached_result
-            
-            
 
-            payload = {"combined_data": ranking_data}
-            
-            print(payload,"-------")
+            logger.info("Generating new ranking insights.")
+            prompt = f"""
+                You are a data analyst specializing in educational rankings. Analyze this college ranking data and generate insights following these STRICT requirements:
+                {json.dumps(ranking_data, indent=2)}
 
-            headers = {'Content-Type': 'application/json'}
-            
-            logger.info("Sending request to Ranking Insights API.")
-            response = requests.get(
-                url=RankingAiInsightHelper.API_URL,
-                headers=headers,
-                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"API call failed with status {response.status_code}: {response.text}")
-                return None
+                Generate a JSON response with these EXACT sections and formats:
 
-            raw_content = response.content.decode('utf-8')
-            response_data = json.loads(raw_content)
+                {{
+                    "graduation_outcome": "Arrange graduation_outcome_scores[0] in order of greater to lesser(eg.89>76). Format: 'Based on current graduation outcomes [college_short_name] scores [score] in  [domain_name], followed by [college_short_name] with [score] in [domain_name], and [college_short_name] achieving [score] in [domain_name]' Include ALL three colleges. Use exact scores from graduation_outcome_scores[0] field in multi_year_ranking_data",
 
-            if not response_data.get("body"):
-                logger.warning("Empty response body received from the API.")
-                return None
+                    "state_specific_rankings": "Extract from current_combined_ranking_data state_rank_display. Format: 'In state level rankings  [college_short_name]  stands at [current state rank] in [domain_name], followed by [college_short_name]  at [current state rank] in [domain_name], while [college_short_name]  holds [current state rank] in [domain_name]' respectively List ALL mentioned colleges ordered by rank position",
 
-            body_data = (
-                json.loads(response_data["body"])
-                if isinstance(response_data["body"], str)
-                else response_data["body"]
-            )
+                    "ownership_rankings": "Use ownership_rank_display from current_combined_ranking_data in DESCENDING order. Format: 'Among government institutes [college_short_name]  ranks [current rank] in [domain_name], followed by [college_short_name]  at [current rank] in [domain_name], and [college_short_name]  securing [current rank] in [domain_name]' respectively Include ALL mentioned colleges",
 
-            insights = {
-                key: body_data.get(key, None)
-                for key in [
-                    "graduation_outcome",
-                    "state_specific_rankings",
-                    "ownership_rankings",
-                    "past_year_changes",
-                    "highest_changes",
-                    "yearly_trends"
-                ]
-            }
-            
-            cache.set(cache_key, insights, timeout=3600 * 24 * 7)  # Cache for one week
-            logger.info("Ranking insights cached successfully.")
-            return insights
+                    "past_year_changes": "Compare nirf_overall_rank between current_year_data and previous_year_data. Format: 'In NIRF rankings [college_short_name]  jumps up/down by [X] spots (calculate |current - previous|) in [domain_name], while [college_short_name]  jumps up/down by [X] spots in [domain_name], and [college_short_name]  jumps up/down by [X] spots in [domain_name]' respectively List in DESCENDING order of change magnitude",
 
+                    "highest_changes": "Calculate changes in state_rank_display and ownership_rank_display between current and previous data. Format: 'The most significant ranking shifts show [college_short_name]  moving up/down by [X] spots in [domain_name], followed by [college_short_name]  changing by [X] spots in [domain_name], and [college_short_name]  shifting by [X] spots in [domain_name]' respectively Sort in DESCENDING order by change magnitude",
+
+                    "yearly_trends": "Analyze 5-year nirf_overall_rank from multi_year_ranking_data. Format: 'Looking at five-year performance data [college_short_name]  demonstrates a [upward/consistent/downward] trend in [domain_name], while [college_short_name]  shows a [trend] in [domain_name], and [college_short_name]  exhibits a [trend] in [domain_name]' respectively Include ALL colleges"
+                }}
+
+                MANDATORY RULES:
+                1. Include all colleges in EVERY insight
+                2. STRICTLY maintain descending order for numerical values
+                3. Calculate and verify ALL numerical differences
+                4. Use abbreviated college names
+                5. Use multi_year_ranking_data for graduation scores and trends
+                6. For ranking changes, use format "jumps up/down by X spots"
+                7. Sort changes in DESCENDING order (e.g., "jumps up 5 spots, jumps up 3 spots, jumps down 2 spots")
+                8. Verify each insight includes all three colleges before output
+                9. Double-check all calculations and sorting
+                10. Generate insights based ONLY on provided data
+                11. Each insight must include a trend observation
+                12. Focus on patterns and trends within each specific category
+                13. Maintain analytical depth while being user-friendly
+                14. Include only data-driven observations
+                15. Avoid using colons within sentences
+                16. Use natural language transitions like "followed by" and "while" instead of colons
+                
+                IMPORTANT
+                1. Output ONLY valid JSON. Do not include any explanatory text or comments.
+                2. The response must start and end with a JSON object.
+                3. FOR EACH Insights HAS NA FOR particular college, say currently no data available.
+
+                ERROR PREVENTION:
+                1. Verify data presence for each college
+                2. Confirm all numerical calculations
+                3. Validate sorting order multiple times
+                4. Ensure consistent naming across insights
+                5. Check completeness of all sections
+                6. Verify no colons appear within sentences
+                7. Verify JSON structure before returning.
+
+                Temperature: 0.3 (for maximum precision and consistency)
+                """
+                
+            raw_insights = RankingAiInsightHelper.create_ranking_insights(prompt)
+            logger.debug(f"Raw insights output: {raw_insights}")
+            formatted_insights = RankingAiInsightHelper.format_insights(raw_insights)
+            cache.set(cache_key, formatted_insights, timeout=3600 * 24 * 7)
+            return formatted_insights
         except Exception as e:
-            logger.error(f"Error in get_ai_insights: {str(e)}")
+            logger.error(f"Error in generate_ranking_insights: {str(e)}")
             return None
+
+ 
 
 
 class PlacementInsightHelper:
@@ -1019,59 +1124,142 @@ class PlacementInsightHelper:
             raise
 
 
+
 class PlacementAiInsightHelper:
-    API_URL = "https://v61hnghcz2.execute-api.ap-south-1.amazonaws.com/DEV/placement_insight"
+    """
+    A class to generate AI-powered insights from placement data using AWS Bedrock
+    with Claude 3 Sonnet model. Includes caching functionality to optimize performance.
+    The system is designed to work with any educational institution's placement data.
+    """
+    
+    def __init__(self):
+        """Initialize the Bedrock client with AWS credentials"""
+        self.client = boto3.client(
+            "bedrock-runtime",
+            region_name="us-east-1",
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
+            
+        )
+        self.model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
 
     @staticmethod
     def get_cache_key(placement_data: Dict) -> str:
+        """Generate a unique cache key based on the input data"""
         data_str = json.dumps(placement_data, sort_keys=True)
         return f"placement_ai_insights_{hash(data_str)}"
 
-    @staticmethod
-    def get_ai_insights(placement_data: Dict) -> Optional[Dict]:
-        try:
-            cache_key = PlacementAiInsightHelper.get_cache_key(placement_data)
-            cached_result = cache.get(cache_key)
-            
-            if cached_result:
-                return cached_result
+    def _create_prompt(self, data: Dict) -> str:
+        """
+        Create an optimized prompt for the AI model that works with any college/institution data.
+        The prompt uses generic [college_short_name] references and focuses on analyzing placement metrics
+        regardless of the institution type.
+        """
+        return f"""
+            Analyze the placement data and generate comprehensive insights for EACH COLLEGE in ALL FIVE categories, regardless of data availability. Present the analysis in JSON format:
 
-            payload = {"placement_data": placement_data}
-            headers = {'Content-Type': 'application/json'}
-            
-            response = requests.request(
-                method="GET",
-                url=PlacementAiInsightHelper.API_URL,
-                headers=headers,
-                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            )
-            
-            raw_content = response.content.decode('utf-8')
-            response_data = json.loads(raw_content)
-            
-            if not response_data.get("body"):
-                return None
+            {{
+                "highest_domestic_placement": "Format: '[Overview of Domestic Package Trends] refer[total_students_placed_in_domain]. [List ALL colleges in desc order: college_short_name reported ₹Y LPA in [Domain], college_short_name Z reported no data reported, etc.] in [Domain]. Industry insight: [Brief Salary Trend Analysis].' MUST include every college with their values or 'no data reported'",
                 
-            if isinstance(response_data["body"], str):
-                response_data["body"] = response_data["body"].replace('\\n', '').replace('\\', '')
-                body_data = json.loads(response_data["body"])
-            else:
-                body_data = response_data["body"]
+                "highest_international_placement": "Format: '[Overview of International Package Distribution] refer [highest_international_salary_cr]. [List ALL colleges in desc order: college_short_name reported ₹Y Cr in [Domain], college_short_name no data reported, etc.] in [Domain]. Market observation: [Brief International Placement Trend].' MUST include every college with their values or 'no data reported'",
+                
+                "total_offers": "Format: '[Overview of Offer Trends] refer [total_offers]. [List ALL colleges in desc order: college_short_name reported Y offers in [Domain], college_short_name no data reported in [Domain], etc.]. Recruitment insight: [Brief Analysis of Offer Patterns].' MUST include every college with their values or 'no data reported'",
+                
+                "students_placed_min_time": "Format: '[Overview of Placement Success] refer [total_students_placed_in_domain]. [List ALL colleges in desc order: college_short_name reported  Y students placed in [domain], college_short_name no data reported, etc.] in [Domain]. Placement trend: [Brief Analysis of Placement Efficiency].' MUST include every college with their values or 'no data reported'",
+                
+                "average_salary": "Format: '[Overview of Average Compensation] refer [average_salary_lpa]. [List ALL colleges in desc order: college_short_name reported average package of ₹Y LPA in [Domain], college_short_name no data reported, etc.] in [Domain]. Compensation insight: [Brief Analysis of Average Salary Trends].' MUST include every college with their values or 'no data reported'"
+            }}
 
-            insights = {
-                key: str(body_data.get(key, "")).strip()
+            Critical Requirements:
+            1. MANDATORY: Include ALL colleges in EVERY category, even if data is missing
+            2. For missing/zero values, use exact phrase: 'College_Short_Name has no data reported for all/specific insights'
+            3. Use short college names (e.g., 'IIT Indore' instead of 'Indian Institute of Technology Indore', DTU Delhi instead of Delhi Techincal University)
+            4. List colleges in descending order by their respective metric values
+            5. Include EXACT numbers for all available metrics
+            6. Each insight must include a trend observation
+            7. Focus on patterns and trends within each specific category
+            8. Maintain analytical depth while being user-friendly
+            9. Include only data-driven observations.
+            10. strictly 0 as no data reported  for this insight.
+            11. strictly not mismatch other's / differ refer insight criteria.
+            12.  strictly for all insights consider ₹NA, ₹0 ,0 as currently no data reported. 
+
+            Temperature: 0.5 (to balance creativity with precision)
+
+            Input Data: {json.dumps(data, ensure_ascii=False, indent=2)}
+            """
+
+    def _invoke_model(self, prompt: str) -> Optional[str]:
+        """Invoke the Bedrock model with the given prompt"""
+        try:
+            native_request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.5,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ],
+            }
+            request = json.dumps(native_request, ensure_ascii=False)
+            response = self.client.invoke_model(
+                modelId=self.model_id, 
+                body=request.encode('utf-8')
+            )
+            model_response = json.loads(response["body"].read().decode('utf-8'))
+            return model_response["content"][0]["text"]
+        except Exception as e:
+            logger.error(f"Error invoking the model: {str(e)}")
+            return None
+
+    def _format_insights(self, raw_insights: str) -> Optional[Dict]:
+        """Format the raw insights into the desired structure"""
+        try:
+            insights_dict = json.loads(raw_insights)
+            formatted_insights = {
+                key: str(insights_dict.get(key, "")).strip()
                 for key in [
                     "highest_domestic_placement",
                     "highest_international_placement",
                     "total_offers",
-                    "average_salary",
-                    "students_placed_min_time"
+                    "students_placed_min_time",
+                    "average_salary"
                 ]
             }
-            
-            cache.set(cache_key, insights, timeout=3600 * 24 * 7)  
-            return insights
+            return formatted_insights
+        except Exception as e:
+            logger.error(f"Error formatting insights: {str(e)}")
+            return None
 
+    def get_ai_insights(self, placement_data: Dict) -> Optional[Dict]:
+        """
+        Main method to generate AI insights from placement data.
+        Implements caching to avoid redundant API calls.
+        """
+        try:
+            # Check cache first
+            cache_key = self.get_cache_key(placement_data)
+            cached_result = cache.get(cache_key)
+            
+            if cached_result:
+                return cached_result
+            
+            # Generate new insights if not in cache
+            prompt = self._create_prompt(placement_data)
+            raw_insights = self._invoke_model(prompt)
+            
+            if not raw_insights:
+                return None
+            
+            # Format and cache the insights
+            insights = self._format_insights(raw_insights)
+            if insights:
+                cache.set(cache_key, insights, timeout=3600 * 24 * 180)  # Cache for 7 days
+                
+            return insights
+            
         except Exception as e:
             logger.error(f"Error in get_ai_insights: {str(e)}")
             return None
@@ -1688,75 +1876,24 @@ class FeesHelper:
         return max_authority if authority_map[max_authority] > 0 else 'NA'
 
 
+
 class FeesAiInsightHelper:
-    API_URL = "https://ccj7oup84m.execute-api.ap-south-1.amazonaws.com/DEV/fees_insights"
+    def __init__(self):
+        """Initialize the FeesInsightHelper with Bedrock client configuration."""
+        self.client = boto3.client(
+            "bedrock-runtime",
+            region_name="us-east-1",
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
+          
+        )
+        self.model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 
     @staticmethod
     def get_cache_key(fees_data: Dict) -> str:
         """Generate a unique cache key based on the input fees data."""
         data_str = json.dumps(fees_data, sort_keys=True)
         return f"fees_insights_{hash(data_str)}"
-
-    @staticmethod
-    def get_fees_insights(fees_data: Dict) -> Optional[Dict]:
-        """
-        Fetch and process fees insights data from the API.
-        
-        Args:
-            fees_data (Dict): Dictionary containing fees information for colleges
-            
-        Returns:
-            Optional[Dict]: Processed fees insights or None if there's an error
-        """
-        try:
-            # Check cache first
-            cache_key = FeesAiInsightHelper.get_cache_key(fees_data)
-            cached_result = cache.get(cache_key)
-            
-            if cached_result:
-                return cached_result
-
-            # Prepare request
-            payload = {"fees_data": fees_data}
-            headers = {'Content-Type': 'application/json'}
-            
-            # Make API request
-            response = requests.request(
-                method="GET",
-                url=FeesAiInsightHelper.API_URL,
-                headers=headers,
-                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            )
-            
-            # Process response
-            raw_content = response.content.decode('utf-8')
-            response_data = json.loads(raw_content)
-            
-            if not response_data.get("body"):
-                return None
-                
-            # Handle potential string JSON in body
-            if isinstance(response_data["body"], str):
-                response_data["body"] = response_data["body"].replace('\\n', '').replace('\\', '')
-                body_data = json.loads(response_data["body"])
-            else:
-                body_data = response_data["body"]
-
-            # Extract relevant insights
-            insights = {
-                "highest_tuition_fees": body_data.get("highest_tuition_fees", "NA"),
-                "highest_fees_element": body_data.get("highest_fees_element", "NA"),
-                "scholarships_available": body_data.get("scholarships_available", "NA"),
-                "scholarship_granting_authority": body_data.get("scholarship_granting_authority", "NA")
-            }
-            
-            # Cache the results for a week
-            cache.set(cache_key, insights, timeout=3600 * 24 * 7)
-            return insights
-
-        except Exception as e:
-            logger.error(f"Error in get_fees_insights: {str(e)}")
-            return None
 
     @staticmethod
     def format_currency(amount: str) -> str:
@@ -1784,10 +1921,107 @@ class FeesAiInsightHelper:
                 return f"₹ {value/100000:.2f} L"
             else:
                 return f"₹ {value:,.2f}"
-                
+            
         except (ValueError, TypeError):
             return "NA"
+
+    def create_fees_insights(self, prompt: str) -> str:
+        """
+        Generate insights using Bedrock model based on the given prompt.
+        """
+        try:
+            native_request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.6,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ],
+            }
+            request = json.dumps(native_request, ensure_ascii=False)
+            response = self.client.invoke_model(
+                modelId=self.model_id, 
+                body=request.encode('utf-8')
+            )
+            model_response = json.loads(response["body"].read().decode('utf-8'))
+            return model_response["content"][0]["text"]
+        except Exception as e:
+            logger.error(f"Error in create_fees_insights: {str(e)}")
+            raise
+
+    def format_fees_insights(self, raw_insights: str) -> Dict:
+        """
+        Format the raw insights into structured format.
+        """
+        try:
+            insights_dict = json.loads(raw_insights)
+            formatted_insights = {
+                "highest_tuition_fees": insights_dict.get("highest_tuition_fees", "NA"),
+                "highest_fees_element": insights_dict.get("highest_fees_element", "NA"),
+                "scholarships_available": insights_dict.get("scholarships_available", "NA"),
+                "scholarship_granting_authority": insights_dict.get("scholarship_granting_authority", "NA")
+            }
+            return formatted_insights
+        except Exception as e:
+            logger.error(f"Error formatting insights: {str(e)}")
+            raise
+
+    def generate_prompt(self, fees_data: Dict) -> str:
+        """
+        Generate the prompt for the AI model.
+        """
+        return f"""
+        The agent is provided with the fee details of atmost 3 colleges.
+        Generate detailed fee insights comparing the provided colleges. Return the insights as a JSON object where keys represent the specific categories, and values are descriptive sentences in **plain string format** (not lists or bullet points). Use the following structure:
+        {{
+            "highest_tuition_fees": "Analyze ONLY the direct fee fields (gn_fees, obc_fees, sc_fees, nq_fees, st_fees). Provide a detailed sentence comparing colleges in descending order based on their general category fees. Include specific fee amounts where available and explicitly mention if data is missing. Start each college reference with the institution's name.",
+            "highest_fees_element": "Analyze the total fee fields (total_tuition_fee_general, total_tuition_fee_sc, total_tuition_fee_st, total_tuition_fee_obc). Format the response as: 'For general category, [Institution Name] charges the highest at ₹X, followed by [Institution Name] at ₹Y, and [Institution Name] at ₹Z. The SC, ST, and OBC category fees vary significantly, with [mention specific variations or missing data].' Maintain strictly descending order by category fees. Include all three institutions. Do not use the words,'total' 'tuition' in the response.",
+            "scholarships_available": "[fetch data from 'scholarship_available' it denotes the number of students] write a descriptive sentence or paragraph summarizing the number of students availing scholarship for each college, or mentioning missing data if applicable.",
+            "scholarship_granting_authority": "A descriptive sentence or paragraph summarizing the authority granting scholarships at each college, highlighting any missing or incomplete information."
+        }}
+        Fees Data: {json.dumps(fees_data, ensure_ascii=False, indent=2)}
+        """
+
+    def get_fees_insights(self, fees_data: Dict) -> Optional[Dict]:
+        """
+        Generate and process fees insights locally without API call.
         
+        Args:
+            fees_data (Dict): Dictionary containing fees information for colleges
+            
+        Returns:
+            Optional[Dict]: Processed fees insights or None if there's an error
+        """
+        try:
+            # Generate the prompt
+            prompt = self.generate_prompt(fees_data)
+            
+            # Get raw insights from the model
+            raw_insights = self.create_fees_insights(prompt)
+            
+            # Format the insights
+            insights = self.format_fees_insights(raw_insights)
+            
+            # Format currency values in the insights
+            for key in insights:
+                if isinstance(insights[key], str) and "₹" in insights[key]:
+                    # Extract amounts and format them
+                    text = insights[key]
+                    amounts = [s for s in text.split() if "₹" in s]
+                    for amount in amounts:
+                        formatted_amount = self.format_currency(amount)
+                        text = text.replace(amount, formatted_amount)
+                    insights[key] = text
+            
+            return insights
+            
+        except Exception as e:
+            logger.error(f"Error in get_fees_insights: {str(e)}")
+            return None
+
 
 class FeesGraphHelper:
     """
@@ -1910,7 +2144,7 @@ class FeesGraphHelper:
             return result_dict
         
         # Cache for 1 year
-        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 365)
+        return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
     
     @staticmethod
     def prepare_fees_insights(course_ids: List[int]) -> Dict:
@@ -2608,8 +2842,18 @@ class CollegeAmenitiesHelper:
 
 
 
+
+
 class ClassProfileAiInsightHelper:
-    API_URL = "https://z7u9qtbmcl.execute-api.ap-south-1.amazonaws.com/DEV/class_profile_insights"
+    def __init__(self):
+        self.bedrock_client = boto3.client(
+            "bedrock-runtime",
+            region_name="us-east-1",
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
+           
+        )
+        self.model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
     
     @staticmethod
     def get_cache_key(profile_data: Dict) -> str:
@@ -2625,75 +2869,155 @@ class ClassProfileAiInsightHelper:
         data_str = json.dumps(profile_data, sort_keys=True)
         return f"class_profile_insights_{hash(data_str)}"
     
-    @staticmethod
-    def get_profile_insights(
-                           data: Dict) -> Optional[Dict]:
+    def _get_college_name(self, college_id: str, college_details: list) -> str:
+        """Get college short name from college details."""
+        return next((c["short_name"] for c in college_details if str(c["id"]) == str(college_id)), "Unknown")
+    
+    def _get_ownership_display(self, college_id: str, college_details: list) -> str:
+        """Get college ownership display from college details."""
+        return next((c["ownership_display"] for c in college_details if str(c["id"]) == str(college_id)), "Unknown")
+    
+    def _create_sorted_insights(self, data: Dict) -> Dict:
+        """Create sorted insights for different metrics."""
+        sorted_insights = {
+            "student_faculty_sorted": [],
+            "gender_diversity_sorted": [],
+            "ownership_gender_diversity_sorted": []
+        }
+        
+        # Sort and process student faculty ratio
+        colleges = [(k, v) for k, v in data["data"]["student_faculty_ratio"].items() 
+                   if k.startswith("college_") and v["data_status"] == "complete"]
+        for k, v in sorted(colleges, key=lambda x: x[1]["ownership_ratio_difference_from_avg"], reverse=True):
+            college_name = self._get_college_name(v["college_id"], data["college_details"])
+            ownership_display = self._get_ownership_display(v["college_id"], data["college_details"])
+            ratio = v["ownership_ratio_difference_from_avg"]
+            ratio_text = f"lower by {abs(ratio):.2f}%" if ratio < 0 else f"higher by {ratio:.2f}%"
+            sorted_insights["student_faculty_sorted"].append(
+                f"{college_name} ({ownership_display}) shows a student-faculty ratio {ratio_text} than the average"
+            )
+        
+        # Sort and process gender diversity
+        colleges = [(k, v) for k, v in data["data"]["gender_diversity"].items() 
+                   if k.startswith("college_") and v["data_status"] == "complete"]
+        for metric, sort_key in [
+            ("gender_diversity_sorted", "type_of_institute_gender_diversity_difference_from_avg"),
+            ("ownership_gender_diversity_sorted", "ownership_gender_diversity_difference")
+        ]:
+            for k, v in sorted(colleges, key=lambda x: x[1][sort_key], reverse=True):
+                college_name = self._get_college_name(v["college_id"], data["college_details"])
+                if metric == "gender_diversity_sorted":
+                    college_type = next((c["type_of_institute"] for c in data["college_details"] 
+                                      if str(c["id"]) == str(v["college_id"])), "Unknown")
+                    diff = v[sort_key]
+                    sorted_insights[metric].append(
+                        f"{college_name} ({college_type}) demonstrates a gender diversity metric {abs(diff):.2f}% "
+                        f"{'below' if diff < 0 else 'above'} the average"
+                    )
+                else:
+                    ownership = self._get_ownership_display(v["college_id"], data["college_details"])
+                    diff = v[sort_key]
+                    diff_text = f"trails by {abs(diff):.2f}%" if diff < 0 else f"leads by {diff:.2f}%"
+                    sorted_insights[metric].append(
+                        f"{college_name} ({ownership}) {diff_text} in ownership gender diversity metrics"
+                    )
+        
+        return sorted_insights
+    
+    def _generate_prompt(self, sorted_insights: Dict) -> str:
+        """Generate an enhanced prompt for the Bedrock model."""
+        return f"""
+        Create impactful and data-driven insights from the class profile metrics below. Frame the insights to be concise, 
+        engaging, and easy to understand while maintaining analytical depth.
+
+        Key Requirements:
+        - Use modern, professional language
+        - Highlight significant variations and trends
+        - Focus on actionable insights
+        - Be impactful & compelling in delivery
+        - Maintain objective analysis
+        -mention metric of each mentioned college's (not the highest only ,followed by desc order) by mentioning college_details.short_name (but not use abbreviations like iitr)  by desc order for all insights
+
+        Format the response as a JSON object with the following structure:
+
+
+
+         {{
+            "student_faculty_ownership_ratio_difference_from_avg": 
+          
+                {'. '.join(sorted_insights['student_faculty_sorted'])}",
+            
+            "type_of_institute_gender_diversity_difference_from_avg": 
+      
+                {'. '.join(sorted_insights['gender_diversity_sorted'])}",
+            
+            "ownership_gender_diversity_difference": 
+           
+                {'. '.join(sorted_insights['ownership_gender_diversity_sorted'])}"
+        }}
+
+     
+
+        Style Guidelines:
+        1. Use active voice and present tense
+        2. Employ precise, quantitative language
+        3. Highlight standout metrics and notable patterns
+        4. Use professional yet engaging terminology
+        5. Maintain clarity while being concise
+        6. Focus on comparative insights
         """
-        Fetch and process class profile insights from the API.
+    
+    def get_profile_insights(self, data: Dict) -> Optional[Dict]:
+        """
+        Generate class profile insights using Bedrock model.
         
         Args:
-            year (int): Current year
-            intake_year (int): Year of intake
-            level (int): Level of study
             data (Dict): Dictionary containing metrics data
-            college_details (list): List of college information
             
         Returns:
             Optional[Dict]: Processed profile insights or None if there's an error
         """
         try:
-            # Prepare payload
-            payload = {
-                "p_data": data
-            }
-            
             # Check cache first
-            cache_key = ClassProfileAiInsightHelper.get_cache_key(payload)
+            cache_key = self.get_cache_key(data)
             cached_result = cache.get(cache_key)
             
             if cached_result:
                 return cached_result
-        
-
-
-            headers = {'Content-Type': 'application/json'}
             
-        
-            response = requests.request(
-                method="GET",
-                url=ClassProfileAiInsightHelper.API_URL,
-                headers=headers,
-                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            )
+            # Generate sorted insights
+            sorted_insights = self._create_sorted_insights(data)
             
-            
-            raw_content = response.content.decode('utf-8')
-            response_data = json.loads(raw_content)
-            
-            if not response_data.get("body"):
-                return None
-            
-        
-            if isinstance(response_data["body"], str):
-                body_data = json.loads(response_data["body"])
-            else:
-                body_data = response_data["body"]
-            
-    
-            insights = {
-                "student_faculty_ownership_ratio_difference_from_avg": 
-                    body_data.get("student_faculty_ownership_ratio_difference_from_avg"),
-                "type_of_institute_gender_diversity_difference_from_avg": 
-                    body_data.get("type_of_institute_gender_diversity_difference_from_avg"),
-                "ownership_gender_diversity_difference": 
-                    body_data.get("ownership_gender_diversity_difference")
+            # Prepare and send request to Bedrock
+            prompt = self._generate_prompt(sorted_insights)
+            request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.6,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ],
             }
             
-        
-            insights = {k: v if v is not None else "No data available" 
-                      for k, v in insights.items()}
+            response = self.bedrock_client.invoke_model(
+                modelId=self.model_id,
+                body=json.dumps(request, ensure_ascii=False).encode('utf-8')
+            )
             
-            cache.set(cache_key, insights, timeout=3600 * 24 * 7)
+            response_body = json.loads(response["body"].read().decode('utf-8'))
+            raw_insights = response_body["content"][0]["text"]
+            
+            # Clean and format insights
+            if raw_insights.startswith("```json") and raw_insights.endswith("```"):
+                raw_insights = raw_insights[7:-3].strip()
+            
+            insights = json.loads(raw_insights)
+            
+            # Cache the results
+            cache.set(cache_key, insights, timeout=3600 * 24 * 180)
             return insights
             
         except Exception as e:
@@ -2702,15 +3026,7 @@ class ClassProfileAiInsightHelper:
     
     @staticmethod
     def format_percentage(value: float) -> str:
-        """
-        Format percentage values consistently.
-        
-        Args:
-            value (float): Percentage value
-            
-        Returns:
-            str: Formatted percentage string
-        """
+        """Format percentage values consistently."""
         try:
             return f"{float(value):.2f}%" if value is not None else "NA"
         except (ValueError, TypeError):
@@ -2718,19 +3034,12 @@ class ClassProfileAiInsightHelper:
     
     @staticmethod
     def format_ratio(value: float) -> str:
-        """
-        Format ratio values consistently.
-        
-        Args:
-            value (float): Ratio value
-            
-        Returns:
-            str: Formatted ratio string
-        """
+        """Format ratio values consistently."""
         try:
             return f"{float(value):.2f}" if value is not None else "NA"
         except (ValueError, TypeError):
             return "NA"
+
 
 
 class CollegeReviewsHelper:
@@ -2818,7 +3127,7 @@ class CollegeReviewsHelper:
         
     def _create_summary_cached(self, review_text: str, college_name: str) -> Optional[Dict]:
         """Cached version of _create_summary."""
-        cache_key = self.get_cache_key("api_summary", review_text, college_name)
+        cache_key = self.get_cache_key("api_summary_new", review_text, college_name)
         summary = cache.get(cache_key)
         if summary is None:
             summary = self._create_summary(review_text, college_name)
@@ -2845,7 +3154,7 @@ class CollegeReviewsHelper:
         
         # Generate cache key
         cache_key = self.get_cache_key(
-            'College_Reviews_Summary_new_',
+            'College_Reviews_Summary_new__',
             '-'.join(map(str, sorted(college_ids))),
             '-'.join(map(str, sorted(course_ids or []))),
             grad_year
@@ -3024,95 +3333,135 @@ class CollegeReviewsHelper:
     
         return cache.get_or_set(cache_key, fetch_recent, 3600*24*7)
 
-    
+
+
+
 
 class CollegeReviewAiInsightHelper:
-    API_URL = "https://90pbzu3788.execute-api.ap-south-1.amazonaws.com/DEV/college_review_insights"
+    """Helper class for generating and formatting college review insights."""
 
     @staticmethod
-    def get_cache_key(reviews_data: Dict) -> str:
-        """Generate a unique cache key based on the input reviews data."""
-        data_str = json.dumps(reviews_data, sort_keys=True)
-        return f"college_review_insights_{hash(data_str)}"
-
-    @staticmethod
-    def get_review_insights(reviews_data: Dict) -> Optional[Dict]:
+    def create_reviews_insights(prompt: str) -> str:
         """
-        Fetch and process college review insights from the API.
-        
+        Interacts with the AWS Bedrock Claude model to generate insights about college reviews.
+
         Args:
-            reviews_data (Dict): Dictionary containing review information for colleges
-            
+            prompt: Structured prompt for the AI model.
+
         Returns:
-            Optional[Dict]: Processed review insights or None if there's an error
+            AI-generated insights as text.
         """
         try:
-            # Check cache first
-            cache_key = CollegeReviewAiInsightHelper.get_cache_key(reviews_data)
-            cached_result = cache.get(cache_key)
-            
-            if cached_result:
-                return cached_result
-
-            # Prepare request
-            payload = {"reviews_data": reviews_data}
-            headers = {'Content-Type': 'application/json'}
-            
-            # Make API request
-            response = requests.request(
-                method="GET",
-                url=CollegeReviewAiInsightHelper.API_URL,
-                headers=headers,
-                data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name="us-east-1",
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=  os.getenv("AWS_ACCESS_SECRET_KEY")
             )
-            
-            # Process response
-            raw_content = response.content.decode('utf-8')
-            response_data = json.loads(raw_content)
-            
-            if not response_data.get("body"):
-                return None
-                
-            # Handle potential string JSON in body
-            if isinstance(response_data["body"], str):
-                response_data["body"] = response_data["body"].replace('\\n', '').replace('\\', '')
-                body_data = json.loads(response_data["body"])
-            else:
-                body_data = response_data["body"]
 
-            # Extract relevant insights
-            insights = {
-                "highest_rated_aspects": body_data.get("highest_rated_aspects", ""),
-                "improvement_areas": body_data.get("improvement_areas", ""),
-                "most_discussed_attributes": body_data.get("most_discussed_attributes", "")
+            model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+            native_request = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "temperature": 0.60,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ],
             }
-            
-            # Clean up any empty strings or None values
-            insights = {k: v if v else "No data available" for k, v in insights.items()}
-            
-            # Cache the results for a week
-            cache.set(cache_key, insights, timeout=3600 * 24 * 7)
-            return insights
 
+            request = json.dumps(native_request)
+            response = client.invoke_model(modelId=model_id, body=request)
+            model_response = json.loads(response["body"].read())
+            return model_response["content"][0]["text"]
         except Exception as e:
-            logger.error(f"Error in get_review_insights: {str(e)}")
-            return None
-
+            logger.error(f"Error in create_reviews_insights: {str(e)}")
+            raise
+    
     @staticmethod
-    def format_rating(rating: float) -> str:
+    def format_reviews_insights(raw_insights: str) -> Dict:
         """
-        Format rating values consistently.
-        
+        Format the raw insights into a structured format.
+
         Args:
-            rating (float): Rating value
-            
+            raw_insights (str): Raw insights in JSON-like string format.
+
         Returns:
-            str: Formatted rating string
+            Dict: Formatted insights as a dictionary.
         """
         try:
-            return f"{float(rating):.1f}" if rating is not None else "NA"
-        except (ValueError, TypeError):
-            return "NA"
+     
+            insights_dict = json.loads(raw_insights)
+
+        
+            formatted_insights = {
+                "highest_rated_aspects": insights_dict.get("highest_rated_aspects", "NA"),
+                "improvement_areas": insights_dict.get("improvement_areas", "NA"),
+                "most_discussed_attributes": insights_dict.get("most_discussed_attributes", "NA"),
+            }
+            return formatted_insights
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON: {str(e)}. Raw insights: {raw_insights}")
+            raise ValueError("Failed to decode raw insights into valid JSON.") from e
+        except Exception as e:
+            logger.error(f"Unexpected error formatting insights: {str(e)}")
+            raise
+
+
+   
+
+    @staticmethod
+    def generate_reviews_insights(reviews_data: Dict) -> str:
+        """
+        Generates insights for college reviews ensuring that if no areas below 3.5 are found,
+        the improvement areas field will state that there are no areas of importance for improvement.
+
+        Args:
+            reviews_data: Dictionary containing college reviews and ratings.
+
+        Returns:
+            Formatted insights for the reviews.
+        """
+        prompt = f"""
+        Generate detailed insights about college reviews based on the following exact JSON format:
+
+        {{
+            "highest_rated_aspects":"Sort colleges by their highest rating, then for each college list all aspects with ratings ≥ 4.0 in strict descending order as 'IIT X: [highest rating] in [aspect], [next highest rating] in [aspect]...'; if no aspects ≥ 4.0, write 'no strengths reported for [college name]' using exact numerical values from the data.Write structured sentences to avoid repetitions."
+            
+            "improvement_areas": "Identify areas with ratings < 3.5 across colleges. Focus on aspects like value for money, placement services, and campus life. Offer actionable suggestions for improvement. If no such aspects exist, state that 'No areas of importance for improvement for this college.",
+
+            "most_discussed_attributes": "Discuss the most frequently discussed attributes mentioning short name for colleges[e.g. IIT Delhi]. Explain why these are of particular concern or praise by students."
+        }}
+
+        Use the following data:
+        {json.dumps(reviews_data, indent=2)}
+
+        **Analysis Guidelines:**
+        - Prioritize reviews with more than 4.0 ratings for strengths, and focus on sub-3.5 ratings for improvement areas.
+        - For each area, provide examples of specific metrics and attributes (e.g., 'Faculty rating of 4.5').
+        - If a college has no aspects with ratings below 3.5, return 'No areas of importance for improvement for this college.'
+        - Analyze common themes across colleges.
+
+        Format Requirements:
+        - Provide clear, concise, trendy, compelling, actionable insights that are supported by ratings and review counts.
+        - Avoid generalized statements, focusing on real patterns and examples from the data.
+        - Do not use bullet points, long paragraphs, or generic phrases. Keep it short and to the point.
+        """
+
+        try:
+            raw_insights = CollegeReviewAiInsightHelper.create_reviews_insights(prompt)
+            formatted_insights = CollegeReviewAiInsightHelper.format_reviews_insights(raw_insights)
+            return formatted_insights
+        except Exception as e:
+            logger.error(f"Error generating insights: {str(e)}")
+            return f"Error generating insights: {e}"
+
+
+
+
 
 
 

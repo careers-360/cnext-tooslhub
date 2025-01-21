@@ -137,6 +137,7 @@ class College(models.Model):
     location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True)
     campus_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     year_of_establishment = models.IntegerField(null=True, blank=True)
+    popular_stream = models.IntegerField(null=True, blank=True)
     domains = models.ManyToManyField(Domain, through='CollegeDomain', related_name='colleges')
     entity_reference = models.ForeignKey(
         'self',
@@ -156,6 +157,7 @@ class College(models.Model):
         indexes = [
             models.Index(fields=['published', 'name']),
             models.Index(fields=['country_id']),
+            models.Index(fields=['popular_stream']),
             models.Index(fields=['published', 'status', 'country_id']),
         ]
 

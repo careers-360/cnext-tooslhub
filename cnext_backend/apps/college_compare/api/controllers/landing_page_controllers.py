@@ -11,13 +11,16 @@ from utils.helpers.custom_permission import ApiKeyPermission
 
 logger = logging.getLogger(__name__)
 
+
 class PeerComparisonCollegesView(APIView):
     permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Get Peer Comparison of Colleges",
         description="Retrieve peer comparison details for colleges with optional user-specific context.",
         parameters=[
-            OpenApiParameter(name='uid', type=int, description='User ID for personalized peer comparison', required=False)
+            OpenApiParameter(name='uid', type=int, description='User ID for personalized peer comparison', required=False),
+             OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
+
         ],
         responses={
             200: OpenApiResponse(description='Successful peer comparison retrieval'),
@@ -32,6 +35,7 @@ class PeerComparisonCollegesView(APIView):
         """
         
         uid = request.query_params.get('uid')
+        cache_burst = request.query_params.get('cache_burst')  or 0
 
         try:
           
@@ -41,7 +45,7 @@ class PeerComparisonCollegesView(APIView):
                 uid = None
 
           
-            result = PeerComparisonService.get_peer_comparisons(uid)
+            result = PeerComparisonService.get_peer_comparisons(uid,cache_burst=cache_burst)
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
@@ -58,7 +62,9 @@ class TopCollegesCoursesView(APIView):
         summary="Get Top Colleges and Courses",
         description="Retrieve top colleges and courses with optional user-specific context.",
         parameters=[
-            OpenApiParameter(name='uid', type=int, description='User ID for personalized recommendations', required=False)
+            OpenApiParameter(name='uid', type=int, description='User ID for personalized recommendations', required=False),
+             OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
+
         ],
         responses={
             200: OpenApiResponse(description='Successful top colleges and courses retrieval'),
@@ -71,6 +77,7 @@ class TopCollegesCoursesView(APIView):
         Handle the retrieval of top colleges and courses with optional user context.
         """
         uid = request.query_params.get('uid')
+        cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
 
@@ -79,7 +86,7 @@ class TopCollegesCoursesView(APIView):
             else:
                 uid = None
 
-            result = TopCollegesCoursesService.get_top_colleges_courses(uid)
+            result = TopCollegesCoursesService.get_top_colleges_courses(uid,cache_burst=cache_burst)
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
