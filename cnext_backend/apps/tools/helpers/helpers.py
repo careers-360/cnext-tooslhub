@@ -1,18 +1,19 @@
 from django.utils.timezone import localtime
-import re, time, os
+import time, os
 import threading
 from datetime import datetime as t
-from django.db.models import F, Q
+from django.db.models import Q
 from cnext_backend import settings
 from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
-from tools.models import CPProductCampaign, UrlAlias, UrlMetaPatterns
+from tools.models import CPProductCampaign, ToolsFAQ, UrlAlias, UrlMetaPatterns
 from rest_framework.pagination import PageNumberPagination
 from django.utils.text import slugify
 from utils.helpers.response import SuccessResponse,ErrorResponse
 from rest_framework import status
-from utils.helpers.choices import FIELD_TYPE, TOOL_TYPE_INTEGER
+from utils.helpers.choices import FIELD_TYPE
 import json
+from django.db import transaction
 
 class UrlAliasCreation():
 
@@ -492,3 +493,49 @@ class ToolsHelper():
 
         except Exception as e:
             return {"message": "An error occurred", "error": str(e)}
+        
+    def add_edit_faq(self, *args, **kwargs):
+        user_id = self.request.data.get('user_id')  
+        faqs = self.request.data.get('faqs', [])
+        product_type = self.request.data.get('product_type')  
+        product_id = self.request.data.get('product_id')
+
+        existing_instances = ToolsFAQ.objects.filter(product_id=product_id)
+        existing_ids = set(existing_instances.values_list('id', flat=True))
+        to_update, to_create = [], []
+
+        # Process the provided FAQs
+        for faq in faqs:
+            question_data = {
+                "question": faq.get("question"),
+                "answer": faq.get("answer"),
+                "product_id": product_id,
+                "product_type": product_type,
+                "updated_by": user_id,
+                "status": faq.get("status", True),
+            }
+
+            question_id = faq.get("id")
+            if question_id:
+                if question_id in existing_ids:
+                    to_update.append((question_id, question_data))
+                    existing_ids.remove(question_id)
+            else:
+                question_data["created_by"] = user_id
+                to_create.append(ToolsFAQ(**question_data))
+
+        # Bulk update existing FAQs
+        if to_update:
+            with transaction.atomic():
+                for question_id, data in to_update:
+                    existing_instances.filter(id=question_id).update(**data)
+
+        # Bulk create new FAQs
+        if to_create:
+            ToolsFAQ.objects.bulk_create(to_create)
+
+        # Delete FAQs not present in the current payload
+        if existing_ids:
+            existing_instances.filter(id__in=existing_ids).delete()
+
+        return True , {"message": "FAQs updated successfully"}
