@@ -1051,12 +1051,20 @@ class RPCmsHelper:
                 except ValueError as e:
                     return False, {"error": f"Row {index}: Invalid data type for field. {str(e)}"}
 
-
-                # Validate year and product_id
-                if row_data['year'].strip() != str(selected_year):
-                    return False, {"error": f"Row {index}: Year does not match the selected year."}
+                # Validate product_id
                 if row_data['product_id'].strip() != str(product_id):
                     return False, {"error": f"Row {index}: Product ID does not match the selected Product ID."}
+
+            # Validate: Check if all rows have the same year
+            year_values = [row[headers.index('year')].strip() for row in rows[1:] if row[headers.index('year')].strip()]
+            if len(set(year_values)) > 1:
+                return False, {"error": "Year is not unique in the merit list."}
+
+            # Validate year consistency with selected_year
+            year_index = headers.index('year')
+            for row in rows[1:]:
+                if row[year_index].strip() != str(selected_year):
+                    return False, {"error": f"Sheet Year does not match with the selected one"}
 
             TempRpMeritSheet.objects.filter(product_id=product_id, year=selected_year).delete()
 
