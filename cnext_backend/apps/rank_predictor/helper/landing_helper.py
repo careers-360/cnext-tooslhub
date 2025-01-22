@@ -197,16 +197,26 @@ class RPHelper:
     
     def _get_product__exam_from_alias(self , alias):
 
+        domain = ""
+        level = ""
+        
         base_url_alias = UrlAlias.objects.filter(alias=alias).first()
         split_string = base_url_alias.source.split("/")
 
         product_id = int(split_string[1])
 
-        exam_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
 
-        # print(f"exam dictionary {exam_dict.get('exam')}")
+        exam_id = product_dict.get("exam", "")
 
-        return { "product_id": product_id, "exam_id": exam_dict.get("exam", "")}
+        exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
+
+        if exam_dict != None:
+            domain = exam_dict.get('domain_id', "")
+            level = exam_dict.get('preferred_education_level_id', "")
+        print(f"exam dictionary {exam_dict}")
+
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain, 'level': level}
         
     def _related_products(self, product_id=None, alias=None):
 
