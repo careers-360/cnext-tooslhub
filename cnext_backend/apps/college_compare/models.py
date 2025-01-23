@@ -9,22 +9,24 @@ from django.core.cache import cache
 from hashlib import md5
 from functools import reduce
 import operator
-
+import decimal
+from django.db import connection
 
 import locale
-from django.db import connection
-from django.core.cache import cache
 
-# Set locale for Indian currency formatting
+
 locale.setlocale(locale.LC_ALL, 'en_IN.UTF-8')
+
 
 def format_fee(value):
     """
     Format the fee value to Indian currency format with ₹ symbol or return 'NA' for zero/invalid values.
     """
     try:
+      
         if int(value) == 0:
             return "NA"
+        
         return f"₹ {locale.format_string('%d', int(value), grouping=True)}"
     except (ValueError, TypeError):
         return "NA"
@@ -64,7 +66,6 @@ class CollegeAccrediationApproval(models.Model):
             models.Index(fields=['college', 'type']),
             models.Index(fields=['value']),
         ]
-
 
 class Location(models.Model):
     loc_string = models.TextField(null=True, blank=True)
@@ -127,7 +128,7 @@ class College(models.Model):
     ]
 
     name = models.CharField(max_length=255, db_index=True)
-    short_name = models.CharField(max_length=50, blank=True,default='NA')
+    short_name = models.CharField(max_length=50, null=True, blank=True)
     published = models.CharField(max_length=20, default='published', db_index=True)
     status = models.BooleanField(default=True)
     ownership = models.IntegerField(choices=OWNERSHIP_CHOICES)
@@ -137,7 +138,6 @@ class College(models.Model):
     location = models.ForeignKey(Location, on_delete=models.SET_NULL, null=True)
     campus_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     year_of_establishment = models.IntegerField(null=True, blank=True)
-    popular_stream = models.IntegerField(null=True, blank=True)
     domains = models.ManyToManyField(Domain, through='CollegeDomain', related_name='colleges')
     entity_reference = models.ForeignKey(
         'self',
@@ -157,7 +157,6 @@ class College(models.Model):
         indexes = [
             models.Index(fields=['published', 'name']),
             models.Index(fields=['country_id']),
-            models.Index(fields=['popular_stream']),
             models.Index(fields=['published', 'status', 'country_id']),
         ]
 
@@ -389,8 +388,6 @@ class Course(models.Model):
         indexes = [
             models.Index(fields=['degree', 'branch', 'college', 'status']),
             models.Index(fields=['degree_domain']),
-            models.Index(fields=['degree_domain','level']),
-            
         ]
 
     def __str__(self):
@@ -406,134 +403,18 @@ class Course(models.Model):
             degree=self.degree,
             status=True
         ).count()
-    
-    @staticmethod
-    def get_cache_key(course_id, session):
-        """Generate a unique cache key based on course_id and session"""
-        key = f"tuition_fee_{course_id}_{session}"
-        return md5(key.encode()).hexdigest()
+
     
 
-    @staticmethod
-    def get_total_tuition_fee_by_course(course_id, session):
-        """
-        Args:
-            course_id (int): The ID of the course
-            session (int): The academic session year
+    
+   
+    
+   
+    
 
-        Returns:
-            dict: Dictionary containing formatted total fees for each category
-        """
-        cache_key = f"tuition_fee_{course_id}_{session}"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return cached_data
-
-        # Default response structure
-        total_fees = {
-            'total_tuition_fee_general': 'NA',
-            'total_tuition_fee_sc': 'NA',
-            'total_tuition_fee_st': 'NA',
-            'total_tuition_fee_obc': 'NA',
-        }
-
-        # Raw SQL query
-        sql = """
-            SELECT
-                SUM(ccfd.general) AS total_general_tuition,
-                SUM(ccfd.sc) AS total_sc_tuition,
-                SUM(ccfd.st) AS total_st_tuition,
-                SUM(ccfd.obc) AS total_obc_tuition
-            FROM
-                django360.college_course_fee ccf
-            JOIN
-                django360.college_course_fee_data ccfd ON ccf.id = ccfd.course_fee_duration_id
-            JOIN
-                django360.college_course_fee_fees_type ccfft ON ccfd.id = ccfft.fee_data_id
-            JOIN
-                django360.college_course_fee_type ccft ON ccfft.fee_type = ccft.id
-            WHERE
-                ccf.college_course_id = %s
-                AND ccf.session_type = 'year'
-                AND ccf.session = %s
-                AND ccft.name = 'Tuition Fees'
-                AND ccfft.fee_type = 36
-        """
-
-        # Execute the query
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [course_id, session])
-            row = cursor.fetchone()
-
-        # Update response structure with actual values if query returned data
-        if row:
-            total_fees = {
-                'total_tuition_fee_general': format_fee(row[0]),
-                'total_tuition_fee_sc': format_fee(row[1]),
-                'total_tuition_fee_st': format_fee(row[2]),
-                'total_tuition_fee_obc': format_fee(row[3]),
-            }
-
-        # Cache the result
-        cache.set(cache_key, total_fees, 3600 * 24)
-
-        return total_fees
+  
   
 
-    # @staticmethod
-    # def get_total_tuition_fee_by_course(course_id, session):
-    #     """
-    #     Args:
-    #         course_id (int): The ID of the course
-    #         session (int): The academic session year
-        
-    #     Returns:
-    #         dict: Dictionary containing formatted total fees for each category
-    #     """
-    #     cache_key = f"tuition_____fees___{course_id}_{session}"
-    #     cached_data = cache.get(cache_key)
-    #     if cached_data:
-    #         return cached_data
-
-    #     total_fees = {
-    #         'total_tuition_fee_general': Decimal('0'),
-    #         'total_tuition_fee_sc': Decimal('0'),
-    #         'total_tuition_fee_st': Decimal('0'),
-    #         'total_tuition_fee_obc': Decimal('0'),
-    #     }
-
-    #     try:
-    #         course = Course.objects.get(id=course_id)
-    #         if not course.course_duration:
-    #             return {key: format_fee(value) for key, value in total_fees.items()}
-       
-    #         years = Decimal(str(course.course_duration)) / Decimal('6')
-         
-    #         yearly_fee = CollegeCourseFee.objects.filter(
-    #             course_fee_duration__college_course_id=course_id,
-    #             course_fee_duration__college_course__sessions__session=session,
-    #             fee_category='institute_fee',
-    #             fee_types__fee_type=36,
-    #         ).first()
-            
-    #         if yearly_fee:
-    #             print(years,"------")
-               
-    #             for category in ['general', 'sc', 'st', 'obc']:
-    #                 fee_value = getattr(yearly_fee, category)
-    #                 if fee_value is not None:
-    #                     total_fees[f'total_tuition_fee_{category}'] = \
-    #                         Decimal(str(fee_value)) * years
-
-    #     except Course.DoesNotExist:
-    #         return {key: format_fee(value) for key, value in total_fees.items()}
-
-    #     formatted_fees = {key: format_fee(value) for key, value in total_fees.items()}
-
-    #     if any(total_fees.values()):
-    #         cache.set(cache_key, formatted_fees, 3600 * 24)  
-
-    #     return formatted_fees
 
 class CollegeDomain(models.Model):
     college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='collegedomain', db_index=True)
@@ -736,17 +617,7 @@ class CollegeCompareData(models.Model):
             models.Index(fields=['college_4', 'course_4']),
              models.Index(fields=['college_1', 'college_2', 'college_3', 'college_4']),
             models.Index(fields=['course_1', 'course_2', 'course_3', 'course_4']),
-            models.Index(fields=['course_1', 'course_2']),
-            models.Index(fields=['course_1', 'course_2', 'college_1', 'college_2']),
-            models.Index(fields=['course_1', 'course_2', 'college_1']),
-            models.Index(fields=['college_1', 'college_2']),
-            models.Index(fields=['college_1']),
-            models.Index(fields=['college_2']),
-            models.Index(fields=['course_1']),
-            models.Index(fields=['course_2']),
       
-
-     
         ]
 
         unique_together = ['course_1', 'course_2','college_1',"college_2"] 
@@ -878,12 +749,21 @@ class FeeBifurcation(models.Model):
 
 
 
+class CourseFeesDuration(models.Model):
+    type = models.CharField(max_length=255)  # E.g., Yearly, Semester
+    college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='fee_durations')
+    count = models.IntegerField()  # E.g., 12 months, 6 months for semesters
 
+    class Meta:
+        db_table = 'course_fees_durations'
+
+    def __str__(self):
+        return f"{self.type} - {self.count} months"
 
 
 class CollegeCourseFee(models.Model):
     course_fee_duration = models.ForeignKey('CourseFeesDuration', on_delete=models.CASCADE, related_name='fees', db_index=True)
-    fee_category = models.CharField(max_length=255)
+    fee_category = models.CharField(max_length=255)  # E.g., Tuition Fee, Institute Fee
     obc = models.IntegerField(null=True, blank=True)  # OBC Fee
     sc = models.IntegerField(null=True, blank=True)   # SC Fee
     st = models.IntegerField(null=True, blank=True)   # ST Fee
@@ -897,9 +777,83 @@ class CollegeCourseFee(models.Model):
     def __str__(self):
         return f"{self.fee_category} for Course Fee Duration {self.course_fee_duration}"
 
+    @staticmethod
+    def handle_na_case(value):
+        """Helper function to return 'NA' if value is None"""
+        return 'NA' if value is None else value
+    @staticmethod
+    def get_total_tuition_fee_by_course(course_id, session):
+        """
+        Args:
+            course_id (int): The ID of the course
+            session (int): The academic session year
+
+        Returns:
+            dict: Dictionary containing total fees for each category
+        """
+        cache_key = f"tuitionfees_{course_id}_{session}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
+    
+        total_fees = {
+            'total_tuition_fee_general': 'NA',
+            'total_tuition_fee_sc': 'NA',
+            'total_tuition_fee_st': 'NA',
+            'total_tuition_fee_obc': 'NA',
+        }
+
+        
+        sql = """
+            SELECT
+                SUM(ccfd.general) AS total_general_tuition,
+                SUM(ccfd.sc) AS total_sc_tuition,
+                SUM(ccfd.st) AS total_st_tuition,
+                SUM(ccfd.obc) AS total_obc_tuition
+            FROM
+                django360.college_course_fee ccf
+            JOIN
+                django360.college_course_fee_data ccfd ON ccf.id = ccfd.course_fee_duration_id
+            JOIN
+                django360.college_course_fee_fees_type ccfft ON ccfd.id = ccfft.fee_data_id
+            JOIN
+                django360.college_course_fee_type ccft ON ccfft.fee_type = ccft.id
+            WHERE
+                ccf.college_course_id = %s
+                AND ccf.session_type = 'year'
+                AND ccf.session = %s
+                AND ccft.name = 'Tuition Fees'
+                AND ccfft.fee_type = 36
+        """
+
+     
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [course_id, session])
+            row = cursor.fetchone()
+
+   
+        if row:
+            total_fees = {
+                'total_tuition_fee_general': format_fee(row[0]),
+                'total_tuition_fee_sc': format_fee(row[1]),
+                'total_tuition_fee_st': format_fee(row[2]),
+                'total_tuition_fee_obc': format_fee(row[3]),
+            }
+
+   
+        cache.set(cache_key, total_fees, 3600 * 24)
+
+        return total_fees
+        
+    
+    
+    
+
 class CollegeCourseFeeType(models.Model):
     fee_data = models.ForeignKey('CollegeCourseFee', on_delete=models.CASCADE, related_name='fee_types')
-    fee_type = models.IntegerField()
+    fee_type = models.IntegerField()  # Type ID, e.g., 36 for Tuition
     updated = models.DateTimeField(auto_now=True)
     updated_by = models.IntegerField()
 
@@ -909,8 +863,9 @@ class CollegeCourseFeeType(models.Model):
     def __str__(self):
         return f"Fee Type {self.fee_type} for Fee Data ID {self.fee_data.id}"
 
+
 class FeeType(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255)  # E.g., Tuition, Development, Library Fee
 
     class Meta:
         db_table = 'college_course_fee_type'
@@ -918,20 +873,10 @@ class FeeType(models.Model):
     def __str__(self):
         return self.name
 
-class CourseFeesDuration(models.Model):
-    type = models.CharField(max_length=255)
-    count = models.IntegerField()  # Duration in months or years
-    college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='fee_durations')
-
-    class Meta:
-        db_table = 'course_fees_durations'
-
-    def __str__(self):
-        return f"{self.type} - {self.count} months"
 
 class CollegeCourseSession(models.Model):
     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='sessions')
-    session = models.IntegerField()  # The session year (e.g. 2024)
+    session = models.IntegerField()  # The session year (e.g., 2024)
     session_type = models.CharField(max_length=255)  # E.g., Semester, Annual
     created = models.DateTimeField(auto_now_add=True)
     created_by = models.IntegerField()
@@ -943,6 +888,70 @@ class CollegeCourseSession(models.Model):
 
     def __str__(self):
         return f"Session {self.session} for {self.college_course.course_name} ({self.session_type})"
+
+
+
+# class CollegeCourseFee(models.Model):
+#     course_fee_duration = models.ForeignKey('CourseFeesDuration', on_delete=models.CASCADE, related_name='fees', db_index=True)
+#     fee_category = models.CharField(max_length=255)
+#     obc = models.IntegerField(null=True, blank=True)  # OBC Fee
+#     sc = models.IntegerField(null=True, blank=True)   # SC Fee
+#     st = models.IntegerField(null=True, blank=True)   # ST Fee
+#     general = models.IntegerField(null=True, blank=True)  # General Fee
+#     ls = models.IntegerField()  # LS Fee
+#     ints = models.IntegerField()  # Ints Fee
+
+#     class Meta:
+#         db_table = 'college_course_fee_data'
+
+#     def __str__(self):
+#         return f"{self.fee_category} for Course Fee Duration {self.course_fee_duration}"
+
+# class CollegeCourseFeeType(models.Model):
+#     fee_data = models.ForeignKey('CollegeCourseFee', on_delete=models.CASCADE, related_name='fee_types')
+#     fee_type = models.IntegerField()
+#     updated = models.DateTimeField(auto_now=True)
+#     updated_by = models.IntegerField()
+
+#     class Meta:
+#         db_table = 'college_course_fee_fees_type'
+
+#     def __str__(self):
+#         return f"Fee Type {self.fee_type} for Fee Data ID {self.fee_data.id}"
+
+# class FeeType(models.Model):
+#     name = models.CharField(max_length=255)
+
+#     class Meta:
+#         db_table = 'college_course_fee_type'
+
+#     def __str__(self):
+#         return self.name
+
+# class CourseFeesDuration(models.Model):
+#     type = models.CharField(max_length=255)
+#     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='fee_durations')
+
+#     class Meta:
+#         db_table = 'course_fees_durations'
+
+#     def __str__(self):
+#         return f"{self.type} - {self.count} months"
+
+# class CollegeCourseSession(models.Model):
+#     college_course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='sessions')
+#     session = models.IntegerField()  # The session year (e.g. 2024)
+#     session_type = models.CharField(max_length=255)  # E.g., Semester, Annual
+#     created = models.DateTimeField(auto_now_add=True)
+#     created_by = models.IntegerField()
+#     updated = models.DateTimeField(auto_now=True)
+#     updated_by = models.IntegerField()
+
+#     class Meta:
+#         db_table = 'college_course_fee'
+
+#     def __str__(self):
+#         return f"Session {self.session} for {self.college_course.course_name} ({self.session_type})"
 
 class CollegeCourseExam(models.Model):
     college_course = models.ForeignKey(
@@ -1087,3 +1096,26 @@ class CollegeCourseComparisonFeedback(models.Model):
 
     def __str__(self):
         return f"Feedback by User {self.uid}: Voted [{self.voted_college}, {self.voted_course}]"
+
+ 
+
+class UserReportPreferenceMatrix(models.Model):
+    uid = models.ForeignKey('users.User', on_delete=models.CASCADE, db_index=True,db_column="uid")
+    course_1 = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='user_preferences_1', db_index=True,db_column="course_1")
+    course_2 = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='user_preferences_2', db_index=True, db_column="course_2")
+    course_3 = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='user_preferences_3', db_index=True, null=True, blank=True, db_column="course_3")
+
+    preference_1 = models.CharField(max_length=255, null=True, blank=True)
+    preference_2 = models.CharField(max_length=255, null=True, blank=True)
+    preference_3 = models.CharField(max_length=255, null=True, blank=True)
+    preference_4 = models.CharField(max_length=255, null=True, blank=True)
+    preference_5 = models.CharField(max_length=255, null=True, blank=True)
+
+
+    class Meta:
+        db_table = 'user_report_preference_matrix'
+        indexes = [
+            models.Index(fields=['uid']),
+            models.Index(fields=['preference_1', 'preference_2', 'preference_3', 'preference_4', 'preference_5']),
+            models.Index(fields=['course_1', 'course_2', 'course_3']),
+        ]

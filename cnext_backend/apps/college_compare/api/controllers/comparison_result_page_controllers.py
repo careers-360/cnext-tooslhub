@@ -6,26 +6,64 @@ from django.core.exceptions import ValidationError
 import logging
 from utils.helpers.custom_permission import ApiKeyPermission
 
-from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
+from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
-
+from django.core.exceptions import ObjectDoesNotExist
 
 import logging
 import traceback
 
 logger = logging.getLogger(__name__)
+from rest_framework import serializers
 
 import time
 
 current_year = time.localtime().tm_year
 
 
+class UserPreferenceOptionsView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        summary="Get all available user preferences",
+        description="Retrieve the full list of 10 possible preferences that a user can select from.",
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved the preferences list'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        try:
+            # Get the user preferences using the helper
+            available_preferences = UserPreferenceOptionsHelper.fetch_user_preferences()
+
+            # Return the response
+            return SuccessResponse({"available_preferences": available_preferences}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error fetching user preferences: {str(e)}")
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
+class UserPreferenceSaveView(APIView):
+    @extend_schema(
+        summary="Save User Preferences",
+        description="Allows users to save their top 5 college comparison preferences.",
+        responses={
+            201: OpenApiResponse(description="User preferences saved successfully."),
+            400: OpenApiResponse(description="Invalid input data."),
+        },
+    )
+    def post(self, request):
+        serializer = UserPreferenceSaveSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "User preferences saved successfully."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RankingAccreditationComparisonView(APIView):
     permission_classes = [ApiKeyPermission]
