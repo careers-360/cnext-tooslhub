@@ -272,6 +272,10 @@ class RPHelper:
         
         id = user_data.get('id', None)
         login_status = user_data.get('login_status', None)
+        application = user_data.get('application', '')
+
+        if user_data.get('application') == None:
+            application = ''
 
         if id is not None:
             CnextRpUserTracking.objects.filter(id=id).update(login_status=login_status)
@@ -289,7 +293,7 @@ class RPHelper:
                 uuid=user_data.get('uuid', None),
                 category=user_data.get('category', None),
                 disability=user_data.get('disability', None),
-                application=user_data.get('application', None),
+                application=application,
                 dob=user_data.get('dob', None),
                 exam_session=user_data.get('exam_session', None),
                 tool_session_id=product_session_id.get('id', None),
