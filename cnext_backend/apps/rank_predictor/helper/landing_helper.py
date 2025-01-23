@@ -212,11 +212,16 @@ class RPHelper:
         exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
 
         if exam_dict != None:
-            domain = exam_dict.get('domain_id', "")
+            domain_id = exam_dict.get('domain_id', "")
             level = exam_dict.get('preferred_education_level_id', "")
         print(f"exam dictionary {exam_dict}")
 
-        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain, 'level': level}
+        domain_dict = Domain.objects.filter(id=domain_id).values('name').first()
+
+        if domain_dict != None:
+            domain_name = domain_dict.get('name', "")
+
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name}
         
     def _related_products(self, product_id=None, alias=None):
 

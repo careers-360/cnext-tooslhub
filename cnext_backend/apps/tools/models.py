@@ -193,6 +193,7 @@ class CPProductCampaign(models.Model):
         super().save(*args, **kwargs)
 
 class Domain(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(max_length=1023, blank=True)
     weight = models.PositiveIntegerField(null=True, blank=True)
