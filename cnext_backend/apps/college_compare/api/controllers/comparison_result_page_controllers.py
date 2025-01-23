@@ -9,7 +9,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,ExamCutoffGraphHelper,CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper)
 
 
 
@@ -1406,15 +1406,15 @@ class ExamCutoffView(APIView):
         description="Retrieve exam cutoff comparison data for given colleges, including opening/closing ranks and counselling rounds.",
         parameters=[
             OpenApiParameter(
-                name='college_ids',
+                name='course_ids',
                 type=str,
-                description='Comma-separated list of college IDs',
+                description='Comma-separated list of course IDs',
                 required=True
             ),
             OpenApiParameter(
-                name='year',
+                name='counseling_id',
                 type=int,
-                description='Academic year for cutoff data',
+                description='counseling_id',
                 required=False
             ),
             OpenApiParameter(
@@ -1476,31 +1476,25 @@ class ExamCutoffView(APIView):
         GET endpoint to retrieve exam cutoff comparison data.
         Supports filtering by exam_id and category_id.
         """
-        college_ids = request.query_params.get('college_ids')
-        year = request.query_params.get('year') or current_year-1
+        course_ids = request.query_params.get('course_ids')
         exam_id = request.query_params.get('exam_id')
         category_id = request.query_params.get('category_id')
+        counseling_id = request.query_params.get('counseling_id')
 
         try:
           
-            if not college_ids or not year:
-                raise ValidationError("college_ids and year are required parameters")
+            if not course_ids:
+                raise ValidationError("course_ids is required parameters")
 
           
             try:
-                college_ids_list = [int(cid.strip()) for cid in college_ids.split(',') if cid.strip()]
-                if not college_ids_list:
-                    raise ValidationError("At least one valid college ID is required")
+                course_ids_list = [int(cid.strip()) for cid in course_ids.split(',') if cid.strip()]
+                if not course_ids_list:
+                    raise ValidationError("At least one valid course id is required")
             except ValueError:
                 raise ValidationError("Invalid college ID format - must be comma-separated integers")
 
-            try:
-                year_int = int(year)
-                if year_int < 2022 or year_int > 2100:  
-                    raise ValidationError("Year must be between 2022 and 2100")
-            except ValueError:
-                raise ValidationError("Invalid year format - must be an integer")
-
+           
   
             optional_params = {}
             if exam_id:
@@ -1508,18 +1502,25 @@ class ExamCutoffView(APIView):
                     optional_params['exam_id'] = int(exam_id)
                 except ValueError:
                     raise ValidationError("Invalid exam_id format - must be an integer")
+            
+            if counseling_id:
+                try:
+                    optional_params['counseling_id'] = int(counseling_id)
+                except ValueError:
+                    raise ValidationError("Invalid counseling_id format - must be an integer")
 
             if category_id:
                 try:
-                    optional_params['category_of_admission_id'] = int(category_id)
+                    optional_params['category_id'] = int(category_id)
                 except ValueError:
                     raise ValidationError("Invalid category_id format - must be an integer")
 
-            result = ExamCutoffHelper.fetch_cutoff_data(
-                college_ids=college_ids_list,
-                year=year_int,
+            result = ExamCutoffHelper.get_exam_cutoff(
+                course_ids=course_ids_list,
                 **optional_params
             )
+
+        
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
@@ -1535,6 +1536,173 @@ class ExamCutoffView(APIView):
                 {"error": "An unexpected error occurred while processing your request"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ExamCutGraphoffView(APIView):
+    permission_classes = [ApiKeyPermission]
+    @extend_schema(
+        summary="Get Exam Cutoff Comparison",
+        description="Retrieve exam cutoff comparison data for given colleges, including opening/closing ranks and counselling rounds.",
+        parameters=[
+            OpenApiParameter(
+                name='course_ids',
+                type=str,
+                description='Comma-separated list of course IDs',
+                required=True
+            ),
+            OpenApiParameter(
+                name='counseling_id',
+                type=int,
+                description='counseling_id',
+                required=False
+            ),
+            OpenApiParameter(
+                name='exam_id',
+                type=int,
+                description='Filter by specific exam ID',
+                required=False
+            ),
+            OpenApiParameter(
+                name='category_id',
+                type=int,
+                description='Filter by specific admission category ID',
+                required=False
+            ),
+             OpenApiParameter(
+                name='caste_id',
+                type=int,
+                description='Filter by specific  caste ID',
+                required=False
+            ),
+             OpenApiParameter(
+                name='gender_id',
+                type=int,
+                description='Filter by specific admission category ID',
+                required=False
+            )
+        ],
+        responses={
+            200: OpenApiResponse(
+                description='Successfully retrieved exam cutoff comparison',
+                response=dict,
+                examples=[
+                    {
+                        "exams_data": [
+                            {
+                                "exam_id": 2,
+                                "exam_name": "Paper 1"
+                            }
+                        ],
+                        "category_data": [
+                            {
+                                "category_id": 2,
+                                "category_name": "Outside Home State"
+                            }
+                        ],
+                        "comparison_data": [
+                            {
+                                "exam_id": 2,
+                                "category_id": 2,
+                                "college_1": {
+                                    "college_id": 151,
+                                    "college_course_id": 8072,
+                                    "opening_rank": 12,
+                                    "closing_rank": 932296,
+                                    "total_counselling_rounds": 6,
+                                    "lowest_closing_rank_sc_st": 724665,
+                                    "lowest_closing_rank_obc": 932296,
+                                    "lowest_closing_rank_gn": "NA"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            ),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        }
+    )
+    def get(self, request):
+        """
+        GET endpoint to retrieve exam cutoff comparison data.
+        Supports filtering by exam_id and category_id.
+        """
+        course_ids = request.query_params.get('course_ids')
+        exam_id = request.query_params.get('exam_id')
+        category_id = request.query_params.get('category_id')
+        counseling_id = request.query_params.get('counseling_id')
+        caste_id=request.query_params.get('caste_id')
+        gender_id=request.query_params.get('gender_id')
+
+        try:
+          
+            if not course_ids:
+                raise ValidationError("course_ids is required parameters")
+
+          
+            try:
+                course_ids_list = [int(cid.strip()) for cid in course_ids.split(',') if cid.strip()]
+                if not course_ids_list:
+                    raise ValidationError("At least one valid course id is required")
+            except ValueError:
+                raise ValidationError("Invalid college ID format - must be comma-separated integers")
+
+           
+  
+            optional_params = {}
+            if exam_id:
+                try:
+                    optional_params['exam_id'] = int(exam_id)
+                except ValueError:
+                    raise ValidationError("Invalid exam_id format - must be an integer")
+            
+            if counseling_id:
+                try:
+                    optional_params['counseling_id'] = int(counseling_id)
+                except ValueError:
+                    raise ValidationError("Invalid counseling_id format - must be an integer")
+
+            if category_id:
+                try:
+                    optional_params['category_id'] = int(category_id)
+                except ValueError:
+                    raise ValidationError("Invalid category_id format - must be an integer")
+            if caste_id:
+                try:
+                    optional_params['caste_id'] = int(caste_id)
+                except ValueError:
+                    raise ValidationError("Invalid caste_id format - must be an integer")
+            if gender_id:
+                try:
+                    optional_params['gender_id'] = int(gender_id)
+                except ValueError:
+                    raise ValidationError("Invalid gender_id format - must be an integer")
+            
+            
+            
+
+            result = ExamCutoffGraphHelper.fetch_cutoff_data(
+                course_ids=course_ids_list,
+                **optional_params
+            )
+
+        
+
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+
+        except ValidationError as ve:
+            logger.error("Validation error in ExamCutoffView: %s", str(ve))
+            return CustomErrorResponse(
+                {"error": str(ve)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error("Error in ExamCutoffView: %s", str(e))
+            return CustomErrorResponse(
+                {"error": "An unexpected error occurred while processing your request"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class FeedbackSubmitView(APIView):
     @extend_schema(
