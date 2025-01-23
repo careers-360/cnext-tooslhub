@@ -121,6 +121,10 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/exam-cutoff-comparison/',
         comparison_result_page_controllers.ExamCutoffView.as_view(),
         name='exam-cutoff-comparison/'),
+
+    path(f'{compare_prefix}resultPage/exam-cutoff-graph-comparison/',
+        comparison_result_page_controllers.ExamCutGraphoffView.as_view(),
+        name='exam-cutoff-graph-comparison/'),
     
     path(f'{compare_prefix}resultPage/college-review-rating-graph/',
         comparison_result_page_controllers.CollegeReviewRatingGraphView.as_view(),

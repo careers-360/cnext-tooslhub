@@ -352,132 +352,6 @@ class Branch(models.Model):
 
 
 
-class Course(models.Model):
-    LEVEL_CHOICES = [
-        (1, 'Undergraduate'),
-        (2, 'Postgraduate')
-    ]
-
-    STUDY_MODE_CHOICES = [
-        (1, 'online'),
-        (2, 'offline')
-    ]
-
-    CREDENTIAL_CHOICES = [
-        (0, 'Degree'),
-        (1, 'Diploma'),
-        (2, 'Certificate')
-    ]
-
-    course_name = models.CharField(max_length=255)
-    college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='courses', db_index=True)
-    degree = models.ForeignKey('Degree', on_delete=models.SET_NULL, null=True, blank=True, related_name='course')
-    branch = models.ForeignKey('Branch', on_delete=models.CASCADE, null=True, blank=True, related_name='course')
-    degree_domain = models.ForeignKey('Domain', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses', db_index=True, db_column="degree_domain")
-    level = models.IntegerField(choices=LEVEL_CHOICES)
-    status = models.BooleanField(default=True)
-    course_duration = models.IntegerField(null=True, blank=True)  # in months
-    study_mode = models.IntegerField(choices=STUDY_MODE_CHOICES, null=True, blank=True)
-    approved_intake = models.IntegerField(null=True, blank=True)
-    admission_procedure = models.TextField(null=True, blank=True)
-    eligibility_criteria = models.TextField(null=True, blank=True)
-    credential = models.IntegerField(choices=CREDENTIAL_CHOICES, default=0)  # Default to Degree (0)
-
-    class Meta:
-        db_table = 'colleges_courses'
-        unique_together = ['course_name', 'college', 'level']
-        indexes = [
-            models.Index(fields=['degree', 'branch', 'college', 'status']),
-            models.Index(fields=['degree_domain']),
-            models.Index(fields=['degree_domain','level']),
-            
-        ]
-
-    def __str__(self):
-        return f"{self.course_name} ({self.get_level_display()})"
-
-    def total_courses_offered(self):
-        """
-        Calculate the total number of courses offered by the college
-        for the specific degree.
-        """
-        return Course.objects.filter(
-            college=self.college,
-            degree=self.degree,
-            status=True
-        ).count()
-    
-    @staticmethod
-    def get_cache_key(course_id, session):
-        """Generate a unique cache key based on course_id and session"""
-        key = f"tuition_fee_{course_id}_{session}"
-        return md5(key.encode()).hexdigest()
-    
-
-    @staticmethod
-    def get_total_tuition_fee_by_course(course_id, session):
-        """
-        Args:
-            course_id (int): The ID of the course
-            session (int): The academic session year
-
-        Returns:
-            dict: Dictionary containing formatted total fees for each category
-        """
-        cache_key = f"tuition_fee_{course_id}_{session}"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return cached_data
-
-        # Default response structure
-        total_fees = {
-            'total_tuition_fee_general': 'NA',
-            'total_tuition_fee_sc': 'NA',
-            'total_tuition_fee_st': 'NA',
-            'total_tuition_fee_obc': 'NA',
-        }
-
-        # Raw SQL query
-        sql = """
-            SELECT
-                SUM(ccfd.general) AS total_general_tuition,
-                SUM(ccfd.sc) AS total_sc_tuition,
-                SUM(ccfd.st) AS total_st_tuition,
-                SUM(ccfd.obc) AS total_obc_tuition
-            FROM
-                django360.college_course_fee ccf
-            JOIN
-                django360.college_course_fee_data ccfd ON ccf.id = ccfd.course_fee_duration_id
-            JOIN
-                django360.college_course_fee_fees_type ccfft ON ccfd.id = ccfft.fee_data_id
-            JOIN
-                django360.college_course_fee_type ccft ON ccfft.fee_type = ccft.id
-            WHERE
-                ccf.college_course_id = %s
-                AND ccf.session_type = 'year'
-                AND ccf.session = %s
-                AND ccft.name = 'Tuition Fees'
-                AND ccfft.fee_type = 36
-        """
-
-        # Execute the query
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [course_id, session])
-            row = cursor.fetchone()
-
-        # Update response structure with actual values if query returned data
-        if row:
-            total_fees = {
-                'total_tuition_fee_general': format_fee(row[0]),
-                'total_tuition_fee_sc': format_fee(row[1]),
-                'total_tuition_fee_st': format_fee(row[2]),
-                'total_tuition_fee_obc': format_fee(row[3]),
-            }
-
-        # Cache the result
-        cache.set(cache_key, total_fees, 3600 * 24)
-
-        return total_fees
   
 
     # @staticmethod
@@ -979,38 +853,214 @@ class CourseApprovalAccrediation(models.Model):
 
 
 
+class Course(models.Model):
+    LEVEL_CHOICES = [
+        (1, 'Undergraduate'),
+        (2, 'Postgraduate')
+    ]
+
+    STUDY_MODE_CHOICES = [
+        (1, 'online'),
+        (2, 'offline')
+    ]
+
+    CREDENTIAL_CHOICES = [
+        (0, 'Degree'),
+        (1, 'Diploma'),
+        (2, 'Certificate')
+    ]
+
+    course_name = models.CharField(max_length=255)
+    college = models.ForeignKey('College', on_delete=models.CASCADE, related_name='courses', db_index=True)
+    degree = models.ForeignKey('Degree', on_delete=models.SET_NULL, null=True, blank=True, related_name='course')
+    branch = models.ForeignKey('Branch', on_delete=models.CASCADE, null=True, blank=True, related_name='course')
+    degree_domain = models.ForeignKey('Domain', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses', db_index=True, db_column="degree_domain")
+    level = models.IntegerField(choices=LEVEL_CHOICES)
+    status = models.BooleanField(default=True)
+    course_duration = models.IntegerField(null=True, blank=True)  # in months
+    study_mode = models.IntegerField(choices=STUDY_MODE_CHOICES, null=True, blank=True)
+    approved_intake = models.IntegerField(null=True, blank=True)
+    admission_procedure = models.TextField(null=True, blank=True)
+    eligibility_criteria = models.TextField(null=True, blank=True)
+    credential = models.IntegerField(choices=CREDENTIAL_CHOICES, default=0)  # Default to Degree (0)
+
+    class Meta:
+        db_table = 'colleges_courses'
+        unique_together = ['course_name', 'college', 'level']
+        indexes = [
+            models.Index(fields=['degree', 'branch', 'college', 'status']),
+            models.Index(fields=['degree_domain']),
+            models.Index(fields=['degree_domain','level']),
+            
+        ]
+
+    def __str__(self):
+        return f"{self.course_name} ({self.get_level_display()})"
+
+    def total_courses_offered(self):
+        """
+        Calculate the total number of courses offered by the college
+        for the specific degree.
+        """
+        return Course.objects.filter(
+            college=self.college,
+            degree=self.degree,
+            status=True
+        ).count()
+    
+    @staticmethod
+    def get_cache_key(course_id, session):
+        """Generate a unique cache key based on course_id and session"""
+        key = f"tuition_fee_{course_id}_{session}"
+        return md5(key.encode()).hexdigest()
+    
+
+    @staticmethod
+    def get_total_tuition_fee_by_course(course_id, session):
+        """
+        Args:
+            course_id (int): The ID of the course
+            session (int): The academic session year
+
+        Returns:
+            dict: Dictionary containing formatted total fees for each category
+        """
+        cache_key = f"tuition_fee_{course_id}_{session}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
+        # Default response structure
+        total_fees = {
+            'total_tuition_fee_general': 'NA',
+            'total_tuition_fee_sc': 'NA',
+            'total_tuition_fee_st': 'NA',
+            'total_tuition_fee_obc': 'NA',
+        }
+
+        # Raw SQL query
+        sql = """
+            SELECT
+                SUM(ccfd.general) AS total_general_tuition,
+                SUM(ccfd.sc) AS total_sc_tuition,
+                SUM(ccfd.st) AS total_st_tuition,
+                SUM(ccfd.obc) AS total_obc_tuition
+            FROM
+                django360.college_course_fee ccf
+            JOIN
+                django360.college_course_fee_data ccfd ON ccf.id = ccfd.course_fee_duration_id
+            JOIN
+                django360.college_course_fee_fees_type ccfft ON ccfd.id = ccfft.fee_data_id
+            JOIN
+                django360.college_course_fee_type ccft ON ccfft.fee_type = ccft.id
+            WHERE
+                ccf.college_course_id = %s
+                AND ccf.session_type = 'year'
+                AND ccf.session = %s
+                AND ccft.name = 'Tuition Fees'
+                AND ccfft.fee_type = 36
+        """
+
+        # Execute the query
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [course_id, session])
+            row = cursor.fetchone()
+
+        # Update response structure with actual values if query returned data
+        if row:
+            total_fees = {
+                'total_tuition_fee_general': format_fee(row[0]),
+                'total_tuition_fee_sc': format_fee(row[1]),
+                'total_tuition_fee_st': format_fee(row[2]),
+                'total_tuition_fee_obc': format_fee(row[3]),
+            }
+
+        # Cache the result
+        cache.set(cache_key, total_fees, 3600 * 24)
+
+        return total_fees
 
 class Exam(models.Model):
     exam_name = models.CharField(max_length=255)
     exam_short_name = models.CharField(max_length=50, null=True, blank=True)
-    super_parent_id = models.IntegerField()
+    super_parent_id = models.IntegerField(null=True, blank=True)  
     instance_year = models.IntegerField()  
-    status = models.CharField(max_length=20)
+    status = models.CharField(max_length=20, db_index=True)
+    state_of_exam_id = models.IntegerField(null=True, blank=True) 
+    preferred_education_level_id = models.IntegerField(null=True, blank=True, db_index=True)
+    parent_exam = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='child_exams'
+    )
 
     class Meta:
         db_table = 'exams'
         indexes = [
-            models.Index(fields=['exam_name', 'exam_short_name']),
-            models.Index(fields=['instance_year']), 
+            models.Index(fields=['exam_name', 'exam_short_name'], name='exam_name_short_name_idx'),
+            models.Index(fields=['instance_year'], name='exam_instance_year_idx'),
+            models.Index(fields=['status'], name='exam_status_idx'),
+            models.Index(fields=['super_parent_id'], name='exam_super_parent_id_idx'),
+            models.Index(fields=['state_of_exam_id'], name='exam_state_of_exam_id_idx'),
+            models.Index(fields=['preferred_education_level_id'], name='preferred_education_level_idx'),
         ]
+        app_label = 'college_compare'
+        managed = False
 
     def __str__(self):
-        return self.exam_short_name or self.exam_name
+        return self.get_exam_display_name()
 
+    def get_exam_display_name(self):
+        if self.exam_short_name:
+            return self.exam_short_name
+        
+        if self.parent_exam:
+            return f"{self.parent_exam.exam_short_name or self.parent_exam.exam_name} ({self.exam_name})"
+        return self.exam_name
 
+     
 
 
 class CutoffData(models.Model):
-    college = models.ForeignKey('College', on_delete=models.CASCADE, db_index=True)
-    college_course = models.ForeignKey('Course', on_delete=models.CASCADE, db_index=True)
-    round = models.CharField(max_length=255)
-    round_wise_opening_cutoff = models.CharField(max_length=255, null=True, blank=True)
-    round_wise_closing_cutoff = models.CharField(max_length=255, null=True, blank=True)
-    category_of_admission = models.ForeignKey('AdmissionCategory', on_delete=models.SET_DEFAULT, default=1)
-    caste_id = models.CharField(max_length=10, null=True, blank=True)
-    year = models.IntegerField()
-    exam_sub_exam_id = models.ForeignKey('Exam', on_delete=models.SET_NULL, null=True, blank=True, db_column='exam_sub_exam_id')
-    branch_id = models.IntegerField()
+    college = models.ForeignKey(
+        'College', 
+        on_delete=models.CASCADE, 
+        db_index=True, 
+        related_name='cutoff_data'
+    )
+
+    college_course = models.ForeignKey(
+        'Course', 
+        on_delete=models.CASCADE, 
+        db_index=True, 
+        related_name='cutoff_records'  # Changed from cutoff_data to cutoff_records
+    )
+  
+    round = models.IntegerField(db_index=True)  
+    round_wise_opening_cutoff = models.FloatField(null=True, blank=True)  
+    round_wise_closing_cutoff = models.FloatField(null=True, blank=True)  
+    category_of_admission = models.ForeignKey(
+        'AdmissionCategory', 
+        on_delete=models.SET_DEFAULT, 
+        default=1, 
+        db_index=True
+    )
+    caste_id = models.IntegerField(null=True, blank=True, db_index=True) 
+    year = models.IntegerField(db_index=True)
+    exam_sub_exam = models.ForeignKey(
+        'Exam', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        db_column='exam_sub_exam_id', 
+        db_index=True,
+        related_name="cutoff_data"
+    )
+    counselling_id = models.IntegerField(null=True, blank=True, db_index=True)  #
+    branch_id = models.IntegerField(db_index=True)
+    final_cutoff = models.FloatField(null=True, blank=True)  
 
     class Meta:
         db_table = 'cp_cutoff_final'
@@ -1019,17 +1069,71 @@ class CutoffData(models.Model):
             models.Index(fields=['category_of_admission']),
             models.Index(fields=['round']),
             models.Index(fields=['year']),
-            models.Index(fields=['exam_sub_exam_id']),
+            models.Index(fields=['exam_sub_exam']),
             models.Index(fields=['branch_id']),
+            models.Index(fields=['caste_id']),
+            models.Index(fields=['counselling_id']),  # Added index for performance in query joins
         ]
 
     def __str__(self):
-        return f"Cutoff Data for {self.college.name} - {self.college_course.course_name} ({self.round})"
+        return (
+            f"Cutoff Data for {self.college.name} - {self.college_course.course_name} "
+            f"(Round: {self.round}, Year: {self.year})"
+        )
 
-    @classmethod
-    def update_category_of_admission(cls):
-       
-        cls.objects.filter(models.Q(category_of_admission__isnull=True) | models.Q(category_of_admission='none')).update(category_of_admission=1)
+
+class CpProductCampaign(models.Model):
+    STATUS_CHOICES = [
+        ('published', 'Published'),
+        ('draft', 'Draft'),
+        ('archived', 'Archived'),
+    ]
+
+    name = models.CharField(max_length=255)
+    published = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'cp_product_campaign'
+        indexes = [
+            models.Index(fields=['published']),
+        ]
+        app_label = 'college_compare'
+
+        managed = False
+
+    def __str__(self):
+        return f"{self.name} ({self.get_published_display()})"
+    
+
+    
+class CpProductCampaignItems(models.Model):
+    product = models.ForeignKey(
+        CpProductCampaign,
+        on_delete=models.CASCADE,
+        related_name='campaign_items'
+    )
+    exam_id = models.IntegerField(db_index=True)  
+    counselling_id = models.IntegerField(db_index=True)  
+    class Meta:
+        db_table = 'cp_product_campaign_items'
+        indexes = [
+            models.Index(fields=['exam_id']),
+            models.Index(fields=['counselling_id']),
+        ]
+
+    def __str__(self):
+        return f"Item for {self.product.name} (Exam ID: {self.exam_id}, Counseling ID: {self.counselling_id})"
+    
+    
+
+
 
 class AdmissionCategory(models.Model):
     description = models.CharField(max_length=255)
