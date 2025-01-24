@@ -351,7 +351,6 @@ class Branch(models.Model):
 
 
 
-  CAR-7771
 class Course(models.Model):
     LEVEL_CHOICES = [
         (1, 'Undergraduate'),
@@ -413,9 +412,6 @@ class Course(models.Model):
    
     
 
-  
-
-  college_compare
   
 
 
