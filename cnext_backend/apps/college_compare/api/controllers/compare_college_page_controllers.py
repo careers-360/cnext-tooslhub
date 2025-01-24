@@ -170,6 +170,8 @@ class SummaryComparisonView(APIView):
             logger.error(f"Error fetching summary comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+
 class QuickFactsView(APIView):
     permission_classes = [ApiKeyPermission]
     @extend_schema(
@@ -193,13 +195,15 @@ class QuickFactsView(APIView):
         cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
-            if not college_ids or not course_ids:
+            if not college_ids:
                 raise ValidationError("Both college_ids and course_ids are required")
 
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
-            course_ids_list = [int(csid) for csid in course_ids.split(',')]
-
-            result = QuickFactsService.get_quick_facts(college_ids_list, course_ids_list,int(cache_burst))
+            if course_ids:
+                course_ids_list = [int(csid) for csid in course_ids.split(',')]
+                result = QuickFactsService.get_quick_facts(college_ids_list, course_ids_list,int(cache_burst))
+            else: 
+                result = QuickFactsService.get_quick_facts(college_ids_list,int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")

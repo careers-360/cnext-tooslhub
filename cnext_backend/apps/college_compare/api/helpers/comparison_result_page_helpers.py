@@ -109,9 +109,6 @@ class NoDataAvailableError(Exception):
 
 
 
-
-
-
 class RankingAccreditationHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -120,7 +117,7 @@ class RankingAccreditationHelper:
         """
         key = '_'.join(map(str, args))
         return md5(key.encode()).hexdigest()
-    
+
     @staticmethod
     def fetch_graduation_outcome_score(college_ids: List[int], year: Optional[int] = None) -> Dict[int, float]:
         """
@@ -150,32 +147,35 @@ class RankingAccreditationHelper:
             logger.error("Error fetching Graduation Outcome Score: %s", traceback.format_exc())
             raise
 
-
-    
     @staticmethod
-    def fetch_ranking_data(college_ids: List[int], selected_domains: Dict[int, str], year: Optional[int] = None) -> Dict:
+    def fetch_ranking_data(college_ids: List[int], course_ids: Optional[List[int]] = None, year: Optional[int] = None) -> Dict:
         try:
             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
             if not college_ids:
                 raise NoDataAvailableError("No valid college IDs provided.")
 
-            logger.debug(f"Fetching ranking data with college_ids: {college_ids}, selected_domains: {selected_domains}, year: {year}")
+            logger.debug(f"Fetching ranking data with college_ids: {college_ids}, course_ids: {course_ids}, year: {year}")
 
             cache_key_parts = ['ranking_comparison_data', year, '-'.join(map(str, college_ids))]
-            for cid in college_ids:
-                cache_key_parts.append(f"{cid}-{selected_domains.get(cid, 'NA')}")
+            if course_ids:
+                cache_key_parts.append('-'.join(map(str, course_ids)))
             cache_key = RankingAccreditationHelper.get_cache_key(*cache_key_parts)
 
             def fetch_data():
                 try:
                     year_filter = Q(ranking__year=year) if year else Q()
 
+                    course_domain_map = {}
+                    if course_ids:
+                        courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain')
+                        course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
                     rankings = []
                     for college_id in college_ids:
-                        selected_domain = selected_domains.get(college_id)
-                        if not selected_domain:
-                            rankings.append({"college_id": college_id})
-                            continue
+                        selected_domain = None
+                        if course_ids:
+                            selected_domain = course_domain_map.get(college_id)
+
 
                         old_domain_name = (
                             Domain.objects.filter(id=selected_domain)
@@ -185,95 +185,92 @@ class RankingAccreditationHelper:
                         formatted_domain_name = DomainHelper.format_domain_name(old_domain_name)
 
                         other_ranked_domain_subquery = (
-                                RankingUploadList.objects
-                                .filter(college_id=OuterRef('college_id'))
-                                .exclude(ranking__nirf_stream='')
-                                .exclude(ranking__ranking_stream=selected_domain)
-                                .annotate(
-                                    overall_rank_str=Cast(F('overall_rank'), CharField()),
-                                    other_ranked_domain=Concat(
-                                        F('ranking__nirf_stream'),
-                                        Value(' (NIRF '),
-                                        F('overall_rank_str'),
-                                        Value(')')
-                                    )
+                            RankingUploadList.objects
+                            .filter(college_id=OuterRef('college_id'))
+                            .exclude(ranking__nirf_stream='')
+                            .exclude(ranking__ranking_stream=selected_domain)
+                            .annotate(
+                                overall_rank_str=Cast(F('overall_rank'), CharField()),
+                                other_ranked_domain=Concat(
+                                    F('ranking__nirf_stream'),
+                                    Value(' (NIRF '),
+                                    F('overall_rank_str'),
+                                    Value(')')
                                 )
-                                .values('overall_rank', 'other_ranked_domain')
-                                .distinct()
-                                .order_by('overall_rank')
                             )
+                            .values('overall_rank', 'other_ranked_domain')
+                            .distinct()
+                            .order_by('overall_rank')
+                        )
                         min_other_ranked_domain = other_ranked_domain_subquery.values('other_ranked_domain')[2:3]
 
-
-
-
                         college_rankings = (
-                                RankingUploadList.objects
-                                .filter(college_id=college_id)
-                                .filter(year_filter)
-                                .values('college_id')
-                                .annotate(
-                                    careers360_overall_rank=Coalesce(
-                                        Cast(
-                                            Max(Case(
-                                                When(Q(ranking__ranking_authority='Careers360') & ~Q(ranking__ranking_stream=selected_domain), then=F('overall_rating')),
-                                                default=None
-                                            )),
-                                            output_field=CharField()
-                                        ),
-                                        Value('NA', output_field=CharField())
+                            RankingUploadList.objects
+                            .filter(college_id=college_id)
+                            .filter(year_filter)
+                            .values('college_id')
+                            .annotate(
+                                careers360_overall_rank=Coalesce(
+                                    Cast(
+                                        Max(Case(
+                                            When(Q(ranking__ranking_authority='Careers360') & ~Q(ranking__ranking_stream=selected_domain), then=F('overall_rating')),
+                                            default=None
+                                        )),
+                                        output_field=CharField()
                                     ),
-                                    careers360_domain_rank=Coalesce(
-                                        Cast(
-                                            Max(Case(
-                                                When(Q(ranking__ranking_authority='Careers360') & Q(ranking__ranking_stream=selected_domain), then=F('overall_rating')),
-                                                default=None
-                                            )),
-                                            output_field=CharField()
-                                        ),
-                                        Value('NA', output_field=CharField())
+                                    Value('NA', output_field=CharField())
+                                ),
+                                careers360_domain_rank=Coalesce(
+                                    Cast(
+                                        Max(Case(
+                                            When(Q(ranking__ranking_authority='Careers360') & Q(ranking__ranking_stream=selected_domain), then=F('overall_rating')),
+                                            default=None
+                                        )),
+                                        output_field=CharField()
                                     ),
-                                    nirf_overall_rank=Coalesce(
-                                        Cast(
-                                            Max(Case(
-                                                When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_entity='Overall'), then=F('overall_rank')),
-                                                default=None
-                                            )),
-                                            output_field=CharField()
-                                        ),
-                                        Value('NA', output_field=CharField())
+                                    Value('NA', output_field=CharField())
+                                ),
+                                nirf_overall_rank=Coalesce(
+                                    Cast(
+                                        Min(Case(
+                                            When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_entity='Overall'), then=F('overall_rank')),
+                                            default=None
+                                        )),
+                                        output_field=CharField()
                                     ),
-                                    nirf_domain_rank=Coalesce(
-                                        Cast(
-                                            Max(Case(
-                                                When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_stream=selected_domain), then=F('overall_rank')),
-                                                default=None
-                                            )),
-                                            output_field=CharField()
-                                        ),
-                                        Value('NA', output_field=CharField())
+                                    Value('NA', output_field=CharField())
+                                ),
+                                nirf_domain_rank=Coalesce(
+                                    Cast(
+                                        Min(Case(
+                                            When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_stream=selected_domain), then=F('overall_rank')),
+                                            default=None
+                                        )),
+                                        output_field=CharField()
                                     ),
-                                    other_ranked_domain=Coalesce(
-                                        Cast(
-                                            Subquery(min_other_ranked_domain),
-                                            output_field=CharField()
-                                        ),
-                                        Value('NA', output_field=CharField())
+                                    Value('NA', output_field=CharField())
+                                ),
+                                other_ranked_domain=Coalesce(
+                                    Cast(
+                                        Subquery(min_other_ranked_domain),
+                                        output_field=CharField()
                                     ),
-                                    domain_name=Value(formatted_domain_name, output_field=CharField()),  # Add formatted domain name
-                                )
+                                    Value('NA', output_field=CharField())
+                                ),
+                                domain_name=Value(formatted_domain_name, output_field=CharField()),
                             )
+                        )
                         rankings.extend(college_rankings)
 
                     if not rankings:
                         raise NoDataAvailableError("No rankings data found for the provided college IDs.")
-                    
+
                     all_accreditations = (
-                            CollegeAccrediationApproval.objects
-                            .filter(college_id__in=college_ids)
-                            .select_related('value')
-                            .only('college_id', 'type', 'value__short_name')
-                        )
+                        CollegeAccrediationApproval.objects
+                        .filter(college_id__in=college_ids)
+                        .select_related('value')
+                        .only('college_id', 'type', 'value__short_name')
+                    )
 
                     approvals_dict = {}
                     accreditations_dict = {}
@@ -291,7 +288,6 @@ class RankingAccreditationHelper:
 
                     approvals_dict = {k: ', '.join(sorted(v)) if v else 'NA' for k, v in approvals_dict.items()}
                     accreditations_dict = {k: ', '.join(sorted(v)) if v else 'NA' for k, v in accreditations_dict.items()}
-
 
                     college_details = {
                         college['id']: {
@@ -348,7 +344,8 @@ class RankingAccreditationHelper:
         except Exception as e:
             logger.error("Error in fetch_ranking_data: %s", traceback.format_exc())
             raise
-       
+
+
 
 
 
@@ -380,46 +377,34 @@ class CollegeRankingService:
 
     @staticmethod
     def get_state_and_ownership_ranks(
-        college_ids: List[int], selected_domains: Dict[int, str], year: int
+        college_ids: List[int],
+        course_ids: List[int],
+        year: int
     ) -> Dict[str, Dict]:
-        """
-        Gets state-wise and ownership-wise ranks based on overall ranks for given college IDs.
-        Supports different domains for different colleges, with a fallback query.
-        
-        Args:
-            college_ids: List of college IDs
-            selected_domains: Dictionary mapping college IDs to their respective domain IDs
-            year: Year for ranking data
-        """
+        """Gets state-wise and ownership-wise ranks based on overall ranks."""
         try:
-    
-            cache_key = CollegeRankingService.get_cache_key(college_ids, selected_domains, year)
-            
-            
+            cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
             cached_result = cache.get(cache_key)
             if cached_result:
                 return cached_result
 
+            courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain')
+            course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
             result = {}
             domain_groups = {}
             for college_id in college_ids:
-                domain_id = selected_domains[college_id]
+                domain_id = course_domain_map.get(college_id)
                 domain_groups.setdefault(domain_id, []).append(college_id)
 
             for domain_id, domain_college_ids in domain_groups.items():
-
                 base_queryset = RankingUploadList.objects.filter(
                     ranking__ranking_stream=domain_id,
                     ranking__year=year,
                     ranking__status=1
                 ).select_related('college', 'college__location')
 
-                # Fallback query if no data found for domain-specific filtering
-
                 if not base_queryset.exists():
-                    logger.warning(f"No data found for domain_id={domain_id}. Retrying with popular_stream.")
-
-                    # Fetch the popular_stream for the current domain
                     popular_stream = (
                         College.objects.filter(id__in=domain_college_ids)
                         .values_list('popular_stream', flat=True)
@@ -433,18 +418,14 @@ class CollegeRankingService:
                             ranking__status=1
                         ).select_related('college', 'college__location')
 
-                    if not base_queryset.exists():
-                        logger.warning(f"No data found for popular_stream={popular_stream}. Retrying without domain filter.")
-                        base_queryset = RankingUploadList.objects.filter(
-                            ranking__year=year,
-                            ranking__status=1
-                        ).select_related('college', 'college__location')
 
-                # Compute totals for state and ownership
+             
                 total_counts = base_queryset.values(
                     'college__location__state_id',
                     'college__ownership'
                 )
+
+                print(total_counts,"-------")
 
                 state_totals = {}
                 ownership_totals = {}
@@ -474,6 +455,7 @@ class CollegeRankingService:
                     college_id = college['college_id']
                     state_id = college['college__location__state_id']
                     ownership = college['college__ownership']
+                    print(ownership)
 
                     overall_rank_str = college['overall_rank']
 
@@ -522,6 +504,7 @@ class CollegeRankingService:
                     if details:
                         state_id = details['state_id']
                         ownership = details['ownership']
+                        print(ownership,"-------")
                         state_name = details['state_name']
 
                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
@@ -571,11 +554,10 @@ class MultiYearRankingHelper:
         """
         key = '_'.join(map(str, args))
         return md5(key.encode()).hexdigest()
-
     @staticmethod
     def fetch_multi_year_ranking_data(
-        college_ids: List[int], 
-        selected_domains: Dict[int, str], 
+        college_ids: List[int],
+        course_ids: List[int],
         years: List[int]
     ) -> Dict:
         """
@@ -583,45 +565,45 @@ class MultiYearRankingHelper:
         
         Args:
             college_ids: List of college IDs
-            selected_domains: Dictionary mapping college IDs to their respective domain IDs
+            course_ids: List of course IDs
             years: List of years to fetch data for
         """
         try:
-            # Generate cache key
-            cache_key = MultiYearRankingHelper.get_cache_key(college_ids, selected_domains, years)
-
-            # Try fetching the result from cache
+            cache_key = MultiYearRankingHelper.get_cache_key(college_ids, course_ids, years)
             cached_result = cache.get(cache_key)
             if cached_result:
                 return cached_result
 
             if not years or len(years) != 5:
                 raise ValueError("Exactly 5 years must be provided.")
-            
+
+            # Get domain mapping from courses
+            courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain')
+            course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
             result_dict = {
                 f"college_{i + 1}": {
                     "college_id": college_id,
-                    "domain": selected_domains[college_id]
+                    "domain": course_domain_map.get(college_id)
                 } for i, college_id in enumerate(college_ids)
             }
-    
-            data_found = False  
+
+            data_found = False
 
             for year in years:
                 yearly_data = RankingAccreditationHelper.fetch_ranking_data(
-                    college_ids, 
-                    selected_domains,
-                    year
+                    college_ids=college_ids,
+                    course_ids=course_ids,
+                    year=year
                 )
-                
+
                 if not yearly_data:
-                    continue  
-                
-                data_found = True  
-                
+                    continue
+
+                data_found = True
+
                 for key, data in yearly_data.items():
                     college = result_dict.get(key, {})
-                    
                     college.setdefault("college_name", data.get("college_name", "NA"))
                     college.setdefault("nirf_overall_rank", []).append(data.get("nirf_overall_rank", "NA"))
                     college.setdefault("nirf_domain_rank", []).append(data.get("nirf_domain_rank", "NA"))
@@ -629,15 +611,13 @@ class MultiYearRankingHelper:
                     
                     college.setdefault("other_ranked_domain", [])
                     if "nirf_domain_rank" in data and data["nirf_domain_rank"] != "NA":
-                        domain_id = selected_domains[college["college_id"]]
+                        domain_id = course_domain_map.get(college["college_id"])
                         other_domain_entry = f"{domain_id} (NIRF {data['nirf_domain_rank']})"
                         college["other_ranked_domain"].append(other_domain_entry)
 
                     result_dict[key] = college
 
-          # Cache the result for future use
             cache.set(cache_key, result_dict, timeout=3600 * 24 * 7)  # 7 days cache
-
             return result_dict
 
         except NoDataAvailableError as e:
@@ -647,6 +627,7 @@ class MultiYearRankingHelper:
             logger.error(f"Error fetching multi-year ranking data: {traceback.format_exc()}")
             raise
 
+   
 
 class RankingGraphHelper:
     @staticmethod
@@ -846,8 +827,8 @@ class RankingAiInsightHelper:
 
             native_request = {
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,
-                "temperature": 0.3,
+                "max_tokens": 1536,
+                "temperature": 0.2,
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": prompt}]}
                 ]
@@ -913,60 +894,39 @@ class RankingAiInsightHelper:
                 return cached_result
 
             logger.info("Generating new ranking insights.")
-            prompt = f"""
-                You are a data analyst specializing in educational rankings. Analyze this college ranking data and generate insights following these STRICT requirements:
-                {json.dumps(ranking_data, indent=2)}
+            prompt =  f"""
+        Analyze this college ranking data and generate JSON insights based on the following schema:
+        {json.dumps(ranking_data, indent=2)}
 
-                Generate a JSON response with these EXACT sections and formats:
+        Output JSON must include these sections:
 
-                {{
-                    "graduation_outcome": "Arrange graduation_outcome_scores[0] in order of greater to lesser(eg.89>76). Format: 'Based on current graduation outcomes [college_short_name] scores [score] in  [domain_name], followed by [college_short_name] with [score] in [domain_name], and [college_short_name] achieving [score] in [domain_name]' Include ALL three colleges. Use exact scores from graduation_outcome_scores[0] field in multi_year_ranking_data",
+        1. "graduation_outcome": "Arrange graduation_outcome_scores[0] in descending order. Format: 'Based on current graduation outcomes, [college_short_name] scores [score] in [domain_name], followed by [college_short_name] with [score], and [college_short_name] with [score]' Include all colleges. Use exact scores from multi_year_ranking_data.",
+        
+        2. "state_specific_rankings": "Use state_rank_display from current_combined_ranking_data. Format: 'In state rankings, [college_short_name] is ranked [state rank], followed by [college_short_name]  is ranked [state rank] and [college_short_name]' is ranked [state rank] . List all colleges ordered by rank.",
+        
+        3. "ownership_rankings": "Use ownership_rank_display in descending order. Format: 'Among government institutes, [college_short_name] ranks [rank], followed by [college_short_name] ranks [rank] and [college_short_name]' ranks [rank]. Include all colleges.",
+        
+        4. "past_year_changes": "Compare nirf_overall_rank for current and previous years. Format: '[college_short_name] changes by [X] spots, followed by [college_short_name] changes by  [X] spots and [college_short_name] changes by  [X] spots'. Order by magnitude of change.",
+        
+        5. "highest_changes": "Identify the largest changes in ranks across all data. Format: '[college_short_name] shows the highest increase of [X]% among all colleges.'",
+        
+        6. "yearly_trends": "Analyze 5-year nirf_overall_rank. Format: '[college_short_name] shows a [trend] trend, followed by [college_short_name] and [college_short_name]'."
 
-                    "state_specific_rankings": "Extract from current_combined_ranking_data state_rank_display. Format: 'In state level rankings  [college_short_name]  stands at [current state rank] in [domain_name], followed by [college_short_name]  at [current state rank] in [domain_name], while [college_short_name]  holds [current state rank] in [domain_name]' respectively List ALL mentioned colleges ordered by rank position",
+        Rules:
+        1. Include all colleges in every insight.
+        2. Use descending order for all numerical values.
+        3. Ensure all sections are complete and JSON is valid.
+        4. Focus only on the data provided. If data is missing, include 'No data available for [college_short_name]'.
+        5. Use concise, natural transitions (e.g., "followed by", "while").
+        6. Avoid using colons inside sentences.
 
-                    "ownership_rankings": "Use ownership_rank_display from current_combined_ranking_data in DESCENDING order. Format: 'Among government institutes [college_short_name]  ranks [current rank] in [domain_name], followed by [college_short_name]  at [current rank] in [domain_name], and [college_short_name]  securing [current rank] in [domain_name]' respectively Include ALL mentioned colleges",
+        IMPORTANT:
+        - Only return valid JSON starting and ending with braces.
+        - Do not include explanatory text or comments.
+        - Ensure calculations and sorting are accurate.
 
-                    "past_year_changes": "Compare nirf_overall_rank between current_year_data and previous_year_data. Format: 'In NIRF rankings [college_short_name]  jumps up/down by [X] spots (calculate |current - previous|) in [domain_name], while [college_short_name]  jumps up/down by [X] spots in [domain_name], and [college_short_name]  jumps up/down by [X] spots in [domain_name]' respectively List in DESCENDING order of change magnitude",
-
-                    "highest_changes": "Calculate changes in state_rank_display and ownership_rank_display between current and previous data. Format: 'The most significant ranking shifts show [college_short_name]  moving up/down by [X] spots in [domain_name], followed by [college_short_name]  changing by [X] spots in [domain_name], and [college_short_name]  shifting by [X] spots in [domain_name]' respectively Sort in DESCENDING order by change magnitude",
-
-                    "yearly_trends": "Analyze 5-year nirf_overall_rank from multi_year_ranking_data. Format: 'Looking at five-year performance data [college_short_name]  demonstrates a [upward/consistent/downward] trend in [domain_name], while [college_short_name]  shows a [trend] in [domain_name], and [college_short_name]  exhibits a [trend] in [domain_name]' respectively Include ALL colleges"
-                }}
-
-                MANDATORY RULES:
-                1. Include all colleges in EVERY insight
-                2. STRICTLY maintain descending order for numerical values
-                3. Calculate and verify ALL numerical differences
-                4. Use abbreviated college names
-                5. Use multi_year_ranking_data for graduation scores and trends
-                6. For ranking changes, use format "jumps up/down by X spots"
-                7. Sort changes in DESCENDING order (e.g., "jumps up 5 spots, jumps up 3 spots, jumps down 2 spots")
-                8. Verify each insight includes all three colleges before output
-                9. Double-check all calculations and sorting
-                10. Generate insights based ONLY on provided data
-                11. Each insight must include a trend observation
-                12. Focus on patterns and trends within each specific category
-                13. Maintain analytical depth while being user-friendly
-                14. Include only data-driven observations
-                15. Avoid using colons within sentences
-                16. Use natural language transitions like "followed by" and "while" instead of colons
-                
-                IMPORTANT
-                1. Output ONLY valid JSON. Do not include any explanatory text or comments.
-                2. The response must start and end with a JSON object.
-                3. FOR EACH Insights HAS NA FOR particular college, say currently no data available.
-
-                ERROR PREVENTION:
-                1. Verify data presence for each college
-                2. Confirm all numerical calculations
-                3. Validate sorting order multiple times
-                4. Ensure consistent naming across insights
-                5. Check completeness of all sections
-                6. Verify no colons appear within sentences
-                7. Verify JSON structure before returning.
-
-                Temperature: 0.3 (for maximum precision and consistency)
-                """
+        Temperature: 0.2
+        """
                 
             raw_insights = RankingAiInsightHelper.create_ranking_insights(prompt)
             logger.debug(f"Raw insights output: {raw_insights}")

@@ -291,26 +291,32 @@ class SummaryComparisonService:
 
 
 
-
 class QuickFactsService:
     @staticmethod
-    def get_quick_facts(college_ids: List[int], course_ids: List[int], cache_burst: int = 0) -> Dict[str, Dict]:
-        cache_key = CacheHelper.get_cache_key("quick_facts", college_ids, course_ids)
+    def get_quick_facts(college_ids: List[int], course_ids: List[int] = None, cache_burst: int = 0) -> Dict[str, Dict]:
+        # Create a cache key that accounts for optional course_ids
+        cache_key = CacheHelper.get_cache_key("quick_facts", college_ids, course_ids or [])
 
         def fetch_data():
             try:
-                # Fetch courses and related data
-                courses = Course.objects.filter(
+                # Base query for courses
+                courses_query = Course.objects.filter(
                     college_id__in=college_ids,
-                    id__in=course_ids,
                     status=True
-                ).select_related(
+                )
+
+                # Apply course_ids filter only if provided
+                if course_ids:
+                    courses_query = courses_query.filter(id__in=course_ids)
+
+                # Fetch courses and related data
+                courses = courses_query.select_related(
                     'college',
                     'college__location',
                     'college__entity_reference',
-                    'degree'
+                    
                 ).only(
-                    'id', 'course_name', 'college_id', 'degree_id',
+                    'college_id',
                     'college__name', 'college__ownership',
                     'college__institute_type_1', 'college__institute_type_2', 'college__type_of_entity',
                     'college__year_of_establishment', 'college__campus_size',
@@ -318,19 +324,12 @@ class QuickFactsService:
                     'college__entity_reference__short_name'
                 )
 
+           
+                total_courses_per_college = courses.values('college_id').annotate(total_courses=Count('id'))
+                total_courses_map = {item['college_id']: item['total_courses'] for item in total_courses_per_college}
+
                 # Create a dictionary for faster lookups
                 course_map = {course.college_id: course for course in courses}
-
-                # Fetch course counts
-                course_counts = {}
-                counts = Course.objects.filter(
-                    college_id__in=college_ids,
-                    status=True
-                ).values('college_id', 'degree_id').annotate(count=Count('id'))
-
-                for count in counts:
-                    key = (count['college_id'], count['degree_id'])
-                    course_counts[key] = count['count']
 
                 results = {}
                 all_na = True
@@ -342,13 +341,10 @@ class QuickFactsService:
                     if matching_course:
                         all_na = False
                         college = matching_course.college
-                        count_key = (college.id, matching_course.degree_id)
 
                         results[key] = {
                             'college_id': college.id,
                             'college_name': college.name,
-                            'course_name': matching_course.course_name,
-                            'course_id': matching_course.id,
                             'location': college.location.loc_string if college.location else 'NA',
                             'ownership': college.ownership_display(),
                             'parent_institute': college.parent_institute(),
@@ -358,14 +354,12 @@ class QuickFactsService:
                             'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, '-'),
                             'establishment_year': college.year_of_establishment or '',
                             'campus_size': college.campus_size_in_acres(),
-                            'total_courses_offered': course_counts.get(count_key, 0)
+                            'total_courses_offered': total_courses_map.get(college_id, 0)
                         }
                     else:
                         results[key] = {
                             'college_id': college_id,
                             'college_name': 'NA',
-                            'course_name': 'NA',
-                            'course_id': 'NA',
                             'location': 'NA',
                             'ownership': 'NA',
                             'parent_institute': 'NA',
@@ -390,7 +384,7 @@ class QuickFactsService:
                 return {}
 
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600 * 24 * 7, cache_burst=cache_burst)
-    
+
     
 class CardDisplayService:
     @staticmethod
