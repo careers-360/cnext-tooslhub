@@ -10,7 +10,7 @@ from django.db.models import Subquery, ExpressionWrapper,Window, Func, OuterRef,
 from django.db.models.functions import Coalesce,Cast,Concat,RowNumber
 from decimal import Decimal
 from college_compare.models import (
-    College, CollegeReviews,Domain,CollegeFacility,CollegePlacement,CollegePlacementCompany,Exam,CpProductCampaign,CpProductCampaignItems,RankingParameters,Company,RankingUploadList,Course,FeeBifurcation,Exam,Ranking,CollegeAccrediationApproval,ApprovalsAccrediations,CourseApprovalAccrediation
+    College, CollegeReviews,Domain,CollegeFacility,CollegePlacement,CollegePlacementCompany,Exam,CpProductCampaign,CpProductCampaignItems,RankingParameters,RankingParameters,Company,RankingUploadList,Course,FeeBifurcation,Exam,Ranking,CollegeAccrediationApproval,ApprovalsAccrediations,CourseApprovalAccrediation,User
 )
 
 from college_compare.models import *
@@ -38,11 +38,74 @@ warnings.filterwarnings("ignore", category=ElasticsearchWarning)
 
 from elasticsearch import Elasticsearch
 
+from django.core.exceptions import ObjectDoesNotExist
 
 
 logger = logging.getLogger(__name__)
 
+class UserPreferenceOptionsHelper:
+    @staticmethod
+    def fetch_user_preferences() -> list:
+        """
+        Fetch and return the list of available user preferences.
+        In this case, it's a static list of preferences.
+        """
+        preferences = [
+            "Fees",
+            "Placement",
+            "Scholarship",
+            "People Perception",
+            "Gender Diversity",
+            "Alumni Network",
+            "Location",
+            "Faculty & Resources",
+            "Academic Reputation",
+            "Extra Curricular & Resources"
+        ]
+        
+         
 
+        return preferences
+
+
+# class UserPreferenceSaveHelper:
+#     @staticmethod
+#     def validate_user_and_courses(uid: int, course_1: int, course_2: int, course_3: Optional[int] = None):
+#         """
+#         Validates whether the given user ID and course IDs exist in the respective tables.
+
+#         Args:
+#             uid (int): User ID.
+#             course_1 (int): First course ID (required).
+#             course_2 (int): Second course ID (required).
+#             course_3 (Optional[int]): Third course ID (optional).
+
+#         Returns:
+#             Dict: Validated user and course instances.
+        
+#         Raises:
+#             ObjectDoesNotExist: If any of the provided IDs do not exist.
+#         """
+#         try:
+#             user = User.objects.get(uid=uid)
+#         except ObjectDoesNotExist:
+#             raise ObjectDoesNotExist("Invalid uid. User does not exist.")
+
+#         try:
+#             course_1_instance = Course.objects.get(id=course_1)
+#             course_2_instance = Course.objects.get(id=course_2)
+#             course_3_instance = None
+#             if course_3:
+#                 course_3_instance = Course.objects.get(id=course_3)
+#         except ObjectDoesNotExist:
+#             raise ObjectDoesNotExist("One or more course IDs are invalid.")
+
+#         return {
+#             "user": user,
+#             "course_1": course_1_instance,
+#             "course_2": course_2_instance,
+#             "course_3": course_3_instance
+#         }
 
 
 class GroupConcat(Func):
