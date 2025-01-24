@@ -147,8 +147,14 @@ class College(models.Model):
         related_name='sub_institutes',
         db_column='entity_reference'
     )
+
     country_id = models.IntegerField(default=1, db_index=True)
     total_faculty = models.IntegerField(null=True, blank=True)
+    associate_hospital=models.CharField(null=True,max_length=100,blank=True)
+    number_of_bed=models.CharField(null=True,max_length=10,blank=True)
+
+
+
 
     class Meta:
         db_table = 'colleges'
