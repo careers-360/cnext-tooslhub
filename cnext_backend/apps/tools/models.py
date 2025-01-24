@@ -381,33 +381,6 @@ class College(models.Model):
 
 class Branches(models.Model):
 	name=models.CharField(max_length=255, unique=True, null=False)
-	# description=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# eligibility_criteria=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# scope=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# skills=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# course_curriculum=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# abt_syllabus=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# abt_company=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# abt_salary=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
-	# abt_careers=FroalaField(max_length=10000000, null=True, blank=True, default=None, options={
-	# 	'toolbarButtons': ['bold', 'italic', 'insertTable', 'formatOL', 'formatUL', 'insertLink', 'paragraphFormat'],
-	# 	'quickInsertButtons': ['table', 'ul'], 'paragraphFormat': {'H3': 'Heading 3'}})
 	company_id=models.IntegerField()
 	certificate_id=models.IntegerField()
 	syllabus_id=models.IntegerField()
@@ -566,63 +539,6 @@ class Exam(models.Model):
         States, on_delete=models.DO_NOTHING, null=True, blank=True
     )
     competition_type = models.CharField(max_length=255, null=True, blank=True)
-    # about_exam = FroalaField(
-    #     max_length=2,
-    #     null=True,
-    #     blank=True,
-    #     options={
-    #         "imageUploadURL": "/dj/froala_editor/optimized_image_upload/",
-    #         "toolbarButtons": [
-    #             "bold",
-    #             "italic",
-    #             "underline",
-    #             "strikeThrough",
-    #             "subscript",
-    #             "superscript",
-    #             "fontFamily",
-    #             "fontSize",
-    #             "inlineClass",
-    #             "inlineStyle",
-    #             "clearFormatting",
-    #             "alignLeft",
-    #             "alignCenter",
-    #             "formatOLSimple",
-    #             "alignRight",
-    #             "alignJustify",
-    #             "formatOL",
-    #             "formatUL",
-    #             "paragraphFormat",
-    #             "paragraphStyle",
-    #             "lineHeight",
-    #             "outdent",
-    #             "indent",
-    #             "quote",
-    #             "insertLink",
-    #             "insertImage",
-    #             "insertVideo",
-    #             "insertTable",
-    #             "emoticons",
-    #             "fontAwesome",
-    #             "specialCharacters",
-    #             "embedly",
-    #             "insertFile",
-    #             "insertHR",
-    #             "undo",
-    #             "redo",
-    #             "fullscreen",
-    #             "print",
-    #             "getPDF",
-    #             "spellChecker",
-    #             "selectAll",
-    #             "html",
-    #             "help",
-    #             "transLiterate",
-    #         ],
-    #         "quickInsertButtons": ["table", "ul"],
-    #         "charCounterMax": 10000000,
-    #     },
-    # )
-
     no_of_seats = models.PositiveIntegerField(null=True, blank=True)
     exam_duration = models.CharField(max_length=255, blank=True, null=True)
     parent_exam_id = models.PositiveIntegerField(default=0, null=True, blank=True)
@@ -657,67 +573,6 @@ class Exam(models.Model):
     push_to_paytm = models.BooleanField(default=False)
     move_to_top = models.BooleanField(default=False)
     author = models.ForeignKey(User, on_delete=models.DO_NOTHING, null=True, blank=True, related_name="exams")
-    # syllabus = FroalaField(
-    #     blank=True,
-    #     null=True,
-    #     options={
-    #         "tableCellStyles": {
-    #             "tbl-cell-border1": "Border 1px",
-    #             "tbl-cell-border2": "Border 2px",
-    #             "tbl-cell-border3": "Border 3px",
-    #             "fr-highlighted": "Highlighted",
-    #             "fr-thick": "Thick",
-    #         },
-    #         "imageUploadURL": "/dj/froala_editor/optimized_image_upload/",
-    #         "toolbarButtons": [
-    #             "bold",
-    #             "italic",
-    #             "underline",
-    #             "strikeThrough",
-    #             "subscript",
-    #             "superscript",
-    #             "color",
-    #             "fontFamily",
-    #             "fontSize",
-    #             "inlineClass",
-    #             "inlineStyle",
-    #             "clearFormatting",
-    #             "alignLeft",
-    #             "alignCenter",
-    #             "formatOLSimple",
-    #             "alignRight",
-    #             "alignJustify",
-    #             "formatOL",
-    #             "formatUL",
-    #             "paragraphFormat",
-    #             "paragraphStyle",
-    #             "lineHeight",
-    #             "outdent",
-    #             "indent",
-    #             "quote",
-    #             "insertLink",
-    #             "insertImage",
-    #             "insertVideo",
-    #             "insertTable",
-    #             "emoticons",
-    #             "fontAwesome",
-    #             "specialCharacters",
-    #             "embedly",
-    #             "insertFile",
-    #             "insertHR",
-    #             "undo",
-    #             "redo",
-    #             "fullscreen",
-    #             "print",
-    #             "getPDF",
-    #             "spellChecker",
-    #             "selectAll",
-    #             "html",
-    #             "help",
-    #             "transLiterate",
-    #         ],
-    #     },
-    # )
     move_to_top_order = models.IntegerField(blank=True, null=True, default=0)
 
     class Meta:
@@ -876,28 +731,6 @@ class CollegeCourse(models.Model):
 	
 	def __str__(self):
 		return self.course_name
-      
-
-
-
-# class ToolsContentSection(models.Model):
-#     product_id = models.IntegerField(null=True, blank=True)
-#     product_type = models.IntegerField(null=True, blank=True)
-#     heading = models.CharField(max_length=255, null=True, blank=True)
-#     content = models.CharField(max_length=255, null=True, blank=True)
-#     image_web = models.CharField(max_length=255, null=True, blank=True)
-#     image_wap = models.CharField(max_length=255, null=True, blank=True)
-#     status = models.BooleanField(default=True)
-#     created = models.DateTimeField(default=timezone.now)
-#     created_by = models.IntegerField(null=True, blank=True)
-#     updated = models.DateTimeField(auto_now=True)
-#     updated_by = models.IntegerField(null=True, blank=True)
-
-#     class Meta:
-#         db_table = "cnext_rp_content_section" #TODO change table name 
-#         verbose_name = "Content Section"
-#         verbose_name_plural = "Content Sections"
-
 
 
 class CPFeedback(models.Model):
