@@ -24,17 +24,15 @@ current_year = time.localtime().tm_year
 
 
 
-
-
-
 class RankingAccreditationComparisonView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Ranking and Accreditation Comparison",
-        description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year. Accepts a comma-separated list of selected domains.",
+        description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year. Accepts a comma-separated list of course IDs.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of selected domains (e.g., 1,2,3 or 1,1,1). Must be the same length as college_ids.', required=True),
+            OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs (optional). Must align with college_ids.', required=False),
             OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=False),
         ],
         responses={
@@ -46,26 +44,33 @@ class RankingAccreditationComparisonView(APIView):
     )
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
-        selected_domains_str = request.query_params.get('selected_domains')
+        course_ids_str = request.query_params.get('course_ids')
         year = request.query_params.get('year') or current_year - 1
 
         try:
-            
-            if not college_ids_str or not selected_domains_str:
-                raise ValidationError("Both college_ids and selected_domains are required.")
+            if not college_ids_str:
+                raise ValidationError("college_ids parameter is required.")
 
             college_ids = [int(cid) for cid in college_ids_str.split(',')]
-            selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
 
-            if len(college_ids) != len(selected_domains):
-                raise ValidationError("The number of college_ids and selected_domains must be the same.")
+            course_ids = (
+                [int(course_id) for course_id in course_ids_str.split(',')]
+                if course_ids_str else None
+            )
 
-            selected_domains_dict = {college_ids[i]: str(selected_domains[i]) for i in range(len(college_ids))}
+            if course_ids and len(college_ids) != len(course_ids):
+                raise ValidationError("The number of college_ids and course_ids must be the same if course_ids are provided.")
+
+            course_ids_dict = (
+                {college_ids[i]: course_ids[i] for i in range(len(college_ids))}
+                if course_ids else {}
+            )
+
+            print(course_ids_dict)
 
             year = int(year) if year else None
 
-        
-            result = RankingAccreditationHelper.fetch_ranking_data(college_ids, selected_domains_dict, year)
+            result = RankingAccreditationHelper.fetch_ranking_data(college_ids, course_ids_dict, year)
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except ValidationError as ve:
@@ -77,8 +82,8 @@ class RankingAccreditationComparisonView(APIView):
             return CustomErrorResponse({"error": str(nde)}, status=status.HTTP_404_NOT_FOUND)
 
         except ValueError:
-            logger.error("Invalid input format. college_ids and selected_domains must be comma-separated integers.")
-            return CustomErrorResponse({"error": "Invalid input format. college_ids and selected_domains must be comma-separated integers."}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error("Invalid input format. college_ids and course_ids must be comma-separated integers.")
+            return CustomErrorResponse({"error": "Invalid input format. college_ids and course_ids must be comma-separated integers."}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}")
@@ -89,12 +94,13 @@ class RankingAccreditationComparisonView(APIView):
 
 class RankingAccreditationCombinedComparisonView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Ranking and Accreditation Comparison",
         description="Retrieve ranking and accreditation data for given colleges, optionally filtered by year, and includes combined and multi-year data.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of domains for ranking', required=True),
+            OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs for ranking', required=True),
             OpenApiParameter(name='year', type=int, description='Year for filtering rankings (optional)', required=False),
         ],
         responses={
@@ -106,52 +112,47 @@ class RankingAccreditationCombinedComparisonView(APIView):
     )
     def get(self, request):
         college_ids = request.query_params.get('college_ids')
-        selected_domains_str = request.query_params.get('selected_domains')
+        course_ids_str = request.query_params.get('course_ids')
+        print(course_ids_str)
         year_str = request.query_params.get('year') or current_year - 1
 
         try:
-            if not college_ids or not selected_domains_str or not year_str:
-                raise ValidationError("Both college_ids, selected_domains, and year are required.")
+            if not college_ids or not course_ids_str or not year_str:
+                raise ValidationError("Both college_ids, course_ids, and year are required.")
 
             college_ids_list = [int(cid) for cid in college_ids.split(',')]
-            selected_domains = [int(sd) for sd in selected_domains_str.split(',')]
+            course_ids_list = [int(cid) for cid in course_ids_str.split(',')]
 
-            if len(college_ids_list) != len(selected_domains):
-                raise ValidationError("The number of college_ids must match the number of selected_domains.")
+            if len(college_ids_list) != len(course_ids_list):
+                raise ValidationError("The number of college_ids must match the number of course_ids.")
 
-            selected_domains_dict = {college_ids_list[i]: str(selected_domains[i]) for i in range(len(college_ids_list))}
-            print(selected_domains_dict)
+            # Create course_ids_dict using college_ids_list and course_ids_list
+            course_ids_dict = dict(zip(college_ids_list, course_ids_list))
+
             year = int(year_str)
 
-            ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year)
+            # Fetch ranking data for current and previous years
+            ranking_data_current_year = RankingAccreditationHelper.fetch_ranking_data(
+                college_ids_list, course_ids_dict, year
+            )
+            
+            ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(
+                college_ids_list, course_ids_dict, year - 1
+            )
 
-            # if not ranking_data_current_year:
-            #     raise NoDataAvailableError("No ranking data available for the current year.")
+            # Rest of the code remains the same...
+            combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(
+                college_ids_list, course_ids_list, year
+            )
 
-            ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(college_ids_list, selected_domains_dict, year - 1)
-            
-            # if not ranking_data_previous_year:
-            #     raise NoDataAvailableError("No ranking data available for the previous year.")
-
-            combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year)
-            
-            # if not combined_ranking_data_current_year:
-            #     raise NoDataAvailableError("No combined ranking data available for the current year.")
-
-            combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(college_ids_list, selected_domains_dict, year - 1)
-            
-            # if not combined_ranking_data_previous_year:
-            #     raise NoDataAvailableError("No combined ranking data available for the previous year.")
-            
-            
+            combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(
+                college_ids_list, course_ids_list, year - 1
+            )
 
             years = [year - i for i in range(5)]
-            
-            
-            multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(college_ids_list, selected_domains_dict, years)
-            if not multi_year_ranking_data:
-                raise NoDataAvailableError("No multi-year ranking data available.")
-
+            multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(
+                college_ids_list, course_ids_list, years
+            )
             result = {
                 "current_year_data": ranking_data_current_year,
                 "previous_year_data": ranking_data_previous_year,
@@ -160,6 +161,9 @@ class RankingAccreditationCombinedComparisonView(APIView):
                 "multi_year_ranking_data": multi_year_ranking_data,
             }
 
+            print(result)
+
+          
             insights = RankingAiInsightHelper.generate_ranking_insights(result)
             result['insights'] = insights
 
@@ -177,8 +181,6 @@ class RankingAccreditationCombinedComparisonView(APIView):
         except Exception as e:
             logger.error(f"Error fetching ranking and accreditation comparison: {traceback.format_exc()}")
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 class RankingGraphInsightsView(APIView):
     permission_classes = [ApiKeyPermission]
