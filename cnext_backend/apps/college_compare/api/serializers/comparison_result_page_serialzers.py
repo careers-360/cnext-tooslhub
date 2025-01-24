@@ -137,9 +137,9 @@ class UserPreferenceSaveSerializer(serializers.ModelSerializer):
     preferences = serializers.ListField(
         child=serializers.CharField(),
         required=True,
-        min_length=1,
-        max_length=5,
-        help_text="List of up to 5 preferences in order."
+        min_length=5,
+        max_length=10,
+        help_text="List of up to 10 preferences in order, but only the first 5 will be saved."
     )
 
     
@@ -175,7 +175,7 @@ class UserPreferenceSaveSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        preferences = validated_data.pop('preferences', [])
+        preferences = validated_data.pop('preferences', [])[:5] 
 
         user_preference = UserReportPreferenceMatrix.objects.create(
             uid_id=validated_data['uid'],  # Use `_id` to pass the primary key directly

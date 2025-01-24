@@ -61,8 +61,8 @@ class UserPreferenceSaveView(APIView):
     def post(self, request):
         serializer = UserPreferenceSaveSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "User preferences saved successfully."}, status=status.HTTP_201_CREATED)
+            user_preference = serializer.save()
+            return Response({"message": "User preferences saved successfully.", "id": user_preference.id}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RankingAccreditationComparisonView(APIView):
