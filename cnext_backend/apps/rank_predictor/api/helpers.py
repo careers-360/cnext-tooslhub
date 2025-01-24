@@ -10,7 +10,7 @@ from django.conf import settings
 from django.db.models import Max,F, Q
 from datetime import datetime, timedelta
 from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
-from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, TempRpMeanSd, TempRpMeritList, TempRpMeritSheet
+from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpMeritList, RpMeritSheet, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from rest_framework.pagination import PageNumberPagination
@@ -605,24 +605,24 @@ class RPCmsHelper:
         if not product_id or not uid or not year or not isinstance(custom_mean_sd_data, list):
             return False, "Missing arguments or Incorrect data type"
         
-        rp_session_ids = list(TempRpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
+        rp_session_ids = list(RpMeanSd.objects.filter(product_id=product_id, year=year).values_list("id",flat=True))
         incomming_ids = [row_["id"] for row_ in custom_mean_sd_data if row_.get("id")]
         rp_session_mapping = {row_["id"]:row_ for row_ in custom_mean_sd_data if row_.get("id")}
 
         error = []
         to_create = []
-        to_update = TempRpMeanSd.objects.filter(id__in=incomming_ids)
+        to_update = RpMeanSd.objects.filter(id__in=incomming_ids)
 
         # Fetch existing mean and SD before any updates
         existing_mean_sd_mapping = {
             row["input_flow_type_id"]: {"sheet_mean": row["sheet_mean"], "sheet_sd": row["sheet_sd"]}
-            for row in TempRpMeanSd.objects.filter(product_id=product_id, year=year).values("input_flow_type_id", "sheet_mean", "sheet_sd")
+            for row in RpMeanSd.objects.filter(product_id=product_id, year=year).values("input_flow_type_id", "sheet_mean", "sheet_sd")
         }
 
         # Delete non existing records
         non_common_ids = set(rp_session_ids) - set(incomming_ids)
         if non_common_ids:
-            TempRpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
+            RpMeanSd.objects.filter(product_id=product_id, year=year, id__in=non_common_ids).delete()
 
         # Create new records
         for new_row in custom_mean_sd_data:
@@ -639,11 +639,11 @@ class RPCmsHelper:
             if not new_row.get("id"):
                 if not admin_mean: admin_mean = None
                 if not admin_sd: admin_sd = None
-                to_create.append(TempRpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
+                to_create.append(RpMeanSd(product_id=product_id, year=year, input_flow_type_id=input_flow_type, sheet_mean=sheet_mean, sheet_sd=sheet_sd,
                                                 admin_mean=admin_mean, admin_sd=admin_sd, created_by=uid, updated_by=uid))
         
         if to_create:
-            TempRpMeanSd.objects.bulk_create(to_create)
+            RpMeanSd.objects.bulk_create(to_create)
 
         # Update records
         for row_ in to_update:
@@ -670,7 +670,7 @@ class RPCmsHelper:
             row_.updated_by = uid
 
         if incomming_ids:
-            TempRpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
+            RpMeanSd.objects.bulk_update(to_update, ["input_flow_type", "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "updated_by"])
 
         #thread implememtation for zscore calculation, on the change of mean or sd value
         thread = threading.Thread(
@@ -711,14 +711,14 @@ class RPCmsHelper:
     # Update Z-Scores
     def update_zscores(self, product_id, year, input_flow_type, mean, sd, uid):
         """
-        Update the z-score column in TempRpMeritList for a specific input_flow_type
+        Update the z-score column in RpMeritList for a specific input_flow_type
         when the mean or standard deviation changes.
         """
         if not product_id or not year or not input_flow_type or mean is None or sd is None:
             return False, "Missing arguments or invalid data"
 
-        # Check if data exists in TempRpMeritList for the given product_id and year
-        rows_to_update = TempRpMeritList.objects.filter(
+        # Check if data exists in RpMeritList for the given product_id and year
+        rows_to_update = RpMeritList.objects.filter(
             product_id=product_id,
             year=year,
             input_flow_type=input_flow_type
@@ -739,7 +739,7 @@ class RPCmsHelper:
 
         # Bulk update the rows
         if updated_rows:
-            TempRpMeritList.objects.bulk_update(updated_rows, ["z_score", "updated_by"])
+            RpMeritList.objects.bulk_update(updated_rows, ["z_score", "updated_by"])
             return True, f"Updated z-scores for {len(updated_rows)} rows"
         else:
             return False, "No rows updated"
@@ -1066,10 +1066,10 @@ class RPCmsHelper:
                 if row[year_index].strip() != str(selected_year):
                     return False, {"error": f"Sheet Year does not match with the selected one"}
 
-            TempRpMeritSheet.objects.filter(product_id=product_id, year=selected_year).delete()
+            RpMeritSheet.objects.filter(product_id=product_id, year=selected_year).delete()
 
-            # Save metadata in TempRpMeritSheet
-            TempRpMeritSheet.objects.create(
+            # Save metadata in RpMeritSheet
+            RpMeritSheet.objects.create(
                 product_id=product_id,
                 year=selected_year,
                 file_name=file,
@@ -1091,7 +1091,7 @@ class RPCmsHelper:
 
         try:
             # Fetch the merit sheet
-            merit_sheet = TempRpMeritSheet.objects.filter(product_id=product_id, year=year).first()
+            merit_sheet = RpMeritSheet.objects.filter(product_id=product_id, year=year).first()
             if not merit_sheet:
                 return False, "Merit sheet not found for the given product_id and year."
 
@@ -1109,7 +1109,7 @@ class RPCmsHelper:
             reader = csv.DictReader(csv_file)
 
             # Delete existing records for the product_id and year
-            TempRpMeritList.objects.filter(product_id=product_id, year=year).delete()
+            RpMeritList.objects.filter(product_id=product_id, year=year).delete()
 
             # Group data by input_flow_type
             input_data = defaultdict(list)
@@ -1132,12 +1132,12 @@ class RPCmsHelper:
                 else:
                     stats_data[input_flow_type] = {'mean': None, 'sd': None}
 
-            # Insert data into TempRpMeanSd
+            # Insert data into RpMeanSd
             for input_flow_type, stats in stats_data.items():
                 if not input_flow_type:
                     return False, f"Invalid input_flow_type: {input_flow_type}."
 
-                TempRpMeanSd.objects.update_or_create(
+                RpMeanSd.objects.update_or_create(
                     product_id=product_id,
                     year=year,
                     input_flow_type_id=input_flow_type,
@@ -1169,7 +1169,7 @@ class RPCmsHelper:
                 sheet_sd = stats.get('sd')
                 zscore = self.calculate_zscore(input_value, sheet_mean, sheet_sd)
 
-                merit_list_entries.append(TempRpMeritList(
+                merit_list_entries.append(RpMeritList(
                     product_id=row['product_id'],
                     year=row['year'],
                     caste=row.get('caste') if row.get('caste') and row.get('caste').strip() else None,
@@ -1189,12 +1189,12 @@ class RPCmsHelper:
 
                 # Bulk create in batches
                 if len(merit_list_entries) == batch_size:
-                    TempRpMeritList.objects.bulk_create(merit_list_entries)
+                    RpMeritList.objects.bulk_create(merit_list_entries)
                     merit_list_entries = []  # Reset the list after each batch
 
             # Insert remaining entries
             if merit_list_entries:
-                TempRpMeritList.objects.bulk_create(merit_list_entries)
+                RpMeritList.objects.bulk_create(merit_list_entries)
 
             return True, "Mean, SD, and Z-scores calculated successfully."
         except Exception as e:
@@ -1213,7 +1213,7 @@ class RPCmsHelper:
             items_on_page = int(request.query_params.get('page_size', 30))
             product_id = request.query_params.get('product_id')
             year = request.query_params.get('year')
-            queryset = TempRpMeritList.objects.filter(product_id=product_id)
+            queryset = RpMeritList.objects.filter(product_id=product_id)
 
             if not product_id:
                 return False, 'product_id is required'
@@ -1251,7 +1251,7 @@ class RPCmsHelper:
                     item['input_flow_type'] = input_flow_dict.get(item['input_flow_type'], item['input_flow_type'])
                     item['result_flow_type'] = result_flow_dict.get(item['result_flow_type'], item['result_flow_type'])
             paginated_data = paginator.get_paginated_response(paginated_results)
-            paginated_data['to_graph'] = TempRpMeritSheet.objects.filter(product_id=product_id,year=year).values_list('to_graph',flat=True).first()
+            paginated_data['to_graph'] = RpMeritSheet.objects.filter(product_id=product_id,year=year).values_list('to_graph',flat=True).first()
             paginated_data['filtered_year'] = year
             return True, paginated_data
 
@@ -1265,7 +1265,7 @@ class RPCmsHelper:
         if to_graph == 'not_found':
             return False, "to_graph key is required"
 
-        queryset = TempRpMeritSheet.objects.filter(product_id=product_id,year=year)
+        queryset = RpMeritSheet.objects.filter(product_id=product_id,year=year)
         if queryset.exists():
             queryset.update(to_graph=to_graph)
         return True, "Data Created Successfully"
