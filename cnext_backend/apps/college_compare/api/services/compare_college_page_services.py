@@ -290,7 +290,6 @@ class SummaryComparisonService:
 
 
 
-
 class QuickFactsService:
     @staticmethod
     def get_quick_facts(college_ids: List[int], course_ids: List[int] = None, cache_burst: int = 0) -> Dict[str, Dict]:
@@ -314,17 +313,17 @@ class QuickFactsService:
                     'college',
                     'college__location',
                     'college__entity_reference',
-                    
+
                 ).only(
                     'college_id',
                     'college__name', 'college__ownership',
                     'college__institute_type_1', 'college__institute_type_2', 'college__type_of_entity',
-                    'college__year_of_establishment', 'college__campus_size',
+                    'college__year_of_establishment', 'college__campus_size', 'college__associate_hospital',
+                    'college__number_of_bed',
                     'college__location__loc_string',
                     'college__entity_reference__short_name'
                 )
 
-           
                 total_courses_per_college = courses.values('college_id').annotate(total_courses=Count('id'))
                 total_courses_map = {item['college_id']: item['total_courses'] for item in total_courses_per_college}
 
@@ -348,13 +347,19 @@ class QuickFactsService:
                             'location': college.location.loc_string if college.location else 'NA',
                             'ownership': college.ownership_display(),
                             'parent_institute': college.parent_institute(),
+
                             'type_of_institute': College.type_of_institute(
                                 college.institute_type_1, college.institute_type_2
                             ),
-                            'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, '-'),
+                            'college_type': dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, 'NA'),
                             'establishment_year': college.year_of_establishment or '',
                             'campus_size': college.campus_size_in_acres(),
-                            'total_courses_offered': total_courses_map.get(college_id, 0)
+                            'total_courses_offered': total_courses_map.get(college_id, 0),
+                            "is_hospital": bool(
+                                dict(College.ENTITY_TYPE_CHOICES).get(college.type_of_entity, 'NA') == 'Hospital'),
+                            "associate_hospital": college.associate_hospital or 'NA',
+                            "number_of_bed": college.number_of_bed
+
                         }
                     else:
                         results[key] = {
@@ -367,7 +372,9 @@ class QuickFactsService:
                             'college_type': 'NA',
                             'establishment_year': '',
                             'campus_size': 'NA',
-                            'total_courses_offered': 0
+                            'total_courses_offered': 0,
+                            "number_of_bed": 'NA',
+                            "associate_hospital": 'NA'
                         }
 
                 if all_na:
