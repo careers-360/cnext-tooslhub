@@ -3,6 +3,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from  college_compare.models import College, Course, CollegeCourseComparisonFeedback, User, UserReportPreferenceMatrix
  
 
+
+
 # class FeedbackSubmitSerializer(serializers.ModelSerializer):
 #     voted_college = serializers.IntegerField(required=True)
 #     voted_course = serializers.IntegerField(required=True)
@@ -15,8 +17,6 @@ from  college_compare.models import College, Course, CollegeCourseComparisonFeed
 #         help_text="List of college IDs to compare (2-3 colleges)"
 #     )
 #     course_ids = serializers.ListField(
-
-        
 #         child=serializers.IntegerField(),
 #         write_only=True,
 #         required=True,
@@ -43,38 +43,26 @@ from  college_compare.models import College, Course, CollegeCourseComparisonFeed
 #         if voted_course not in course_ids:
 #             raise serializers.ValidationError("voted_course must be one of the courses being compared.")
 
-#         self.college_ids = college_ids
-#         self.course_ids = course_ids
-        
 #         return data
 
 #     def create(self, validated_data):
-#         college_ids = self.college_ids
-#         course_ids = self.course_ids
-
 #         feedback_data = {
 #             'uid': validated_data['uid'],
 #             'voted_college_id': validated_data['voted_college'],
 #             'voted_course_id': validated_data['voted_course'],
-#             'createdBy': str(validated_data['uid'])
+#             'createdBy': str(validated_data['uid']),
 #         }
 
-#         for i, (college_id, course_id) in enumerate(zip(college_ids, course_ids), 1):
-#             try:
-#                 College.objects.get(id=college_id)
-#                 feedback_data[f'college_{i}_id'] = college_id
-#             except ObjectDoesNotExist:
-#                 raise serializers.ValidationError(f"College with ID {college_id} does not exist.")
-
-#             try:
-#                 Course.objects.get(id=course_id)
-#                 feedback_data[f'course_{i}_id'] = a course_id
-#             except ObjectDoesNotExist:
-#                 raise serializers.ValidationError(f"Course with ID {course_id} does not exist.")
+#         for i, (college_id, course_id) in enumerate(zip(validated_data['college_ids'], validated_data['course_ids']), 1):
+#             feedback_data[f'college_{i}_id'] = college_id
+#             feedback_data[f'course_{i}_id'] = course_id
 
 #         return CollegeCourseComparisonFeedback.objects.create(**feedback_data)
 
+
+
 class FeedbackSubmitSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     voted_college = serializers.IntegerField(required=True)
     voted_course = serializers.IntegerField(required=True)
     college_ids = serializers.ListField(
@@ -96,7 +84,7 @@ class FeedbackSubmitSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CollegeCourseComparisonFeedback
-        fields = ['uid', 'voted_college', 'voted_course', 'college_ids', 'course_ids']
+        fields = ['id', 'uid', 'voted_college', 'voted_course', 'college_ids', 'course_ids']
 
     def validate(self, data):
         college_ids = data.get('college_ids', [])
@@ -114,79 +102,133 @@ class FeedbackSubmitSerializer(serializers.ModelSerializer):
 
         return data
 
-    def create(self, validated_data):
+    def create_or_update(self, validated_data):
+        feedback_id = validated_data.get('id')
         feedback_data = {
             'uid': validated_data['uid'],
             'voted_college_id': validated_data['voted_college'],
             'voted_course_id': validated_data['voted_course'],
-            'createdBy': str(validated_data['uid']),
+            'updatedBy': str(validated_data['uid']),
         }
 
         for i, (college_id, course_id) in enumerate(zip(validated_data['college_ids'], validated_data['course_ids']), 1):
             feedback_data[f'college_{i}_id'] = college_id
             feedback_data[f'course_{i}_id'] = course_id
 
-        return CollegeCourseComparisonFeedback.objects.create(**feedback_data)
+        if feedback_id:
+            instance = CollegeCourseComparisonFeedback.objects.filter(id=feedback_id).first()
+            if instance:
+                for key, value in feedback_data.items():
+                    setattr(instance, key, value)
+                instance.save()
+                return instance, "Feedback updated successfully"
+            
+        instance = CollegeCourseComparisonFeedback.objects.create(**feedback_data, createdBy=str(validated_data['uid']))
+        return instance, "Feedback submitted successfully"
+    
 
 
 class UserPreferenceSaveSerializer(serializers.ModelSerializer):
-    uid = serializers.IntegerField(required=True)
-    course_1 = serializers.IntegerField(required=True)
-    course_2 = serializers.IntegerField(required=True)
+    uid = serializers.IntegerField(required=False)  # Optional for partial updates
+    course_1 = serializers.IntegerField(required=False, allow_null=True)
+    course_2 = serializers.IntegerField(required=False, allow_null=True)
     course_3 = serializers.IntegerField(required=False, allow_null=True)
     preferences = serializers.ListField(
         child=serializers.CharField(),
-        required=True,
+        required=False,  # Optional for partial updates
         min_length=5,
-        max_length=10,
-        help_text="List of up to 10 preferences in order, but only the first 5 will be saved."
+        max_length=10
     )
 
-    
+    AVAILABLE_PREFERENCES = {
+        "Fees", "Placement", "Scholarship", "People Perception", "Gender Diversity",
+        "Alumni Network", "Location", "Faculty & Resources", "Academic Reputation", 
+        "Extra Curricular & Resources"
+    }
+
     class Meta:
         model = UserReportPreferenceMatrix
         fields = ['uid', 'course_1', 'course_2', 'course_3', 'preferences']
 
     def validate(self, data):
-        # Define Available Preferences Here
-        AVAILABLE_PREFERENCES = [
-        "Fees", "Placement", "Scholarship", "People Perception", "Gender Diversity",
-        "Alumni Network", "Location", "Faculty & Resources", "Academic Reputation", "Extra Curricular & Resources"
-    ]
-        # Validate user existence
-        if not User.objects.filter(uid=data['uid']).exists():
-            raise serializers.ValidationError({"uid": "User ID does not exist."})
+        if 'uid' in data:
+            user_exists = User.objects.filter(uid=data.get('uid')).exists()
+            if not user_exists:
+                raise serializers.ValidationError({"uid": "User ID does not exist."})
 
-        # Validate course existence
-        for key in ['course_1', 'course_2', 'course_3']:
-            if key in data and data[key] is not None:
-                if not Course.objects.filter(id=data[key]).exists():
-                    raise serializers.ValidationError({key: f"Course ID {data[key]} does not exist."})
+        course_ids = set()
+        if 'course_1' in data:
+            course_ids.add(data['course_1'])
+        if 'course_2' in data:
+            course_ids.add(data['course_2'])
+        if 'course_3' in data:
+            course_ids.add(data['course_3'])
+        course_ids.discard(None)  # Remove None values if any course field is missing
 
-        # Validate preferences using AVAILABLE_PREFERENCES from the model
-        invalid_prefs = [p for p in data['preferences'] if p not in AVAILABLE_PREFERENCES]
-        if invalid_prefs:
-            raise serializers.ValidationError({"preferences": f"Invalid preferences: {invalid_prefs}"})
+        if course_ids:
+            existing_courses = Course.objects.filter(id__in=course_ids).values_list('id', flat=True)
+            if len(existing_courses) != len(course_ids):
+                raise serializers.ValidationError({"courses": "One or more course IDs do not exist."})
 
-        # Ensure preferences are unique
-        if len(data['preferences']) != len(set(data['preferences'])):
-            raise serializers.ValidationError({"preferences": "Preferences should be unique. Duplicates are not allowed."})
+        if 'preferences' in data:
+            preferences_set = set(data['preferences'])
+            invalid_prefs = preferences_set - self.AVAILABLE_PREFERENCES
+            if invalid_prefs:
+                raise serializers.ValidationError({"preferences": f"Invalid preferences: {invalid_prefs}"})
+
+            if len(preferences_set) != len(data['preferences']):
+                raise serializers.ValidationError({"preferences": "Duplicate preferences not allowed."})
 
         return data
 
     def create(self, validated_data):
-        preferences = validated_data.pop('preferences', [])[:5] 
-
-        user_preference = UserReportPreferenceMatrix.objects.create(
-            uid_id=validated_data['uid'],  # Use `_id` to pass the primary key directly
-            course_1_id=validated_data['course_1'],
-            course_2_id=validated_data['course_2'],
-            course_3_id=validated_data['course_3'] if validated_data.get('course_3') else None,
-            preference_1=preferences[0] if len(preferences) > 0 else None,
-            preference_2=preferences[1] if len(preferences) > 1 else None,
-            preference_3=preferences[2] if len(preferences) > 2 else None,
-            preference_4=preferences[3] if len(preferences) > 3 else None,
-            preference_5=preferences[4] if len(preferences) > 4 else None
+        preferences = validated_data.pop('preferences', [])[:5]
+        preference_dict = {
+            f'preference_{i+1}': pref 
+            for i, pref in enumerate(preferences)
+        }
+        
+        return UserReportPreferenceMatrix.objects.create(
+            uid_id=validated_data.get('uid'),
+            course_1_id=validated_data.get('course_1'),
+            course_2_id=validated_data.get('course_2'),
+            course_3_id=validated_data.get('course_3'),
+            **preference_dict
         )
+    @staticmethod
+    def update_user_preference_matrix(user_preference_id, update_data):
+        try:
+            user_preference = UserReportPreferenceMatrix.objects.get(id=user_preference_id)
 
-        return user_preference
+            # Validate and update the uid if provided
+            if 'uid' in update_data:
+                user_instance = User.objects.get(uid=update_data['uid'])  # Get the User instance
+                user_preference.uid = user_instance  # Assign the User instance to the foreign key
+
+            # Other field updates (fees_budget, location_states, exams) stay the same as before
+            if 'fees_budget' in update_data:
+                fees_budget = update_data['fees_budget']
+                if fees_budget and not isinstance(fees_budget, str):
+                    raise serializers.ValidationError({"fees_budget": "Must be a string representation of budget."})
+                user_preference.fees_budget = fees_budget
+
+            if 'location_states' in update_data:
+                location_states = update_data['location_states']
+                if location_states is not None:
+                    if not isinstance(location_states, list):
+                        raise serializers.ValidationError({"location_states": "Must be a list of states."})
+                    user_preference.location_states = location_states
+
+            if 'exams' in update_data:
+                exams = update_data['exams']
+                if exams is not None:
+                    if not isinstance(exams, list):
+                        raise serializers.ValidationError({"exams": "Must be a list of exam names."})
+                    user_preference.exams = exams
+
+            user_preference.save()
+            return user_preference
+
+        except UserReportPreferenceMatrix.DoesNotExist:
+            raise serializers.ValidationError({"error": f"No UserReportPreferenceMatrix found with id {user_preference_id}."})
+        

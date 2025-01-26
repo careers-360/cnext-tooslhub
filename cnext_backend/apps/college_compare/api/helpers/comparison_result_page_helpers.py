@@ -4561,6 +4561,7 @@ class ExamCutoffHelper:
 
 
 
+
 class ExamCutoffGraphHelper:
 
     @staticmethod
@@ -4685,238 +4686,199 @@ class ExamCutoffGraphHelper:
         if gender_id:
             result_list = [item for item in result_list if item['gender_id'] == gender_id]
 
-     
-       
-        print(len(result_list))
-
         formatted_result = {"exams_data": [], "college_names": []}
-        college_names_set = set()
-
-      
         exam_counseling_groups = {}
+        
         for item in result_list:
-            exam_id = item['exam_sub_exam_id']
-            counseling_id = item['counselling_id']
-            key = (exam_id, counseling_id)
+            key = (item['exam_sub_exam_id'], item['counselling_id'])
             if key not in exam_counseling_groups:
                 exam_counseling_groups[key] = []
             exam_counseling_groups[key].append(item)
 
         for (exam_id, counseling_id), items in exam_counseling_groups.items():
-            exam_name = items[0]['exam_name']
-            counseling_name = items[0]['counseling_name']
-
             exam_data = {
                 "id": exam_id,
-                "name": exam_name,
+                "name": items[0]['exam_name'],
                 "counseling": []
             }
 
             counseling_data = {
                 "id": counseling_id,
-                "name": counseling_name,
+                "name": items[0]['counseling_name'],
                 "categories": []
             }
 
-          
             all_category_ids = set(item['category_id'] for item in items if item['category_id'] != 'NA')
-            
-           
             if not all_category_ids:
                 all_category_ids.add('NA')
 
             for category_id_val in all_category_ids:
-            
                 category_items = [item for item in items if item['category_id'] == category_id_val]
                 
-            
                 if not category_items:
-                    
-                    representative_item = items[0] if items else None
-                    if representative_item:
-                        category_name = "NA"
-                        if category_id_val == 1:
-                            category_name = "All India"
-                        elif category_id_val == 2:
-                            category_name = "Outside Home State"
-                        elif category_id_val == 3:
-                            category_name = "Home State"
-                        
-                        category_items = [{
-                            "college_course_id": course_id,
-                            "exam_sub_exam_id": representative_item['exam_sub_exam_id'],
-                            "counselling_id": representative_item['counselling_id'],
-                            "exam_name": representative_item['exam_name'],
-                            "counseling_name": representative_item['counseling_name'],
-                            "caste_name": "NA",
-                            "category_of_admission": category_name,
-                            "category_id": category_id_val,
-                            "min_closing_cutoff": "NA",
-                            "caste_id": 2,
-                            "gender_id": 1,
-                        } for course_id in course_ids]
-                    else:
-                        continue  
-                
-                category_name = category_items[0]['category_of_admission']
+                    continue
+
                 category_data = {
                     "id": category_id_val,
-                    "name": category_name,
+                    "name": category_items[0]['category_of_admission'],
                     "caste": []
                 }
 
-              
                 all_caste_ids = set(item['caste_id'] for item in category_items)
 
                 for caste_id_val in all_caste_ids:
-                 
                     caste_items = [item for item in category_items if item['caste_id'] == caste_id_val]
                     
-                   
                     if not caste_items:
-                       
-                        representative_item = category_items[0] if category_items else None
-                        if representative_item:
-                            caste_name = "NA"
-                            if caste_id_val == 2:
-                                caste_name = "General"
-                            elif caste_id_val == 3:
-                                caste_name = "OBC"
-                            elif caste_id_val == 4:
-                                caste_name = "SC"
-                            elif caste_id_val == 5:
-                                caste_name = "ST"
-                            caste_items = [{
-                                "college_course_id": course_id,
-                                "exam_sub_exam_id": representative_item['exam_sub_exam_id'],
-                                "counselling_id": representative_item['counselling_id'],
-                                "exam_name": representative_item['exam_name'],
-                                "counseling_name": representative_item['counseling_name'],
-                                "caste_name": caste_name,
-                                "category_of_admission": representative_item['category_of_admission'],
-                                "category_id": representative_item['category_id'],
-                                "min_closing_cutoff": "NA",
-                                "caste_id": caste_id_val,
-                                "gender_id": 1,
-                            } for course_id in course_ids]
-                        else:
-                            continue  
+                        continue
 
-                    caste_name = caste_items[0]['caste_name']
                     caste_data = {
                         "id": caste_id_val,
-                        "name": caste_name,
+                        "name": caste_items[0]['caste_name'],
                         "gender": []
                     }
 
-                 
                     all_gender_ids = set(item['gender_id'] for item in caste_items)
 
                     for gender_id_val in all_gender_ids:
                         gender_items = [item for item in caste_items if item['gender_id'] == gender_id_val]
-                     
-                        if not gender_items:
-                          
-                            representative_item = caste_items[0] if caste_items else None
-                            if representative_item:
-                                gender_name = "Male" if gender_id_val == 1 else "Female"
-                                gender_items = [{
-                                    "college_course_id": course_id,
-                                    "exam_sub_exam_id": representative_item['exam_sub_exam_id'],
-                                    "counselling_id": representative_item['counselling_id'],
-                                    "exam_name": representative_item['exam_name'],
-                                    "counseling_name": representative_item['counseling_name'],
-                                    "caste_name": representative_item['caste_name'],
-                                    "category_of_admission": representative_item['category_of_admission'],
-                                    "category_id": representative_item['category_id'],
-                                    "min_closing_cutoff": "NA",
-                                    "caste_id": representative_item['caste_id'],
-                                    "gender_id": gender_id_val,
-                                } for course_id in course_ids]
-                            else:
-                                continue  
-
-                        gender_name = "Male" if gender_id_val == 1 else "Female"
+                        
                         cutoff_data_dict = {}
                         all_na = True
+
                         for item in gender_items:
                             college_course_id = item['college_course_id']
                             closing_rank = item['min_closing_cutoff']
-                            cutoff_data_dict[f"college_{course_ids.index(college_course_id) + 1}"] = {
+                            college_key = f"college_{course_ids.index(college_course_id) + 1}"
+                            
+                            cutoff_data_dict[college_key] = {
                                 "closing_rank": closing_rank,
                                 "course_id": college_course_id
                             }
+                            
                             if closing_rank != "NA":
                                 all_na = False
-                            college_names_set.add(f"college_{course_ids.index(college_course_id) + 1}")
-                        
-                     
+
+                        # Fill missing colleges
                         for i, course_id in enumerate(course_ids):
+                            
                             college_key = f"college_{i + 1}"
                             if college_key not in cutoff_data_dict:
+                                all_na=True
                                 cutoff_data_dict[college_key] = {
                                     "closing_rank": "NA",
                                     "course_id": course_id
                                 }
 
-                        cutoff_type = "tabular" if all_na else "vertical bar"
-
                         gender_data = {
                             "id": gender_id_val,
-                            "name": gender_name,
+                            "name": "Male" if gender_id_val == 1 else "Female",
                             "cutoff_data": {
-                                "type": cutoff_type,
+                                "type": "tabular" if all_na else "vertical bar",
                                 **cutoff_data_dict
                             }
                         }
                         caste_data["gender"].append(gender_data)
-                    
-                    
-                        for i, course_id in enumerate(course_ids):
-                            college_key = f"college_{i + 1}"
-                            found = False
-                            for gender_data in caste_data["gender"]:
-                                if college_key in gender_data["cutoff_data"]:
-                                    found = True
-                                    break
-                            if not found:
-                                all_na = True
-                                default_gender_data = {
-                                    "id": 1,  
-                                    "name": "Male", 
-                                    "cutoff_data": {
-                                        "type": "tabular",
-                                        **{
-                                            f"college_{j + 1}": {
-                                                "closing_rank": "NA",
-                                                "course_id": course_ids[j]
-                                            } for j in range(len(course_ids))
-                                        }
-                                    }
-                                }
-                                caste_data["gender"].append(default_gender_data)
-                            cutoff_type = "tabular" if all_na else "vertical bar"
-
 
                     category_data["caste"].append(caste_data)
                 counseling_data["categories"].append(category_data)
             exam_data["counseling"].append(counseling_data)
             formatted_result["exams_data"].append(exam_data)
-            college_names_dict = {
-                course_id: college_name 
-                for course_id, college_name in Course.objects.filter(id__in=course_ids)
-                .select_related('college')
-                .values_list('id', 'college__name')
-            }
 
-            formatted_result["college_names"] = [college_names_dict[course_id] for course_id in course_ids]
+        # Get college names
+        college_names_dict = {
+            course_id: college_name 
+            for course_id, college_name in Course.objects.filter(id__in=course_ids)
+            .select_related('college')
+            .values_list('id', 'college__name')
+        }
+        formatted_result["college_names"] = [college_names_dict[course_id] for course_id in course_ids]
 
-
-
-           
-        
         cache.set(cache_key, formatted_result, timeout=3600)
-
         return formatted_result
 
-# print(ExamCutoffGraphHelper.fetch_cutoff_data(course_ids=[55,5040,6221]))
+
+
+
+class UserPreferenceHelper:
+    """
+    Helper class to manage user preferences, fees, locations, courses, and exam data.
+    """
+
+    @staticmethod
+    def get_user_preference_data(preference_id):
+        """
+        Retrieve user preferences, fees, locations, courses, and exam data.
+
+        Args:
+            preference_id (int): The ID of the UserReportPreferenceMatrix entry.
+
+        Returns:
+            dict: A dictionary containing fees, location, and exams data.
+        """
+     
+        response = {
+            "fees": [],
+            "location": [],
+            "exams": []
+        }
+
+        try:
+           
+            user_pref = UserReportPreferenceMatrix.objects.filter(id=preference_id).values(
+                'preference_1', 'preference_2', 'preference_3', 'preference_4', 'preference_5',
+                'course_1', 'course_2', 'course_3'
+            ).first()
+
+            if not user_pref:
+                return response
+
+    
+            fees_values = [user_pref.get(f'preference_{i}') for i in range(1, 6)]
+
+
+            fee_ranges = {
+                1: "up to 1 lakh",
+                2: "up to 2 lakh",
+                3: "up to 3 lakh",
+                4: "up to 5 lakh",
+                5: "up to 10 lakh",
+                6: "10 lakh and above",
+                7: "no budget constraints"
+            }
+
+            if 'Fees' in fees_values:
+                response['fees'] = list(fee_ranges.values())
+
+        
+            city_names = Location.get_active_cities_in_country()
+           
+            if 'Location' in fees_values:
+                response['location'] = city_names
+
+          
+            course_ids = [user_pref.get(f'course_{i}') for i in range(1, 4) if user_pref.get(f'course_{i}')]
+
+            if course_ids:
+              
+                exam_ids = CollegeCourseExam.objects.filter(
+                    college_course__in=course_ids
+                ).values_list('exam_id', flat=True)
+
+            
+                exams = Exam.objects.filter(id__in=exam_ids).order_by(
+                    Coalesce('parent_exam', Value(-1)), 
+                    'state_of_exam_id',
+                    'exam_name'
+                )
+
+                response['exams'] = [exam.get_exam_display_name() for exam in exams]
+
+        except Exception as e:
+           
+            print(f"Error fetching user preference data: {e}")
+
+        return response
+
+
+

@@ -138,8 +138,16 @@ urlpatterns = [
     comparison_result_page_controllers.UserPreferenceOptionsView.as_view(),
     name='user-preference-options'),
 
-    path(f'{compare_prefix}resultPage/user-preference-save/',
+    path(f'{compare_prefix}resultPage/user-preference-save',
          comparison_result_page_controllers.UserPreferenceSaveView.as_view(),
          name='user-preference-save'),
+
+    path(f'{compare_prefix}resultPage/user-preference-form',
+         comparison_result_page_controllers.UserPreferenceOptionsForm2View.as_view(),
+         name='user-preference-form'),
+    
+    path(f'{compare_prefix}resultPage/user-preference-update/',
+         comparison_result_page_controllers.UserPreferenceUpdateView.as_view(),
+         name='user-preference-update'),
 
 ]

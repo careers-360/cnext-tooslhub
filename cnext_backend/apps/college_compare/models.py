@@ -67,24 +67,50 @@ class CollegeAccrediationApproval(models.Model):
         ]
 
 
+class State(models.Model):
+    name = models.CharField(max_length=255)
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'states'
+        indexes = [
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return self.name or "State Name Not Available"
+
+
 class Location(models.Model):
     loc_string = models.TextField(null=True, blank=True)
     country_id = models.IntegerField(default=1)
-    state_id = models.IntegerField(null=True, blank=True)
-    city_id = models.IntegerField(null=True, blank=True)
+    state_id = models.ForeignKey(
+        'State',
+        on_delete=models.SET_NULL,
+        related_name='locations',
+        db_column='state_id',
+        null=True,
+        blank=True
+    )
+    city = models.IntegerField(null=True, blank=True)
     status = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'location'
         indexes = [
-            models.Index(fields=['country_id', 'state_id', 'city_id', 'status']),
+            models.Index(fields=['country_id', 'state_id', 'status']),
         ]
-        app_label = 'college_compare'
-
 
     def __str__(self):
         return self.loc_string or "Location Not Available"
 
+    @staticmethod
+    def get_active_cities_in_country():
+        return list(
+            State.objects.filter(
+                locations__country_id=1,
+            ).order_by('name').values_list('name', flat=True).distinct()
+        )
 
 class Domain(models.Model):
     name = models.CharField(max_length=100, unique=True, db_index=True)
@@ -964,6 +990,11 @@ class Course(models.Model):
             models.Index(fields=['degree', 'branch', 'college', 'status']),
             models.Index(fields=['degree_domain']),
             models.Index(fields=['degree_domain','level']),
+            models.Index(fields=['college']), # For filtering courses by college
+            models.Index(fields=['degree']), # For filtering courses by degree
+            models.Index(fields=['status']), # For filtering courses by status
+            models.Index(fields=['college', 'degree', 'status']), # For total_courses_offered method
+  
             
         ]
 
@@ -1078,6 +1109,8 @@ class Exam(models.Model):
             models.Index(fields=['super_parent_id'], name='exam_super_parent_id_idx'),
             models.Index(fields=['state_of_exam_id'], name='exam_state_of_exam_id_idx'),
             models.Index(fields=['preferred_education_level_id'], name='preferred_education_level_idx'),
+            models.Index(fields=['parent_exam'], name='exam_parent_exam_idx'), # For filtering by parent exam
+   
         ]
         app_label = 'college_compare'
         managed = False
@@ -1134,6 +1167,7 @@ class CutoffData(models.Model):
     counselling_id = models.IntegerField(null=True, blank=True, db_index=True)  #
     branch_id = models.IntegerField(db_index=True)
     final_cutoff = models.FloatField(null=True, blank=True)  
+    gender_id=models.IntegerField(null=True,blank=True,db_index=True)
 
     class Meta:
         db_table = 'cp_cutoff_final'
@@ -1146,6 +1180,16 @@ class CutoffData(models.Model):
             models.Index(fields=['branch_id']),
             models.Index(fields=['caste_id']),
             models.Index(fields=['counselling_id']),  # Added index for performance in query joins
+             models.Index(fields=['college_course', 'year', 'exam_sub_exam', 'counselling_id', 'caste_id', 'category_of_admission']), # For fetch_cutoff_data
+            models.Index(fields=['college_course', 'year']), # For fetching data by college course and year
+            models.Index(fields=['college', 'year']), # For fetching data by college and year
+            models.Index(fields=['college_course', 'exam_sub_exam', 'counselling_id']), # For filtering cutoff data
+            models.Index(fields=['college_course', 'caste_id', 'category_of_admission']), # For filtering cutoff data
+            models.Index(fields=['college_course', 'exam_sub_exam', 'counselling_id', 'caste_id', 'category_of_admission']), # For filtering cutoff data
+     # For filtering cutoff data
+            models.Index(fields=['college_course','exam_sub_exam','counselling_id','caste_id']), # For filtering cutoff data
+    # For filtering cutoff data
+ 
         ]
 
     def __str__(self):
@@ -1199,6 +1243,9 @@ class CpProductCampaignItems(models.Model):
         indexes = [
             models.Index(fields=['exam_id']),
             models.Index(fields=['counselling_id']),
+            models.Index(fields=['product']), # For filtering by product
+            models.Index(fields=['product', 'exam_id', 'counselling_id']), # For filtering by product, exam and counseling
+ 
         ]
 
     def __str__(self):
@@ -1267,6 +1314,7 @@ class CollegeCourseComparisonFeedback(models.Model):
  
 
 class UserReportPreferenceMatrix(models.Model):
+    id = models.AutoField(primary_key=True)
     uid = models.ForeignKey('users.User', on_delete=models.CASCADE, db_index=True,db_column="uid")
     course_1 = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='user_preferences_1', db_index=True,db_column="course_1")
     course_2 = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='user_preferences_2', db_index=True, db_column="course_2")
@@ -1277,6 +1325,25 @@ class UserReportPreferenceMatrix(models.Model):
     preference_3 = models.CharField(max_length=255, null=True, blank=True)
     preference_4 = models.CharField(max_length=255, null=True, blank=True)
     preference_5 = models.CharField(max_length=255, null=True, blank=True)
+
+
+    fees_budget = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text="Budget for course fees (up to 1 lakh)"
+    )
+    location_states = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="List of preferred location states"
+    )
+    exams = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="List of relevant exams"
+    )
+
 
 
     class Meta:

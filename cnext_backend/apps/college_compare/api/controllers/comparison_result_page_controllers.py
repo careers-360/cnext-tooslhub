@@ -9,9 +9,11 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
 from django.core.exceptions import ObjectDoesNotExist
+
+from college_compare.models import UserReportPreferenceMatrix
 
 import logging
 import traceback
@@ -25,7 +27,7 @@ current_year = time.localtime().tm_year
 
 
 class UserPreferenceOptionsView(APIView):
-    permission_classes = []
+    permission_classes = [ApiKeyPermission]
 
     @extend_schema(
         summary="Get all available user preferences",
@@ -46,9 +48,37 @@ class UserPreferenceOptionsView(APIView):
         except Exception as e:
             logger.error(f"Error fetching user preferences: {str(e)}")
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UserPreferenceOptionsForm2View(APIView):
+    permission_classes = [ApiKeyPermission]
+
+    @extend_schema(
+        summary="Get all available user preferences from 2",
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved the preferences list for location ,fees budget &  exams'),
+            500: OpenApiResponse(description='Internal server error'),
+            
+        },
+    )
+    def get(self, request):
+        try:
+            # Get the user preferences using the helper
+
+            preference_id = request.query_params.get('preference_id') 
+            
+            result = UserPreferenceHelper.get_user_preference_data(preference_id=preference_id)
+
+            # Return the response
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error fetching user preferences: {str(e)}")
+            return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
 
 class UserPreferenceSaveView(APIView):
+    permission_classes = [ApiKeyPermission]
     @extend_schema(
         summary="Save User Preferences",
         description="Allows users to save their top 5 college comparison preferences.",
@@ -63,6 +93,59 @@ class UserPreferenceSaveView(APIView):
             user_preference = serializer.save()
             return Response({"message": "User preferences saved successfully.", "id": user_preference.id}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+class UserPreferenceUpdateView(APIView):
+    permission_classes = [ApiKeyPermission]
+
+    @extend_schema(
+        summary="Update User Preferences",
+        description="Allows users to update their preference matrix, including optional fields like fees_budget, location_states, and exams.",
+        request=UserPreferenceSaveSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="User preferences updated successfully.",
+                examples={"message": "User preferences updated successfully."},
+            ),
+            404: OpenApiResponse(
+                description="User preference matrix not found.",
+                examples={"error": "No UserReportPreferenceMatrix found with id 123"},
+            ),
+            400: OpenApiResponse(
+                description="Invalid input data.",
+                examples={"fees_budget": "Must be a string representation of budget"},
+            ),
+        },
+    )
+    def patch(self, request):
+        """
+        Update fields in UserReportPreferenceMatrix for the given ID.
+        """
+        try:
+            user_preference_id = request.query_params.get("user_preference_id")
+            updated_preference = UserPreferenceSaveSerializer.update_user_preference_matrix(
+                user_preference_id, request.data
+            )
+
+            return Response(
+                {"message": "User preferences updated successfully.", "id": updated_preference.id},
+                status=status.HTTP_200_OK,
+            )
+
+        except UserReportPreferenceMatrix.DoesNotExist:
+            return Response(
+                {"error": f"No UserReportPreferenceMatrix found with id {user_preference_id}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except serializers.ValidationError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
  
 class RankingAccreditationComparisonView(APIView):
     permission_classes = [ApiKeyPermission]
@@ -106,7 +189,7 @@ class RankingAccreditationComparisonView(APIView):
                 if course_ids else {}
             )
 
-            print(course_ids_dict)
+
 
             year = int(year) if year else None
 
@@ -1813,18 +1896,22 @@ class ExamCutGraphoffView(APIView):
             )
 
 
+
 class FeedbackSubmitView(APIView):
     @extend_schema(
-        summary="Submit Comparison Feedback",
-        description="Submit feedback for college and course comparison including the voted choices.",
+        summary="Submit or Update Comparison Feedback",
+        description="Submit new feedback or update existing feedback for college and course comparison including the voted choices.",
         responses={
-            201: OpenApiResponse(description='Feedback submitted successfully.'),
+            201: OpenApiResponse(description='Feedback submitted/updated successfully.'),
             400: OpenApiResponse(description='Invalid input data.'),
         },
     )
     def post(self, request):
         serializer = FeedbackSubmitSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return SuccessResponse("Feedback submitted successfully.", status=status.HTTP_201_CREATED)
+            feedback, message = serializer.create_or_update(serializer.validated_data)
+            return SuccessResponse({
+                "message": message,
+                "id": feedback.id
+            }, status=status.HTTP_201_CREATED)
         return CustomErrorResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
