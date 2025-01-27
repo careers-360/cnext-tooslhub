@@ -1,6 +1,6 @@
 import csv
 import requests
-# import chardet
+import chardet
 import io
 import threading
 import time

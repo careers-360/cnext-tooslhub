@@ -224,50 +224,69 @@ class RPHelper:
         return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name}
         
     def _related_products(self, product_id=None, alias=None):
-
-        if alias != None:
+        
+        if alias is not None:
             product_id = self._get_product_from_alias(alias=alias)
 
+        # Get the exam id from the CPProductCampaign model for the given product_id
         exam_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
-        
+
+        # Get the exam domain and preferred education level in a single query
         exam_domain_education_level = Exam.objects.filter(id=exam_dict['exam']).values('domain_id', 'preferred_education_level_id').first()
 
-        ## Limiting for 4 elements
-        exam_ids_and_logos_domain = Exam.objects.filter(domain_id=exam_domain_education_level['domain_id'], preferred_education_level_id=exam_domain_education_level['preferred_education_level_id'])[:4].values('id', 'ecb_logo', 'domain')
+        # Fetch exam ids, logos, and domains in bulk (limiting to 4 records)
+        exam_ids_and_logos_domain = Exam.objects.filter(
+            domain_id=exam_domain_education_level['domain_id'],
+            preferred_education_level_id=exam_domain_education_level['preferred_education_level_id']
+        )[:4].values('id', 'ecb_logo', 'domain')
 
-        # print(f"exam ids {exam_ids_and_logos_domain} type {type(exam_ids_and_logos_domain)} value {[{ 'id': exam['id'] , 'logo': exam['ecb_logo'], 'domain': exam['domain'] } for exam in exam_ids_and_logos_domain]}")
+        # Extract the ids of the exams for further querying
+        exam_ids = [exam['id'] for exam in exam_ids_and_logos_domain]
 
+        # Fetch all the related products in a single query for the matching exam ids
+        products = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year", "alias")
+
+        # Get the UrlAlias for all the sources in bulk (this is for optimization as well)
+        sources = [f"result-predictor/{product['id']}" for product in products]
+        aliases = UrlAlias.objects.filter(source__in=sources).values('source', 'alias')
+
+        # Prepare a dictionary of alias data for quick lookup
+        alias_dict = {alias['source']: alias['alias'] for alias in aliases}
+
+        # Get the domain names for the exam domains in bulk
+        domain_ids = [exam['domain'] for exam in exam_ids_and_logos_domain]
+        domains = Domain.objects.filter(id__in=domain_ids).values('id', 'old_domain_name')
+
+        # Prepare a dictionary of domain names for quick lookup
+        domain_dict = {domain['id']: domain['old_domain_name'] for domain in domains}
+
+        # Create the list of product data, with logo URLs and full URLs
         product_list = []
-        exam_list = [{ 'id': exam['id'] , 'logo': exam['ecb_logo'], 'domain': exam['domain'] } for exam in exam_ids_and_logos_domain]
+        for exam in exam_ids_and_logos_domain:
+            exam_id = exam['id']
+            exam_logo = exam['ecb_logo']
+            domain_id = exam['domain']
 
-        for exam in exam_list:
-            ## iteration for only 4 elements 
-            ## TODO: Collect list of ids and get in single query
-            product = CPProductCampaign.objects.filter(exam=exam['id']).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year", "alias").first()
+            # Get the product matching the current exam_id
+            product = next((product for product in products if product['exam'] == exam_id), None)
 
-            if product != None:
+            if product:
                 product_id = product['id']
                 source = f"result-predictor/{product_id}"
 
-            try:
-                alias = UrlAlias.objects.filter(source=source).first().alias
-            except:
-                print(f"no alias present for alias : {alias}")
+                # Get the alias from the alias_dict
+                alias = alias_dict.get(source, None)
 
-            domain_id = exam.get('domain', '')
+                # Get the domain name from the domain_dict
+                domain = domain_dict.get(domain_id, '')
 
-            if domain_id != None:
-                domain = Domain.objects.filter(id=exam['domain']).first().old_domain_name
-
-            url = f"https://{domain}/{alias}"
-
-            # print(f"product data {product}")
-            if product != None:
-                product['logo'] = self.exam_logo_base_url+exam['logo']
+                # Build the URL and append the logo URL
+                url = f"https://{domain}/{alias}" if alias else ''
+                product['logo'] = self.exam_logo_base_url + exam_logo
                 product['url'] = url
 
-            # print(f"product data {product}")
-            product_list.append(product)
+                # Add the product to the list
+                product_list.append(product)
 
         return product_list
     
