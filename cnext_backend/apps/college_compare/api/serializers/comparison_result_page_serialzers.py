@@ -103,27 +103,35 @@ class FeedbackSubmitSerializer(serializers.ModelSerializer):
         return data
 
     def create_or_update(self, validated_data):
-        feedback_id = validated_data.get('id')
+        uid = validated_data['uid']
+        voted_college = validated_data['voted_college']
+        voted_course = validated_data['voted_course']
+
+        # Check for existing feedback based on uid
+        instance = CollegeCourseComparisonFeedback.objects.filter(uid=uid).first()
+
+        # Prepare feedback data
         feedback_data = {
-            'uid': validated_data['uid'],
-            'voted_college_id': validated_data['voted_college'],
-            'voted_course_id': validated_data['voted_course'],
-            'updatedBy': str(validated_data['uid']),
+            'uid': uid,
+            'voted_college_id': voted_college,
+            'voted_course_id': voted_course,
+            'updatedBy': str(uid),
         }
 
+        # Add college and course IDs to feedback data
         for i, (college_id, course_id) in enumerate(zip(validated_data['college_ids'], validated_data['course_ids']), 1):
             feedback_data[f'college_{i}_id'] = college_id
             feedback_data[f'course_{i}_id'] = course_id
 
-        if feedback_id:
-            instance = CollegeCourseComparisonFeedback.objects.filter(id=feedback_id).first()
-            if instance:
-                for key, value in feedback_data.items():
-                    setattr(instance, key, value)
-                instance.save()
-                return instance, "Feedback updated successfully"
-            
-        instance = CollegeCourseComparisonFeedback.objects.create(**feedback_data, createdBy=str(validated_data['uid']))
+        if instance:
+            # Update the existing instance
+            for key, value in feedback_data.items():
+                setattr(instance, key, value)
+            instance.save()
+            return instance, "Feedback updated successfully"
+        
+        # Create a new instance if no existing one was found
+        instance = CollegeCourseComparisonFeedback.objects.create(**feedback_data, createdBy=str(uid))
         return instance, "Feedback submitted successfully"
     
 
