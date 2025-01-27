@@ -1083,6 +1083,7 @@ class Course(models.Model):
         cache.set(cache_key, total_fees, 3600 * 24)
 
         return total_fees
+    
 
 class Exam(models.Model):
     exam_name = models.CharField(max_length=255)
