@@ -30,6 +30,7 @@ class CacheHelper:
         return result
 
 
+
 class CollegeDataHelper:
     @staticmethod
     @lru_cache(maxsize=1000)

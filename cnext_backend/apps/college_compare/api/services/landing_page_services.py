@@ -40,7 +40,7 @@ import multiprocessing
 class CacheHelper:
     @staticmethod
     def get_cache_key(*args):
-        key = '_'.join(str(arg) for arg in args)
+        key = '__'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -244,10 +244,10 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v14_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v15_{user_context.get('domain_id')}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v14", user_context.get('domain_id'))
+                CacheHelper.burst_cache("top_colleges_courses_v15_", user_context.get('domain_id'))
 
             if cached := cache.get(cache_key):
                 return cached
@@ -274,10 +274,10 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v14_{domain_id}"
+            cache_key = f"top_colleges_v15_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_v14", domain_id)
+                CacheHelper.burst_cache("top_colleges_v15_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
@@ -328,10 +328,10 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v14_{domain_id}"
+            cache_key = f"top_courses_v15_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_courses_v14", domain_id)
+                CacheHelper.burst_cache("top_courses_v15_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
