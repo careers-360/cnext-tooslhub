@@ -92,7 +92,7 @@ class Location(models.Model):
         null=True,
         blank=True
     )
-    city = models.IntegerField(null=True, blank=True)
+    city_id= models.IntegerField(null=True, blank=True)
     status = models.BooleanField(default=True)
 
     class Meta:

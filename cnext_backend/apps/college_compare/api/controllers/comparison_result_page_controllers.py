@@ -828,9 +828,9 @@ class FeesGraphInsightsView(APIView):
 
 
 
-
 class ClassProfileComparisonView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Class Profile Comparison",
         description="Retrieve class profile comparison data for given colleges",
@@ -838,8 +838,7 @@ class ClassProfileComparisonView(APIView):
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
             OpenApiParameter(name='year', type=str, description='Year', required=True),
             OpenApiParameter(name='intake_year', type=str, description='Year of admission', required=False),
-            OpenApiParameter(name='level', type=str, description='Level of course', required=True),
-            OpenApiParameter(name='selected_domains', type=str, description='Comma-separated list of Domain IDs corresponding to the college IDs', required=True)
+            OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of Course IDs corresponding to the college IDs', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved summary comparison'),
@@ -851,47 +850,47 @@ class ClassProfileComparisonView(APIView):
         college_ids_str = request.query_params.get('college_ids')
         year_str = request.query_params.get('year') or str(current_year - 2)
         intake_year_str = request.query_params.get('intake_year') or str(current_year - 5)
-        level = request.query_params.get('level', 1)
-        domain_ids_str = request.query_params.get("selected_domains")
+        course_ids_str = request.query_params.get('course_ids')
 
         try:
-         
-            if not college_ids_str or not domain_ids_str:
-                raise ValidationError("Both college_ids and selected_domains are required")
+            # Validate college_ids and parse them into a list of integers
+            if not college_ids_str:
+                raise ValidationError("college_ids is required")
 
-    
             try:
                 college_ids = [int(cid) for cid in college_ids_str.split(",")]
-                domain_ids = [int(did) for did in domain_ids_str.split(",")]
                 year = int(year_str)
                 intake_year = int(intake_year_str)
-                level = int(level)
             except ValueError:
-                raise ValidationError("college_ids, selected_domains, year, and intake_year must be integers")
+                raise ValidationError("college_ids, year, and intake_year must be integers")
 
-            if len(college_ids) != len(domain_ids):
-                raise ValidationError("The number of college_ids must match the number of domain_ids")
+            # Validate and parse course_ids (if provided)
+            if course_ids_str:
+                try:
+                    course_ids = [int(cid) for cid in course_ids_str.split(",")]
+                    if len(college_ids) != len(course_ids):
+                        raise ValidationError("The number of college_ids must match the number of course_ids")
+                    selected_courses = {college_id: course_id for college_id, course_id in zip(college_ids, course_ids)}
+                except ValueError:
+                    raise ValidationError("course_ids must be integers")
+            else:
+                selected_courses = None  # No courses provided
 
             if intake_year > year:
                 raise ValidationError("intake_year must be less than or equal to year")
 
-   
-            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
-
-        
+            # Fetch class profiles
             result = ClassProfileHelper.fetch_class_profiles(
                 college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                level=level,
-                selected_domains=selected_domains  #
+                selected_courses=selected_courses  # Pass course mapping (can be None)
             )
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
-            logger.error(f"No data available for class Profile comparison: {str(e)}")
+            logger.error(f"No data available for class profile comparison: {str(e)}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
             return CustomErrorResponse({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
@@ -899,8 +898,11 @@ class ClassProfileComparisonView(APIView):
             logger.error(f"Error fetching class profile comparison: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+
 class ProfileInsightsView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Profile Insights",
         description="Retrieve comprehensive profile insights including student-faculty ratio, demographics, and gender diversity for given colleges.",
@@ -924,9 +926,9 @@ class ProfileInsightsView(APIView):
                 required=False,
             ),
             OpenApiParameter(
-                name="selected_domains",
+                name="course_ids",
                 type=str,
-                description="Comma-separated list of Domain IDs corresponding to the college IDs",
+                description="Comma-separated list of Course IDs corresponding to the college IDs",
                 required=True,
             ),
             OpenApiParameter(
@@ -966,40 +968,36 @@ class ProfileInsightsView(APIView):
         year_str = request.query_params.get("year") or str(current_year - 1)
         intake_year_str = request.query_params.get("intake_year") or str(current_year - 5)
         level = request.query_params.get("level", 1)
-        domain_ids_str = request.query_params.get("selected_domains")
+        course_ids_str = request.query_params.get("course_ids")
 
         try:
-            
-            if not college_ids_str or not domain_ids_str:
-                
-                raise ValidationError("college_ids and selected_domains are required")
+            if not college_ids_str or not course_ids_str:
+                raise ValidationError("college_ids and course_ids are required")
 
-        
             try:
                 college_ids = [int(cid) for cid in college_ids_str.split(",")]
-                domain_ids = [int(did) for did in domain_ids_str.split(",")]
+                course_ids = [int(did) for did in course_ids_str.split(",")]
                 year = int(year_str)
                 intake_year = int(intake_year_str)
                 level = int(level)
             except ValueError:
-                raise ValidationError("college_ids, selected_domains, year, and intake_year must be integers")
+                raise ValidationError("college_ids, course_ids, year, and intake_year must be integers")
 
-            if len(college_ids) != len(domain_ids):
-                raise ValidationError("The number of college_ids must match the number of domain_ids")
+            if len(college_ids) != len(course_ids):
+                raise ValidationError("The number of college_ids must match the number of course_ids")
 
             if intake_year > year:
                 raise ValidationError("intake_year must be less than or equal to year")
 
-            # Create a mapping of college IDs to domain IDs
-            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+            # Create a mapping of college IDs to course IDs
+            selected_courses = {college_id: course_id for college_id, course_id in zip(college_ids, course_ids)}
 
             # Fetch and prepare the profile insights
-            print(selected_domains)
             result = ProfileInsightsHelper.prepare_profile_insights(
                 college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                selected_domains=selected_domains,
+                course_ids=selected_courses,  # Pass course_ids instead of selected_domains
                 level=level,
             )
 
@@ -1011,12 +1009,11 @@ class ProfileInsightsView(APIView):
         except Exception as e:
             logger.error(f"Error fetching profile insights: {traceback.format_exc()}")
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-
 
 
 class classProfileAIInsightsView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Profile Insights",
         description="Retrieve comprehensive profile insights including student-faculty ratio, demographics, and gender diversity for given colleges.",
@@ -1040,9 +1037,9 @@ class classProfileAIInsightsView(APIView):
                 required=False,
             ),
             OpenApiParameter(
-                name="selected_domains",
+                name="course_ids",
                 type=str,
-                description="Comma-separated list of Domain IDs corresponding to the college IDs",
+                description="Comma-separated list of Course IDs corresponding to the college IDs",
                 required=True,
             ),
             OpenApiParameter(
@@ -1082,46 +1079,39 @@ class classProfileAIInsightsView(APIView):
         year_str = request.query_params.get("year") or str(current_year - 1)
         intake_year_str = request.query_params.get("intake_year") or str(current_year - 5)
         level = request.query_params.get("level", 1)
-        domain_ids_str = request.query_params.get("selected_domains")
+        course_ids_str = request.query_params.get("course_ids")
 
         try:
-            
-            if not college_ids_str or not domain_ids_str:
-                raise ValidationError("college_ids and selected_domains are required")
+            if not college_ids_str or not course_ids_str:
+                raise ValidationError("college_ids and course_ids are required")
 
-        
             try:
                 college_ids = [int(cid) for cid in college_ids_str.split(",")]
-                domain_ids = [int(did) for did in domain_ids_str.split(",")]
+                course_ids = [int(did) for did in course_ids_str.split(",")]
                 year = int(year_str)
                 intake_year = int(intake_year_str)
                 level = int(level)
             except ValueError:
-                raise ValidationError("college_ids, selected_domains, year, and intake_year must be integers")
+                raise ValidationError("college_ids, course_ids, year, and intake_year must be integers")
 
-            if len(college_ids) != len(domain_ids):
-                raise ValidationError("The number of college_ids must match the number of domain_ids")
+            if len(college_ids) != len(course_ids):
+                raise ValidationError("The number of college_ids must match the number of course_ids")
 
             # if intake_year > year:
             #     raise ValidationError("intake_year must be less than or equal to year")
 
-    
-            selected_domains = {college_id: domain_id for college_id, domain_id in zip(college_ids, domain_ids)}
+            selected_courses = {college_id: course_id for college_id, course_id in zip(college_ids, course_ids)}
 
-        
-            
             result = ProfileInsightsHelper.prepare_profile_insights(
                 college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                selected_domains=selected_domains,
+                course_ids=selected_courses,  # Pass course_ids instead of selected_domains
                 level=level,
             )
 
-            
-
-            insights=ClassProfileAiInsightHelper.get_profile_insights(data=result)
-            result['insights']=insights
+            insights = ClassProfileAiInsightHelper.get_profile_insights(data=result)
+            result['insights'] = insights
 
             return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
 
@@ -1131,6 +1121,7 @@ class classProfileAIInsightsView(APIView):
         except Exception as e:
             logger.error(f"Error fetching profile insights: {traceback.format_exc()}")
             return CustomErrorResponse({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class CollegeFacilitiesComparisonView(APIView):
