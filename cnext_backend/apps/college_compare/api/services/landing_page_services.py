@@ -40,7 +40,7 @@ import multiprocessing
 class CacheHelper:
     @staticmethod
     def get_cache_key(*args):
-        key = '_'.join(str(arg) for arg in args)
+        key = '__'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -247,7 +247,7 @@ class TopCollegesCoursesService:
             cache_key = f"top_colleges_courses_v15_{user_context.get('domain_id')}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v15", user_context.get('domain_id'))
+                CacheHelper.burst_cache("top_colleges_courses_v15_", user_context.get('domain_id'))
 
             if cached := cache.get(cache_key):
                 return cached
@@ -277,7 +277,7 @@ class TopCollegesCoursesService:
             cache_key = f"top_colleges_v15_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_v15", domain_id)
+                CacheHelper.burst_cache("top_colleges_v15_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
@@ -331,7 +331,7 @@ class TopCollegesCoursesService:
             cache_key = f"top_courses_v15_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_courses_v15", domain_id)
+                CacheHelper.burst_cache("top_courses_v15_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached

@@ -78,6 +78,7 @@ class TopCollegesCoursesView(APIView):
         """
         uid = request.query_params.get('uid')
         cache_burst = request.query_params.get('cache_burst') or 0
+        print(cache_burst,"------")
 
         try:
 
