@@ -581,7 +581,7 @@ class RPCmsHelper:
                 session_data["count"] = len(rp_mean_sd_year_data) 
                 session_data["custom_mean_sd_data"] = rp_mean_sd_year_data 
         
-        if not session_data["custom_mean_sd_data"]:
+        elif not session_data["custom_mean_sd_data"]:
             rp_max_year = rp_mean_sd_data.aggregate(Max('year'))['year__max']
             rp_mean_sd_data = list(rp_mean_sd_data.filter(year=rp_max_year).values("id", "product_id", "year", "input_flow_type",
                                                                                     "sheet_mean", "sheet_sd", "admin_mean", "admin_sd", "input_flow_type__input_process_type"))
