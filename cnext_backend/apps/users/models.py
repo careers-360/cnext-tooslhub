@@ -148,6 +148,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 	auto_country = models.CharField(max_length=255, blank=True, null=True)
 	auto_ip = models.CharField(max_length=255, blank=True, null=True)
 	action_location = models.CharField(max_length=255, blank=True, null=True)
+	source_url = models.CharField(max_length=255, blank=True, null=True)
 	admission_preference_status = models.IntegerField(default=0)
 	coaching_interested = models.BooleanField(default=False)
 	

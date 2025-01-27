@@ -16,4 +16,6 @@ urlpatterns = [
     path("api/<int:version>/cms/rp/merit-list-validation-check", cms_controller.MeritListValidationCheck.as_view(),  name='merit_list_validation'),
     path("api/<int:version>/cms/rp/upload-merit-list", cms_controller.UploadMeritList.as_view(),  name='upload_merit_list'),
     path("api/<int:version>/cms/rp/merit-list", cms_controller.MeritListView.as_view(),  name='merit_list_view'),
+    path("api/<int:version>/cms/rp/rp-usage-list", cms_controller.RpUsageReportListingAPI.as_view(),  name='rp_usage_report_list'),
+    path("api/<int:version>/cms/rp/rp-usage-analytics", cms_controller.RpUsageAnalyticsAPI.as_view(),  name='rp_usage_report_list'),
 ]
