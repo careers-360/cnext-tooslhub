@@ -1413,6 +1413,7 @@ class RPCmsHelper:
         for item in data:
             if not isinstance(item, dict):
                 continue
+            is_primary = item.get('primary')
             if flow_type == 3:
                 category = item.get('category')
                 disability = item.get('disability')
@@ -1421,18 +1422,30 @@ class RPCmsHelper:
                 classification = item.get('classification')
                 obj = {"classification" : classification}
 
-                if not disability or disability in ("N.A.", "N.A", "NA", "NA."):
+                if not max_rank or not min_rank:
+                    continue
+
+                if is_primary:
+                    display_name = f"Overall Rank : {min_rank} - {max_rank}"
+                elif not disability or disability in ("N.A.", "N.A", "NA", "NA."):
                     display_name = f"{category} : {min_rank} - {max_rank}"
                 else:
                     display_name = f"{category} {disability} : {min_rank} - {max_rank}"
             else:
-                result_type = item.get('result_details',{}).get('result_type')
-                result_flow_type = item.get('result_details',{}).get('result_flow_type')
-                result_process_type = item.get('result_details',{}).get('result_process_type')
-                result_value = item.get('closest_result',{}).get('result_value')
+                result_type = item.get('result_type')
+                result_flow_type = item.get('result_flow_type')
+                result_process_type = item.get('result_process_type')
+                result_value = item.get('result_value')
+
+                if not result_value:
+                    continue
+
                 obj = {"result_process_type" : result_process_type}
 
-                display_name = f"{result_type} {result_flow_type} : {result_value}"
+                if is_primary:
+                    display_name = f"Overall Result : {result_value}"
+                else:
+                    display_name = f"{result_type} {result_flow_type} : {result_value}"
 
             obj["display_name"] = display_name
             formated_data.append(obj)
