@@ -5,7 +5,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rank_predictor.api.helpers import InputPageStaticHelper
 # from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
-from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
+from rank_predictor.helper.landing_helper import ProductHelper, RPHelper, Prefill
 
 class HealthCheck(APIView):
 
@@ -546,3 +546,24 @@ class ProductDetailsAPI(APIView):
             {"message": f"No details found for product_id {product_id}"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+class PrefillProductsAPI(APIView):
+    """
+    API for fetching top colleges related to an exam.
+    Endpoint: api/<int:version>/rank-predictor/pre-fill
+    Params: product_id
+    """
+    permission_classes = [ApiKeyPermission]
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+        if not product_id or not product_id.isdigit():
+            return CustomErrorResponse(
+                {"message": "product_id is required and should be an integer value"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        product_id = int(product_id)
+        # Fetch colleges from the database
+        prefill_helper = Prefill()
+        prefill_response = prefill_helper.get_prefill_fields(product_id=product_id)
+
+        return SuccessResponse(prefill_response, status=status.HTTP_200_OK)

@@ -1,11 +1,12 @@
 from venv import logger
 from tools.models import CPProductCampaign, ToolsFAQ
-from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster
+from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster, RpSmartRegistration
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 from django.utils import timezone
+from datetime import datetime
 
 
 class CombinationFactory:
@@ -705,4 +706,55 @@ class ProductHelper:
         except Exception as e:
             logger.error(f"Error fetching product details: {e}")
             return None
+
+class Prefill:
+    
+    def get_prefill_fields(self, product_id=None):
+        """
+        Fetch product details for a specific product ID from CPProductCampaign table.
+
+        :param product_id: ID of the product
+        :return: A dictionary containing product details
+        """
+        now = timezone.now()  # Use Django's timezone-aware datetime
+        print(f"current date time now {now}")
+
+        # Fetch the last session for the given product_id
+        product_session = ProductSession.objects.filter(product_id=product_id).values('session_peak_start_date', 'session_peak_end_date').last()
+
+        session_peak_start_date = product_session.get('session_peak_start_date', None)
+        session_peak_end_date = product_session.get('session_peak_end_date', None)
+        session = 'non_peak_season'
+
+        # print(f"start date initial {session_peak_start_date} end date {session_peak_end_date}")
+
+        # Ensure that both dates are not None and compare them
+        if session_peak_start_date and session_peak_end_date:
+
+            print(f"start date {session_peak_start_date} end date {session_peak_end_date}")
+
+            if session_peak_start_date <= now <= session_peak_end_date:
+                # Fetch smart registration for peak season
+                smart_registration = RpSmartRegistration.objects.filter(product_id=product_id, status=1).values("field", "peak_season").iterator()
+
+                # print(f"fields list {field_list}")
+                session = 'peak_season'
+            
+            else:
+                # Fetch smart registration for non-peak season
+                smart_registration = RpSmartRegistration.objects.filter(product_id=product_id, status=1).values("field", "non_peak_season").iterator()
+
+                session = 'non_peak_season'
+
+            smart_registration_list = list(smart_registration)
+            field_list = [entry['field'] for entry in smart_registration_list if entry[session] == 1]
+
+        else:
+            # Handle the case where product session dates are missing
+            print("Session peak start or end date is missing.")
+            field_list = [{}]
+
+        print(f"smart registration session {field_list}")
+
+        return {'fields': field_list, 'session': session}
 
