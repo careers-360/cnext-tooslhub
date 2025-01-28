@@ -10,6 +10,8 @@ from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DI
 import os
 from django.utils import timezone
 from datetime import datetime
+from django.db.models import F
+
 
 
 class CombinationFactory:
@@ -746,6 +748,7 @@ class ProductHelper:
             logger.error(f"Error fetching product details: {e}")
             return None
 
+
 class Prefill:
     
     def get_prefill_fields(self, product_id=None):
@@ -796,4 +799,31 @@ class Prefill:
         print(f"smart registration session {field_list}")
 
         return {'fields': field_list, 'session': session}
+
+
+class FeedbackHelper:
+    def get_feedbacks(self, product_id=None):
+        """
+        Fetch feedbacks for a specific product ID.
+
+        :param product_id: ID of the product
+        :return: A list of feedback dictionaries
+        """
+        if not product_id:
+            return []
+
+        try:
+            feedbacks = CPFeedback.objects.filter(product_id=str(product_id)).values(
+                "id",
+                "msg",
+                "user_name",
+                "user_image",
+                "updated",
+                "custom_feedback"
+            ).order_by("-updated")
+
+            return list(feedbacks)  # Convert QuerySet to a list of dicts
+        except Exception as e:
+            logger.error(f"Error fetching feedbacks: {e}")
+            return []
 
