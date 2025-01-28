@@ -29,5 +29,6 @@ urlpatterns = [
     ),
     path("api/<int:version>/rank-predictor/feedback", rp_controller.FeedbackSubmitAPI.as_view(), name='submit_feedback'),
     
+    path("api/<int:version>/feedback", rp_controller.FeedbackAPI.as_view(), name="feedback"),
     
 ]

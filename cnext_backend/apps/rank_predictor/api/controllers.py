@@ -5,7 +5,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rank_predictor.api.helpers import InputPageStaticHelper
 # from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
-from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
+from rank_predictor.helper.landing_helper import FeedbackHelper, ProductHelper, RPHelper
 
 class HealthCheck(APIView):
 
@@ -649,4 +649,54 @@ class FeedbackSubmitAPI(APIView):
         return SuccessResponse(
             {"message": "Feedback submitted successfully.", "feedback_data": response_data},
             status=status.HTTP_201_CREATED
+        )
+        
+
+class FeedbackAPI(APIView):
+    """
+    API for fetching feedbacks from cp_feedback table.
+    Endpoint: api/<int:version>/feedback
+    Params: product_id, page
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+        product_id = request.GET.get('product_id')
+        page = int(request.GET.get('page', 1))
+
+        if not product_id:
+            return Response(
+                {
+                    "result": False,
+                    "message": "product_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Fetch feedback data using helper function
+        feedback_helper = FeedbackHelper()
+        feedbacks = feedback_helper.get_feedbacks(product_id=product_id)
+
+        if feedbacks:
+            # Paginate feedbacks
+            page_size = 10
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_feedbacks = feedbacks[start:end]
+
+            return Response(
+                {
+                    "result": True,
+                    "feedbacks": paginated_feedbacks
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {
+                "result": True,
+                "feedbacks": []
+            },
+            status=status.HTTP_200_OK,
         )
