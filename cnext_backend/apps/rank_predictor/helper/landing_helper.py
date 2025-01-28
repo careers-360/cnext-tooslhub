@@ -1,6 +1,9 @@
 from venv import logger
-from tools.models import CPProductCampaign, ToolsFAQ
+
 from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster, RpSmartRegistration
+
+from tools.models import CPFeedback, CPProductCampaign, ToolsFAQ
+
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
@@ -669,6 +672,41 @@ class RPHelper:
         Replace this with actual logic to fetch the predictor's display name.
         """
         return "Predictor Name"
+    
+    
+    def _save_feedback(self, feedback_data):
+        """
+        Save feedback data to the cp_feedback table.
+
+        :param feedback_data: Dictionary containing feedback data
+        """
+        feedback_record = {
+            "is_moderated": feedback_data["is_moderated"],
+            "feedback_type": feedback_data["feedback_type"],
+            "exam_id": feedback_data["exam_id"],
+            "counselling_id": feedback_data["counselling_id"],
+            "product_id": feedback_data["product_id"],
+            "response_type": feedback_data["response_type"],
+            "complement": feedback_data.get("complement"),
+            "msg": feedback_data["msg"],
+            "device": feedback_data.get("device"),
+            "created_by": feedback_data["created_by"],
+            "updated_by": feedback_data.get("updated_by"),
+            "session_id": feedback_data["session_id"],
+            "gd_chance_count": feedback_data["gd_chance_count"],
+            "tf_chance_count": feedback_data["tf_chance_count"],
+            "maybe_chance_count": feedback_data["maybe_chance_count"],
+            "counselling_change": feedback_data["counselling_change"],
+            "user_type": feedback_data["user_type"],
+            "user_name": feedback_data.get("user_name"),
+            "user_image": feedback_data.get("user_image"),
+            "custom_feedback": feedback_data.get("custom_feedback"),
+        }
+        # CPFeedback.objects.create(**feedback_record)
+        
+        feedback_instance = CPFeedback.objects.create(**feedback_record)
+        return feedback_instance  # Ensure this is returned to prevent 'NoneType' error.
+
 
 
     
