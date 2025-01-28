@@ -206,23 +206,24 @@ class RPHelper:
 
         product_id = int(split_string[1])
 
-        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration").first()
 
         exam_id = product_dict.get("exam", "")
+        smart_registration = product_dict.get("smart_registration", False)
 
         exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
 
         if exam_dict != None:
             domain_id = exam_dict.get('domain_id', "")
             level = exam_dict.get('preferred_education_level_id', "")
-        print(f"exam dictionary {exam_dict}")
+        # print(f"exam dictionary {exam_dict}")
 
         domain_dict = Domain.objects.filter(id=domain_id).values('name').first()
 
         if domain_dict != None:
             domain_name = domain_dict.get('name', "")
 
-        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name}
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration}
         
     def _related_products(self, product_id=None, alias=None):
         
