@@ -244,10 +244,10 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v20_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v22_{user_context.get('domain_id')}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v20_", user_context.get('domain_id'))
+                CacheHelper.burst_cache("top_colleges_courses_v22", user_context.get('domain_id'))
 
             if cached := cache.get(cache_key):
                 return cached
@@ -274,10 +274,10 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v20_{domain_id}"
+            cache_key = f"top_colleges_v22_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_v19_", domain_id)
+                CacheHelper.burst_cache("top_colleges_v22_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
@@ -328,10 +328,10 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v19_{domain_id}"
+            cache_key = f"top_courses_v22_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_courses_v19_", domain_id)
+                CacheHelper.burst_cache("top_courses_v22_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
