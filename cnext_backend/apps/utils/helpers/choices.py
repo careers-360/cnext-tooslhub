@@ -16,6 +16,8 @@ FIELD_TYPE = {
     1: "Studying In",
     2: "Course Interest for College",
     3: "College Education Stream",
+    4: "Passing Year",
+    5: "College Admission Target Year"
 }
 QUESTION_STATUS = {
     "Published": "Published",
