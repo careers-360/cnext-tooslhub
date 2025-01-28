@@ -409,3 +409,30 @@ class MeritListView(APIView):
             return SuccessResponse(data, status=status.HTTP_200_OK)
         else:
             return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RpUsageReportListingAPI(APIView):
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, *args, **kwargs):
+        helper = RPCmsHelper()
+        resp, data = helper.rp_usage_report(request)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RpUsageAnalyticsAPI(APIView):
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, *args, **kwargs):
+        helper = RPCmsHelper()
+        resp, data = helper.rp_analytics_report(request)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_200_OK)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
+    

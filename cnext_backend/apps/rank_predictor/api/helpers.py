@@ -3,16 +3,19 @@ import requests
 import chardet
 import io
 import threading
+import time
 from collections import defaultdict
 from math import sqrt
 from django.utils.timezone import now
 from django.conf import settings
-from django.db.models import Max,F, Q
-from datetime import datetime, timedelta
+from django.db.models import Max,F, Q, Count
+from datetime import datetime, timedelta, date
 from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
-from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpMeritList, RpMeritSheet, RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared
+from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpMeritList, RpMeritSheet,\
+      RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, CnextRpUserTracking
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam
 from .static_mappings import RP_DEFAULT_FEEDBACK
+from users.models import User
 from rest_framework.pagination import PageNumberPagination
 
 
@@ -1269,6 +1272,303 @@ class RPCmsHelper:
         if queryset.exists():
             queryset.update(to_graph=to_graph)
         return True, "Data Created Successfully"
+
+    def get_report_filters(self, request, analytics=None):
+        email = request.GET.get('email')
+        usage_from = request.GET.get('usage_from')
+        usage_to = request.GET.get('usage_to')
+        product_id = request.GET.get('product_id')
+        uid = request.GET.get('uid')
+        uuid = request.GET.get('uuid')
+        report_id = request.GET.get('report_id')
+        device_type = request.GET.get('device_type')
+        query_filters = {}
+
+        from_status, usage_from = self.get_date_object(usage_date=usage_from)
+        to_status, usage_to = self.get_date_object(usage_date=usage_to)
+
+        if not from_status or not to_status:
+            raise ValueError("Invalid date range")
+
+        if email:
+            query_filters['email'] = email
+
+        if uid:
+            query_filters['uid'] = uid
+
+        if uuid:
+            query_filters['uuid'] = uuid
+
+        if report_id:
+            query_filters['id'] = report_id
+
+        if device_type and not analytics:
+            query_filters['device_type'] = device_type
+
+        if product_id:
+            query_filters['product_id'] = product_id
+    
+        if usage_from:
+            query_filters['form_submission_at__gte'] = usage_from
+    
+        if usage_to:
+            query_filters['form_submission_at__lte'] = usage_to
+        
+        return query_filters
+
+    
+    def rp_usage_report(self, request, *args, **kwargs):
+        usage_from = request.GET.get('usage_from')
+        usage_to = request.GET.get('usage_to')
+        product_id = request.GET.get('product_id')
+        usage_data = []
+
+        if not usage_from or not usage_to or not product_id:
+            return False, "usage_from, usage_to and product_id are required"
+        
+        query_filters = self.get_report_filters(request)
+
+        cast_category_dict = dict(CasteCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+        disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
+
+        queryset = CnextRpUserTracking.objects.filter(**query_filters).values()
+
+        if len(queryset) == 0:
+            return True, usage_data
+
+        for item in queryset:
+
+            ## Input Flow Type
+            flow_type = item['flow_type'] if item['flow_type'] else None
+            if flow_type and str(flow_type).isdigit():
+                flow_type = int(flow_type)
+                if flow_type != 3:
+                    flow_type = 1
+
+                flow_type_data = {
+                    "id": flow_type,
+                    "name": FORM_INPUT_PROCESS_TYPE.get(flow_type)
+                }
+            else: continue
+
+            ## category
+            category_id = item['category'] if item['category'] else None
+            if category_id and str(category_id).isdigit():
+                category_id = int(category_id)
+                category_data = {
+                    "id" : category_id,
+                    "name" : cast_category_dict.get(category_id)
+                }
+            else: category_data = None 
+
+            ## disability
+            disability_id = item['disability'] if item['disability'] else None
+            if disability_id and str(disability_id).isdigit():
+                disability_id = int(disability_id)
+                disability_data = {
+                    "id" : disability_id,
+                    "name" : disability_category_dict.get(disability_id)
+                }
+            else: disability_data = None 
+
+            ## Input fields
+            input_fields = item['input_fields'] if item['input_fields'] else []
+
+            ## Output fields
+            output_fields = self.formate_output_data(flow_type, item['result_predictions']) if item['result_predictions'] else []
+
+            ## exam session
+            if item['exam_session']:
+                exam_session = item['exam_session']
+            else:
+                exam_session = None
+
+            ## Form submission
+            form_submission_time = item['form_submission_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+            ## dataset
+            dataset = {
+                'uid': item['uid'],
+                'uuid': item['uuid'],
+                'login_status': item['login_status'],
+                'form_submission_time': form_submission_time,
+                'usage_duration': None,
+                'slot': None,
+                'category': category_data,
+                'disability': disability_data,
+                'exam_session': exam_session,
+                'product_id': item['product_id'],
+                'device_type': item['device_type'],
+                'flow_type': flow_type_data,
+                'input_fields': input_fields,
+                'output_fields': output_fields,
+            }
+            usage_data.append(dataset)
+
+        return True, usage_data
+
+    def formate_output_data(self, flow_type, data):
+        formated_data = []
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            is_primary = item.get('primary')
+            if flow_type == 3:
+                category = item.get('category')
+                disability = item.get('disability')
+                max_rank = item.get('max_rank')
+                min_rank = item.get('min_rank')
+                classification = item.get('classification')
+                obj = {"classification" : classification}
+
+                if not max_rank or not min_rank:
+                    continue
+
+                if is_primary:
+                    display_name = f"Overall Rank : {min_rank} - {max_rank}"
+                elif not disability or disability in ("N.A.", "N.A", "NA", "NA."):
+                    display_name = f"{category} : {min_rank} - {max_rank}"
+                else:
+                    display_name = f"{category} {disability} : {min_rank} - {max_rank}"
+            else:
+                result_type = item.get('result_type')
+                result_flow_type = item.get('result_flow_type')
+                result_process_type = item.get('result_process_type')
+                result_value = item.get('result_value')
+
+                if not result_value:
+                    continue
+
+                obj = {"result_process_type" : result_process_type}
+
+                if is_primary:
+                    display_name = f"Overall Result : {result_value}"
+                else:
+                    display_name = f"{result_type} {result_flow_type} : {result_value}"
+
+            obj["display_name"] = display_name
+            formated_data.append(obj)
+
+        return formated_data
+
+    def get_date_object(self, *args, **kwargs):
+
+        usage_date = kwargs.get("usage_date")
+        try:
+            if isinstance(usage_date, dict):
+                usage_year = usage_date.get("year")
+                usage_month = usage_date.get("month")
+                usage_day = usage_date.get("day")
+                if usage_year and usage_month and usage_day:
+                    usage_date = date(usage_year, usage_month, usage_day)
+                    return True, usage_date
+
+            elif isinstance(usage_date, str):
+                date_list = list(map(int, str(usage_date).split("-")))
+                if date_list and len(date_list) >= 3:
+                    usage_year = date_list[0]
+                    usage_month = date_list[1]
+                    usage_day = date_list[2]
+                    if usage_year and usage_month and usage_day:
+                        usage_date = date(usage_year, usage_month, usage_day)
+                        return True, usage_date
+        except Exception as error:
+            print("def get_date_object error -> ",error)
+
+        return False, None
+
+    def rp_analytics_report(self, request, *args, **kwargs):
+        usage_from = request.GET.get('usage_from')
+        usage_to = request.GET.get('usage_to')
+        product_id = request.GET.get('product_id')
+        device_type = request.GET.get('device_type')
+        product_alias = request.GET.get('product_alias', 'jee-main-rank-predictor')
+        usage_analytics = []
+        query_filters = {}
+
+        if not usage_from or not usage_to or not product_id:
+            return False, "usage_from, usage_to and product_id are required"
+
+        usage_from_status, usage_from = self.get_date_object(usage_date=usage_from)
+        usage_to_status, usage_to = self.get_date_object(usage_date=usage_to)
+
+        if not usage_from_status or not usage_to_status:
+            return False, "Invalid usage_from or usage_to date format"
+
+        query_filters = self.get_report_filters(request, analytics=True)
+
+        queryset = CnextRpUserTracking.objects.filter(**query_filters).values()
+
+        # master total count
+        master_total_count = queryset.count()
+
+        # total count
+        if device_type:
+            queryset = queryset.filter(device_type = device_type)
+            total_count = queryset.count()
+        else:
+            total_count = master_total_count
+
+        if total_count <= 0:
+            return True, usage_analytics
+
+        # unique users
+        total_unique_users = queryset.exclude(uid = 0).values("uid").distinct().count()
+
+        # anonymous users
+        total_anonomous_users = queryset.filter(uid = 0).count()
+
+        # Total registered users
+        from_timestamp = int(time.mktime(usage_from.timetuple()))
+        to_timestamp = int(time.mktime(usage_to.timetuple()))
+
+        total_registered_users_map = User.objects.filter(added_on__gte=from_timestamp, added_on__lte=to_timestamp, source_url__contains=product_alias).values("mobile_verify").annotate(count=Count("id"))
+        
+        ## Mobile Verified users
+        total_verified_users = [item.get("count") for item in total_registered_users_map if item.get("mobile_verify") == 1]
+        if total_verified_users:
+            total_verified_users = total_verified_users[0]
+        else:
+            total_verified_users = 0
+
+        ## Mobile Unverified users
+        total_unverified_users = [item.get("count") for item in total_registered_users_map if item.get("mobile_verify") == 0]
+        if total_unverified_users:
+            total_unverified_users = total_unverified_users[0]
+        else:
+            total_unverified_users = 0
+
+        ## Total Users
+        total_registered_users = total_verified_users + total_unverified_users
+
+        ## Average Count
+        average_count = round(total_count / total_unique_users)
+
+        ## Total existing users
+        existing_users = total_unique_users - total_registered_users
+
+        ## Existing users percentage
+        existing_users_percentage = round((existing_users/total_unique_users) * 100, 2)
+
+        usage_analytics = {
+            "device_specific" : True if device_type else False,
+            "device_type": device_type,
+            "total_count" : total_count,
+            "total_unique_users" : total_unique_users,
+            "total_anonomous_users" : total_anonomous_users,
+            "total_registered_users" : total_registered_users,
+            "total_verified_users" : total_verified_users,
+            "total_unverified_users" : total_unverified_users,
+            "average_count" : average_count,
+            "existing_users" : existing_users,
+            "existing_users_percentage" : existing_users_percentage,
+        }
+
+        if device_type:
+            usage_analytics["device_type_percentage"] = round((total_count/master_total_count) * 100, 2)
+
+        return True, usage_analytics
 
         
 class CommonDropDownHelper:

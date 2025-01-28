@@ -282,3 +282,36 @@ class CnextRpCreateInputForm(models.Model):
         return f"Input Form {self.id}"
 
 
+class CnextRpUserTracking(models.Model):
+    id = models.AutoField(primary_key=True)
+    device_type = models.CharField(max_length=255, null=True, blank=True)
+    product_id = models.IntegerField(null=True, blank=True)
+    input_flow_type = models.IntegerField(null=True, blank=True)
+    flow_type = models.IntegerField(null=True, blank=True)
+    form_submission_at = models.DateTimeField(auto_now_add=True)
+    login_status = models.CharField(max_length=255, null=True, blank=True)
+    uid = models.IntegerField()
+    uuid = models.CharField(max_length=255)
+    category = models.CharField(max_length=255)
+    disability = models.CharField(max_length=255)
+    application = models.CharField(max_length=255)
+    dob = models.DateTimeField()
+    exam_session = models.IntegerField(null=True, blank=True)
+    tool_session_id = models.IntegerField(null=True, blank=True)
+    form_updated_at = models.DateTimeField(auto_now=True)
+    input_fields = models.JSONField(null=True, blank=True)
+    result_predictions = models.JSONField(null=True, blank=True)
+    additional_info = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'cnext_rp_user_tracking'
+        verbose_name = 'Cnext RP User Tracking'
+        verbose_name_plural = 'Cnext RP User Trackings'
+        ordering = ['-form_submission_at']
+        indexes = [
+            models.Index(fields=['uuid']),  # Index on uuid
+            models.Index(fields=['uid']),   # Index on uid
+        ]
+
+    def __str__(self):
+        return f"User Tracking {self.id}"
