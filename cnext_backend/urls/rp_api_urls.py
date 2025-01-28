@@ -27,5 +27,15 @@ urlpatterns = [
     rp_controller.ProductDetailsAPI.as_view(), 
     name="product_details"
     ),
+
+    path("api/<int:version>/rank-predictor/pre-fill", rp_controller.PrefillProductsAPI.as_view(), name="prefill_fields"),
+
+    path("api/<int:version>/rank-predictor/feedback", rp_controller.FeedbackSubmitAPI.as_view(), name='submit_feedback'),
+    
+
+
+
+    path("api/<int:version>/feedback", rp_controller.FeedbackAPI.as_view(), name="feedback"),
+
     
 ]

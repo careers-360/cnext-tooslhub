@@ -649,6 +649,8 @@ class CollegeCompareData(models.Model):
             models.Index(fields=['college_2']),
             models.Index(fields=['course_1']),
             models.Index(fields=['course_2']),
+                 models.Index(fields=['college_3']),
+            models.Index(fields=['college_4']),
       
 
      

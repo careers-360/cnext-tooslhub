@@ -40,7 +40,7 @@ import multiprocessing
 class CacheHelper:
     @staticmethod
     def get_cache_key(*args):
-        key = '__'.join(str(arg) for arg in args)
+        key = '___'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -71,12 +71,12 @@ class PeerComparisonService:
     def get_peer_comparisons(cls, uid=None, cache_burst=0):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "Peer___Comparison", user_context.get('domain_id'), user_context.get('education_level')
+            "peer_____Comparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         
         # If cache_burst is 1, clear the cache using CacheHelper
         if cache_burst == 1:
-            CacheHelper.burst_cache("Peer___Comparison", user_context.get('domain_id'), user_context.get('education_level'))
+            CacheHelper.burst_cache("peer___Comparison", user_context.get('domain_id'), user_context.get('education_level'))
 
         cached_result = cache.get(cache_key)
         if cached_result:
@@ -95,7 +95,7 @@ class PeerComparisonService:
             )
 
             domain_level_combinations = CacheHelper.get_or_set(
-                "domain_level_combinations",
+                "domain____level_combinations",
                 lambda: CollegeCompareData.objects.filter(
                     college_1__isnull=False, college_2__isnull=False,
                     course_1__in=valid_course_ids, course_2__in=valid_course_ids
@@ -189,7 +189,7 @@ class PeerComparisonService:
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids,cache_burst=0):
         domain_id = combo['domain_id']
         level = combo['level']
-        cache_key = f"domain_level_comparisons_{domain_id}_{level}"
+        cache_key = f"domain___level_comparisons_{domain_id}_{level}"
         
        
         if cache_burst == 1:
@@ -244,10 +244,10 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v18_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v22_{user_context.get('domain_id')}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v18_", user_context.get('domain_id'))
+                CacheHelper.burst_cache("top_colleges_courses_v22", user_context.get('domain_id'))
 
             if cached := cache.get(cache_key):
                 return cached
@@ -274,10 +274,10 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v18_{domain_id}"
+            cache_key = f"top_colleges_v22_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_v18_", domain_id)
+                CacheHelper.burst_cache("top_colleges_v22_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached
@@ -328,10 +328,10 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v18_{domain_id}"
+            cache_key = f"top_courses_v22_{domain_id}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_courses_v18_", domain_id)
+                CacheHelper.burst_cache("top_courses_v22_", domain_id)
 
             if cached := cache.get(cache_key):
                 return cached

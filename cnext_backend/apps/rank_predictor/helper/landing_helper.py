@@ -1,11 +1,17 @@
 from venv import logger
-from tools.models import CPProductCampaign, ToolsFAQ
-from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster
+
+from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpFormField, RpContentSection, CnextRpCreateInputForm, CnextRpSession, CnextRpUserTracking, RpMeanSd, RpMeritList, RpResultFlowMaster, RpSmartRegistration
+
+from tools.models import CPFeedback, CPProductCampaign, ToolsFAQ
+
 from wsgiref import validate
 from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 from django.utils import timezone
+from datetime import datetime
+from django.db.models import F
+
 
 
 class CombinationFactory:
@@ -205,23 +211,24 @@ class RPHelper:
 
         product_id = int(split_string[1])
 
-        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam").first()
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration").first()
 
         exam_id = product_dict.get("exam", "")
+        smart_registration = product_dict.get("smart_registration", False)
 
         exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
 
         if exam_dict != None:
             domain_id = exam_dict.get('domain_id', "")
             level = exam_dict.get('preferred_education_level_id', "")
-        print(f"exam dictionary {exam_dict}")
+        # print(f"exam dictionary {exam_dict}")
 
         domain_dict = Domain.objects.filter(id=domain_id).values('name').first()
 
         if domain_dict != None:
             domain_name = domain_dict.get('name', "")
 
-        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name}
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration}
         
     def _related_products(self, product_id=None, alias=None):
         
@@ -667,6 +674,41 @@ class RPHelper:
         Replace this with actual logic to fetch the predictor's display name.
         """
         return "Predictor Name"
+    
+    
+    def _save_feedback(self, feedback_data):
+        """
+        Save feedback data to the cp_feedback table.
+
+        :param feedback_data: Dictionary containing feedback data
+        """
+        feedback_record = {
+            "is_moderated": feedback_data["is_moderated"],
+            "feedback_type": feedback_data["feedback_type"],
+            "exam_id": feedback_data["exam_id"],
+            "counselling_id": feedback_data["counselling_id"],
+            "product_id": feedback_data["product_id"],
+            "response_type": feedback_data["response_type"],
+            "complement": feedback_data.get("complement"),
+            "msg": feedback_data["msg"],
+            "device": feedback_data.get("device"),
+            "created_by": feedback_data["created_by"],
+            "updated_by": feedback_data.get("updated_by"),
+            "session_id": feedback_data["session_id"],
+            "gd_chance_count": feedback_data["gd_chance_count"],
+            "tf_chance_count": feedback_data["tf_chance_count"],
+            "maybe_chance_count": feedback_data["maybe_chance_count"],
+            "counselling_change": feedback_data["counselling_change"],
+            "user_type": feedback_data["user_type"],
+            "user_name": feedback_data.get("user_name"),
+            "user_image": feedback_data.get("user_image"),
+            "custom_feedback": feedback_data.get("custom_feedback"),
+        }
+        # CPFeedback.objects.create(**feedback_record)
+        
+        feedback_instance = CPFeedback.objects.create(**feedback_record)
+        return feedback_instance  # Ensure this is returned to prevent 'NoneType' error.
+
 
 
     
@@ -705,4 +747,83 @@ class ProductHelper:
         except Exception as e:
             logger.error(f"Error fetching product details: {e}")
             return None
+
+
+class Prefill:
+    
+    def get_prefill_fields(self, product_id=None):
+        """
+        Fetch product details for a specific product ID from CPProductCampaign table.
+
+        :param product_id: ID of the product
+        :return: A dictionary containing product details
+        """
+        now = timezone.now()  # Use Django's timezone-aware datetime
+        print(f"current date time now {now}")
+
+        # Fetch the last session for the given product_id
+        product_session = ProductSession.objects.filter(product_id=product_id).values('session_peak_start_date', 'session_peak_end_date').last()
+
+        session_peak_start_date = product_session.get('session_peak_start_date', None)
+        session_peak_end_date = product_session.get('session_peak_end_date', None)
+        session = 'non_peak_season'
+
+        # print(f"start date initial {session_peak_start_date} end date {session_peak_end_date}")
+
+        # Ensure that both dates are not None and compare them
+        if session_peak_start_date and session_peak_end_date:
+
+            print(f"start date {session_peak_start_date} end date {session_peak_end_date}")
+
+            if session_peak_start_date <= now <= session_peak_end_date:
+                # Fetch smart registration for peak season
+                smart_registration = RpSmartRegistration.objects.filter(product_id=product_id, status=1).values("field", "peak_season").iterator()
+
+                # print(f"fields list {field_list}")
+                session = 'peak_season'
+            
+            else:
+                # Fetch smart registration for non-peak season
+                smart_registration = RpSmartRegistration.objects.filter(product_id=product_id, status=1).values("field", "non_peak_season").iterator()
+
+                session = 'non_peak_season'
+
+            smart_registration_list = list(smart_registration)
+            field_list = [entry['field'] for entry in smart_registration_list if entry[session] == 1]
+
+        else:
+            # Handle the case where product session dates are missing
+            print("Session peak start or end date is missing.")
+            field_list = [{}]
+
+        print(f"smart registration session {field_list}")
+
+        return {'fields': field_list, 'session': session}
+
+
+class FeedbackHelper:
+    def get_feedbacks(self, product_id=None):
+        """
+        Fetch feedbacks for a specific product ID.
+
+        :param product_id: ID of the product
+        :return: A list of feedback dictionaries
+        """
+        if not product_id:
+            return []
+
+        try:
+            feedbacks = CPFeedback.objects.filter(product_id=str(product_id)).values(
+                "id",
+                "msg",
+                "user_name",
+                "user_image",
+                "updated",
+                "custom_feedback"
+            ).order_by("-updated")
+
+            return list(feedbacks)  # Convert QuerySet to a list of dicts
+        except Exception as e:
+            logger.error(f"Error fetching feedbacks: {e}")
+            return []
 

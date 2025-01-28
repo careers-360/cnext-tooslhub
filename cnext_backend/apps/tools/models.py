@@ -859,6 +859,8 @@ class ProductSession(models.Model):
     product_id = models.IntegerField(null=False, blank=False)
     session_start_date = models.DateTimeField(null=False, blank=False)
     session_end_date = models.DateTimeField(null=False, blank=False)
+    session_peak_start_date = models.DateTimeField(null=False, blank=False)
+    session_peak_end_date = models.DateTimeField(null=False, blank=False)
     created_by = models.IntegerField(null=False, blank=False)
     created = models.DateTimeField(null=False, blank=False)
     updated = models.DateTimeField(null=False, blank=False)
