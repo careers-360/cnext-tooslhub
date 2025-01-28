@@ -71,7 +71,7 @@ class PeerComparisonService:
     def get_peer_comparisons(cls, uid=None, cache_burst=0):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "peer___Comparison", user_context.get('domain_id'), user_context.get('education_level')
+            "peer_____Comparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         
         # If cache_burst is 1, clear the cache using CacheHelper
@@ -95,7 +95,7 @@ class PeerComparisonService:
             )
 
             domain_level_combinations = CacheHelper.get_or_set(
-                "domain__level_combinations",
+                "domain____level_combinations",
                 lambda: CollegeCompareData.objects.filter(
                     college_1__isnull=False, college_2__isnull=False,
                     course_1__in=valid_course_ids, course_2__in=valid_course_ids
@@ -189,7 +189,7 @@ class PeerComparisonService:
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids,cache_burst=0):
         domain_id = combo['domain_id']
         level = combo['level']
-        cache_key = f"domain__level_comparisons_{domain_id}_{level}"
+        cache_key = f"domain___level_comparisons_{domain_id}_{level}"
         
        
         if cache_burst == 1:
@@ -244,10 +244,10 @@ class TopCollegesCoursesService:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v19_{user_context.get('domain_id')}"
+            cache_key = f"top_colleges_courses_v20_{user_context.get('domain_id')}"
 
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v19_", user_context.get('domain_id'))
+                CacheHelper.burst_cache("top_colleges_courses_v20_", user_context.get('domain_id'))
 
             if cached := cache.get(cache_key):
                 return cached
@@ -274,7 +274,7 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v19_{domain_id}"
+            cache_key = f"top_colleges_v20_{domain_id}"
 
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_colleges_v19_", domain_id)
