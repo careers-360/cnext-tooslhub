@@ -6,7 +6,7 @@ from django.db.models import Q
 from cnext_backend import settings
 from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
-from tools.models import CPProductCampaign, ToolsFAQ, UrlAlias, UrlMetaPatterns
+from tools.models import CPProductCampaign, ToolsFAQ, UrlAlias, UrlMetaPatterns, UserGroups
 from rest_framework.pagination import PageNumberPagination
 from django.utils.text import slugify
 from utils.helpers.response import SuccessResponse,ErrorResponse
@@ -370,6 +370,16 @@ class ToolsHelper():
         update_data['exam_other_content'] = request_data.get('exam_other_content')
         update_by = request_data.get('updated_by')
         display_name_type = int(request_data.get('display_name_type'))
+
+        if request_data.get('exam_other_content'):
+            # check author is active and has if the author previously selected is currently non-active
+            # OR not having any of seo/content group permission.
+            if not request_data.get('author_name'): return False, {"error":"With exam other content author name is compulsory"}
+
+            # UserGroups.objects.filter(group_id=30, user_id = )
+            pass
+
+
         if display_name_type == 2:
             update_data.update({
                 'alias': request_data.get('alias'),

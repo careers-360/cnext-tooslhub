@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, date
 from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpMeritList, RpMeritSheet,\
       RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, CnextRpUserTracking
-from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam
+from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam, UserGroups
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from users.models import User
 from rest_framework.pagination import PageNumberPagination
@@ -1604,8 +1604,8 @@ class CommonDropDownHelper:
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in dict(CnextRpVariationFactor.PRESET_TYPE_ENUM).items()]
 
         elif field_name == "input_flow_type":
-            master_result_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_process_type"))
-            dropdown = [{"id": item.get("id"), "value": item.get("input_process_type"), "selected": selected_id == item.get("id")} for item in master_result_flow_type]
+            master_input_flow_type = list(RpInputFlowMaster.objects.filter(status=1).values("id", "input_flow_type"))
+            dropdown = [{"id": item.get("id"), "value": item.get("input_flow_type"), "selected": selected_id == item.get("id")} for item in master_input_flow_type]
 
         elif field_name == "result_flow_type":
             master_result_flow_type = list(RpResultFlowMaster.objects.filter(status=1).values("id", "result_flow_type"))
@@ -1647,6 +1647,13 @@ class CommonDropDownHelper:
         elif field_name == "year":
             year_range = list(range(2020, 2031))
             dropdown = [{"id": year, "value": year} for year in year_range]
+
+        elif field_name == "tools_author_name":
+            pass
+            # dropdown = UserGroups.objects.filter(product_id=product_id).annotate(key=F('input_process_type'), value=F('input_process_type')).values_list('key', 'value')
+            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(id=F('user__id'),value=F('user__name')).values('id', 'value')[:20])
+            print("thsi sis the dropdown  ", dropdown)
+            # dropdown = [{"id": key, "value": value} for key, value in dropdown]
 
         elif field_name == "tools_name":
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")

@@ -811,6 +811,30 @@ class DisabilityCategory(models.Model):
             models.Index(fields=['name', ]),
         ]
 
+class UserGroups(models.Model):
+    """
+    User Groups model using for the mapping between users and groups
+    """
+    user = models.ForeignKey('users.User', models.DO_NOTHING)
+    group = models.ForeignKey('Groups', models.DO_NOTHING)
+    status = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'user_groups'
+        unique_together = (('user', 'group'),)
+
+class Groups(models.Model):
+    """
+    Groups model with name & status attributes
+    """
+    name = models.CharField(max_length=255)
+    status = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'groups'
+
+
+
 
 class CPTopCollege(models.Model):
     exam_id = models.IntegerField(null=True, blank=True)
