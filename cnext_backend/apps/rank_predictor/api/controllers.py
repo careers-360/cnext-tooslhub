@@ -546,3 +546,107 @@ class ProductDetailsAPI(APIView):
             {"message": f"No details found for product_id {product_id}"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+
+class FeedbackSubmitAPI(APIView):
+    """
+    API for submitting feedback.
+    Endpoint : api/<int:version>/rank-predictor/feedback
+    Method : POST
+    Payload : {
+        "is_moderated": bool,
+        "feedback_type": "actual" or "custom",
+        "exam_id": str,
+        "counselling_id": str,
+        "product_id": str,
+        "response_type": str,
+        "complement": str,
+        "msg": str,
+        "device": str,
+        "created_by": int,
+        "updated_by": int (optional),
+        "session_id": int,
+        "gd_chance_count": int,
+        "tf_chance_count": int,
+        "maybe_chance_count": int,
+        "counselling_change": int,
+        "user_type": str,
+        "user_name": str,
+        "user_image": str,
+        "custom_feedback": str
+    }
+    """
+
+    permission_classes = [ApiKeyPermission]
+
+    def post(self, request, version, **kwargs):
+        data = request.data
+
+        # Required fields for validation
+        required_fields = [
+            "feedback_type", "exam_id", "counselling_id", "product_id", "response_type", 
+            "msg", "created_by", "session_id", "gd_chance_count", "tf_chance_count", 
+            "maybe_chance_count", "counselling_change", "user_type"
+        ]
+
+        # Check for missing fields
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return CustomErrorResponse(
+                {"message": f"Missing fields: {', '.join(missing_fields)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Ensure fields have correct data types
+            data["is_moderated"] = bool(data.get("is_moderated", False))
+            data["gd_chance_count"] = int(data["gd_chance_count"])
+            data["tf_chance_count"] = int(data["tf_chance_count"])
+            data["maybe_chance_count"] = int(data["maybe_chance_count"])
+            data["counselling_change"] = int(data["counselling_change"])
+            data["session_id"] = int(data["session_id"])
+        except ValueError:
+            return CustomErrorResponse(
+                {"message": "Integer fields must contain valid integer values."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Save feedback data
+        try:
+            rp_helper = RPHelper()
+            feedback_instance = rp_helper._save_feedback(data)  # assuming _save_feedback returns the saved instance
+        except Exception as e:
+            return CustomErrorResponse(
+                {"message": f"An error occurred while saving feedback: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Returning saved feedback data including the id
+        response_data = {
+            "id": feedback_instance.id,  # id is the primary key in your model
+            "feedback_type": data["feedback_type"],
+            "exam_id": data["exam_id"],
+            "counselling_id": data["counselling_id"],
+            "product_id": data["product_id"],
+            "response_type": data["response_type"],
+            "complement": data.get("complement"),
+            "msg": data["msg"],
+            "device": data.get("device"),
+            "created_by": data["created_by"],
+            "updated_by": data.get("updated_by"),
+            "session_id": data["session_id"],
+            "gd_chance_count": data["gd_chance_count"],
+            "tf_chance_count": data["tf_chance_count"],
+            "maybe_chance_count": data["maybe_chance_count"],
+            "counselling_change": data["counselling_change"],
+            "user_type": data["user_type"],
+            "user_name": data.get("user_name"),
+            "user_image": data.get("user_image"),
+            "custom_feedback": data.get("custom_feedback"),
+        }
+
+        return SuccessResponse(
+            {"message": "Feedback submitted successfully.", "feedback_data": response_data},
+            status=status.HTTP_201_CREATED
+        )
