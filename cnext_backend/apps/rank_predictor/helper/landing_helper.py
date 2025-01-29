@@ -104,18 +104,24 @@ class RPHelper:
             product_id = self._get_product_from_alias(alias=alias)
 
 
-        header_data = CPProductCampaign.objects.filter(id=product_id).values("id", "header_section", "custom_exam_name", "custom_flow_type", "custom_year", "video", "usage_count_matrix", "positive_feedback_percentage", "display_preference", "gif", "secondary_image", 'image', 'exam_other_content')
-        # print(header_data['result'])
+        header_data = CPProductCampaign.objects.filter(id=product_id).values("id", "header_section", "custom_exam_name", "custom_flow_type", "custom_year", "video", "usage_count_matrix", "positive_feedback_percentage", "display_preference", "gif", "secondary_image", 'image', 'exam_other_content', 'display_name_type', 'alias').first()
 
-        header_data_list = list(header_data)
+        if header_data.get('display_name_type') == 1:
+            # handled the case for showing custom exam name
+            header_data.pop('alias')
+        else:
+            # handled the case for showing alias
+            header_data.pop('custom_exam_name')
+            header_data.pop('custom_flow_type')
+            header_data.pop('custom_year')
+            
 
-        for data in header_data_list:
+        # print(header_data)
 
-            removable_fields = {key: value for key, value in HEADER_DISPLAY_PREFERANCE.items() if key != data.get('display_preference')}
-            # print(removable_fields)
+        removable_fields = {key: value for key, value in HEADER_DISPLAY_PREFERANCE.items() if key != header_data.get('display_preference')}
 
-            for k in removable_fields:
-                data.pop(HEADER_DISPLAY_PREFERANCE.get(k), None)
+        for k in removable_fields:
+            header_data.pop(HEADER_DISPLAY_PREFERANCE.get(k), None)
 
         return header_data
     
