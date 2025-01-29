@@ -153,6 +153,7 @@ class CPProductCampaign(models.Model):
     custom_year = models.IntegerField(null=True, blank=True)
     listing_description = models.CharField(max_length=255, null=True, blank=True)
     exam_other_content = models.TextField(null=True, blank=True)
+    exam_content_author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     header_section = models.JSONField(null=True, blank=True)
     disclaimer = models.CharField(max_length=255, null=True, blank=True)
     cp_cta_name = models.CharField(max_length=255, null=True, blank=True)
@@ -829,3 +830,30 @@ class Groups(models.Model):
 
     class Meta:
         db_table = 'groups'
+
+
+class UserPermissions(models.Model):
+    """
+    User Permission Model using for the mapping between users and permissions
+    """
+    user = models.ForeignKey('users.User', models.DO_NOTHING)
+    permission = models.ForeignKey('Permissions', models.DO_NOTHING)
+    status = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'user_permissions'
+        unique_together = (('user', 'permission'),)
+
+
+class Permissions(models.Model):
+    """
+    Permissions model with name, codename, content_type & status attributes
+    """
+    name = models.CharField(max_length=255)
+    codename = models.CharField(max_length=100)
+    content_type = models.CharField(max_length=255)
+    status = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'permissions'
+        ordering = ['id']

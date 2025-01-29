@@ -6,7 +6,7 @@ from django.db.models import Q
 from cnext_backend import settings
 from rank_predictor.models import RpContentSection, RpSmartRegistration
 from tools.api.serializers import ToolBasicDetailSerializer
-from tools.models import CPProductCampaign, ToolsFAQ, UrlAlias, UrlMetaPatterns, UserGroups
+from tools.models import CPProductCampaign, Permissions, ToolsFAQ, UrlAlias, UrlMetaPatterns, UserGroups, UserPermissions, User
 from rest_framework.pagination import PageNumberPagination
 from django.utils.text import slugify
 from utils.helpers.response import SuccessResponse,ErrorResponse
@@ -344,10 +344,12 @@ class ToolsHelper():
                 meta_pattern.save()
 
     def get_input_page_detail_data(self, pk):
-        data = CPProductCampaign.objects.filter(pk=pk).values(
-            'id', 'display_name_type', 'custom_exam_name', 'custom_flow_type', 
-            'custom_year', 'listing_desc','exam_other_content', 'header_section','alias'
-        ).first()
+        data = CPProductCampaign.objects.select_related("exam_content_author_id").filter(pk=pk).values(
+                'id', 'display_name_type', 'custom_exam_name', 'custom_flow_type', 
+                'custom_year', 'listing_desc', 'exam_other_content', 
+                'exam_content_author_id', 'exam_content_author__name',  # Fetch related user fields
+                'header_section', 'alias'
+            ).first()
         
         if data:
             header_section = data.get('header_section')
@@ -361,7 +363,28 @@ class ToolsHelper():
             data['header_section'] = header_section
         return data
     
-    def edit_input_page_detail(self, *args, **kwargs):
+    def _validate_author(self, request_data):
+        """
+        Validates the exam content author, checking if they exist, are active, and have required permissions.
+        """
+        author_id = request_data.get('exam_content_author')
+        if not author_id:
+            return False, {"error": "With exam other content, author name is compulsory"}
+
+        user = User.objects.filter(id=author_id).values('id', 'is_active', 'is_staff').first()
+        if not user:
+            return False, {"error": "Author not found"}
+        if not user.get('is_active') or not user.get('is_staff'):
+            return False, {"error": "Author is not active or staff"}
+
+        needed_permissions = Permissions.objects.filter(name__in=["Manage Predictor Tools", "Edit Predictor Content SEO"]).values_list("id", flat=True)
+        user_permissions = UserPermissions.objects.filter(user_id=author_id, permission__in=needed_permissions, status=1)
+        if not user_permissions.exists():
+            return False, {"error": "Author doesn't have necessary permissions"}
+
+        return True, None
+    
+    def add_edit_input_page_detail(self, *args, **kwargs):
         request_data = kwargs.get('request_data')
         instance = kwargs.get('instance')
 
@@ -371,13 +394,12 @@ class ToolsHelper():
         update_by = request_data.get('updated_by')
         display_name_type = int(request_data.get('display_name_type'))
 
+        # Validate and process exam_other_content and author data if applicable
         if request_data.get('exam_other_content'):
-            # check author is active and has if the author previously selected is currently non-active
-            # OR not having any of seo/content group permission.
-            if not request_data.get('author_name'): return False, {"error":"With exam other content author name is compulsory"}
-
-            # UserGroups.objects.filter(group_id=30, user_id = )
-            pass
+            valid, error_response = self._validate_author(request_data)
+            if not valid:
+                return False, error_response
+            update_data['exam_content_author'] = request_data.get('exam_content_author')
 
 
         if display_name_type == 2:
