@@ -571,7 +571,6 @@ class RPCmsHelper:
             "count": 0,
             "custom_mean_sd_data": []
         }
-        # Fetch student appeared data from database
         rp_mean_sd_data = RpMeanSd.objects.filter(product_id=product_id, status=1)
         if year:
             rp_mean_sd_year_data = list(rp_mean_sd_data.filter(year=year).values("id", "product_id", "year", "input_flow_type",
@@ -1649,11 +1648,9 @@ class CommonDropDownHelper:
             dropdown = [{"id": year, "value": year} for year in year_range]
 
         elif field_name == "tools_author_name":
-            pass
-            # dropdown = UserGroups.objects.filter(product_id=product_id).annotate(key=F('input_process_type'), value=F('input_process_type')).values_list('key', 'value')
-            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(id=F('user__id'),value=F('user__name')).values('id', 'value')[:20])
-            print("thsi sis the dropdown  ", dropdown)
-            # dropdown = [{"id": key, "value": value} for key, value in dropdown]
+            # group_id=30 denotes Content Group 
+            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(author_id=F('user__id'),author_name=F('user__name')).values('author_id', 'author_name')[:20])
+            dropdown = [{"id": item["author_id"], "value": item["author_name"]} for item in dropdown]
 
         elif field_name == "tools_name":
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")

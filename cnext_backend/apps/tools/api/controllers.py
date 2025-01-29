@@ -330,8 +330,11 @@ class CMSToolsInputPageDetailAPI(APIView):
         request_data = request.data.copy()
         instance = self.get_object(product_id)
         helper = ToolsHelper()
-        data = helper.edit_input_page_detail(product_id,instance = instance, request_data = request_data)
-        return SuccessResponse(data, status=status.HTTP_200_OK)
+        resp, data  = helper.add_edit_input_page_detail(product_id,instance = instance, request_data = request_data)
+        if resp:
+            return SuccessResponse(data, status=status.HTTP_201_CREATED)
+        else:
+            return CustomErrorResponse(data, status=status.HTTP_400_BAD_REQUEST)
 
 class CMSToolContentAPI(APIView):
     permission_classes = (
