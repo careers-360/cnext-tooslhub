@@ -429,7 +429,7 @@ class ToolsHelper():
         formatted_incoming_header_section = [{"value": item} if isinstance(item, str) else item for item in incoming_header_section]
         update_data['header_section'] = formatted_incoming_header_section
         CPProductCampaign.objects.filter(id=instance.id).update(**update_data)
-        return "Ok"
+        return True, "Ok"
     
     def get_tool_content_data(self, pk):
         image_url = os.getenv('CAREERS_BASE_IMAGES_URL')
