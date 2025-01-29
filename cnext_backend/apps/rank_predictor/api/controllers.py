@@ -1,11 +1,15 @@
+from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from cnext_backend.apps.rank_predictor.models import CnextRpUserTracking, RpInputFlowMaster
+from cnext_backend.apps.tools.models import CPProductCampaign
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rank_predictor.api.helpers import InputPageStaticHelper
 # from rank_predictor.helper.landing_helper import ProductHelper, RPHelper
 from rank_predictor.helper.landing_helper import FeedbackHelper, ProductHelper, RPHelper
+from django.core.exceptions import ObjectDoesNotExist
 
 class HealthCheck(APIView):
 
@@ -307,60 +311,215 @@ class RankPredictorAPI(APIView):
 
     permission_classes = [ApiKeyPermission]
 
-    def get(self, request, version, **kwargs):
+    def get(self, request, version, *args, **kwargs):
         try:
-            flow_type = int(request.GET.get("flow_type"))
+            # Extract form_id from the request
+            form_id = request.GET.get("form_id")
+            if not form_id:
+                return JsonResponse(
+                    {"message": "form_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            # Retrieve flow_type using auto_increment_id (corresponding to form_id)
+            try:
+                user_tracking = CnextRpUserTracking.objects.get(id=form_id)
+                flow_type = user_tracking.flow_type
+            except ObjectDoesNotExist:
+                return JsonResponse(
+                    {"message": "Invalid form_id or data not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            
+            # Call the appropriate method based on flow_type
             if flow_type == 3:
                 return self.rank_calculation(request)
             else:
                 return self.rank_predictor_workflow(request)
+        
         except Exception as e:
-            return CustomErrorResponse(
+            return JsonResponse(
                 {"message": f"Error occurred: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+    
+
+
+    import json  # Add this import statement at the top of your script
 
     def rank_calculation(self, request):
         """
         Handles rank calculation for flow_type = 3.
         """
-        try:
-            exam_id = int(request.GET.get("exam_id"))
-            percentile = float(request.GET.get("percentile"))
-            category_id = request.GET.get("category_id")
-            disability_id = request.GET.get("disability_id")
+        # try:
+        # Extract form_id and exam_id from the request
+        form_id = request.GET.get("form_id")
+        exam_id = request.GET.get("exam_id")
+        
+        
 
-            rp_helper = RPHelper()
-            rank_data = rp_helper.calculate_rank(
-                exam_id=exam_id,
-                percentile=percentile,
-                category_id=category_id,
-                disability_id=disability_id,
-            )
-
-            formatted_data = {
-                "exam_id": exam_id,
-                "percentile": percentile,
-                "rank_data": rank_data.get("data"),
-            }
-
-            return SuccessResponse(
-                formatted_data,
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
+        # Validate and convert exam_id
+        if not form_id or not exam_id:
             return CustomErrorResponse(
-                {"message": f"Error occurred while calculating rank: {str(e)}"},
+                {"message": "form_id and exam_id are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        try:
+            form_id = int(form_id)
+            exam_id = int(exam_id)
+        except (ValueError, TypeError):
+            return CustomErrorResponse(
+                {"message": "Invalid data type for form_id or exam_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Fetch category_id, disability_id, and input_fields using form_id
+        try:
+            user_tracking = CnextRpUserTracking.objects.get(id=form_id)
+            category_id = user_tracking.category  # 'category' column exists
+            disability_id = user_tracking.disability  # 'disability' column exists
+            input_fields = user_tracking.input_fields  # 'input_fields' column exists
+            
+            
+            
+
+            # Debugging: Log the input_fields data
+            
+        except ObjectDoesNotExist:
+            return CustomErrorResponse(
+                {"message": "Invalid form_id or data not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if input_fields is empty or None
+        if not input_fields:
+            return CustomErrorResponse(
+                {"message": "input_fields is empty or null"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if input_fields is a list and has the expected structure
+        if not isinstance(input_fields, list):
+            return CustomErrorResponse(
+                {"message": "input_fields is not a list"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        percentile = None
+        for field in input_fields:
+            if isinstance(field, dict) and field.get("input_flow_type") == 3:
+                try:
+                    percentile = float(field.get("value"))
+                    break
+                except (ValueError, TypeError):
+                    return CustomErrorResponse(
+                        {"message": "Invalid percentile value in input_fields"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        if percentile is None:
+            return CustomErrorResponse(
+                {"message": "Percentile value not found in input_fields"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Set default values for category_id and disability_id if they are null or blank
+        if not category_id:  # If category_id is None or blank
+            category_id = 2  # Default to "General"
+        if not disability_id:  # If disability_id is None or blank
+            disability_id = 2  # Default to "N.A."
+
+        # Call RPHelper to calculate rank
+        rp_helper = RPHelper()
+        rank_data = rp_helper.calculate_rank(
+            exam_id=exam_id,
+            percentile=percentile,
+            category_id=category_id,
+            disability_id=disability_id,
+        )
+
+        # Format the response data
+        formatted_data = {
+            "message": "Rank Predictor Percentile to Rank Work flow.",
+            "exam_id": exam_id,
+            "percentile": percentile,
+            "rank_data": rank_data.get("data"),
+        }
+
+        return SuccessResponse(
+            
+            formatted_data,
+            status=status.HTTP_200_OK,
+        )
+
+       
+    
+    
+    def transform_data(self,input_data):
+        output = []
+
+        def parse_data(entry, primary=True):
+            caste_mapping = {1: "General", 2: "OBC", 3: "SC/ST"}
+            disability_mapping = {1: "PWD", 2: "N.A."}
+            
+            combination = entry.get("combination", {})
+            factors = entry.get("factors", {})
+            result_details = entry.get("result_details", {})
+
+            output_entry = {
+                "category": caste_mapping.get(combination.get("caste"), "General"),
+                "max_rank": factors.get("max_range", None),
+                "min_rank": factors.get("min_range", None),
+                "disability": disability_mapping.get(combination.get("disability"), "N.A."),
+                "classification": "Good" if entry.get("z_score", 0) >= 0 else "Average",
+                "result_value": entry.get("result_value", None),
+                "primary": primary,
+                "result_type": result_details.get("result_type", None),
+                "result_flow_type": result_details.get("result_flow_type", None),
+                "result_process_type": result_details.get("result_process_type", None)
+            }
+
+            output.append(output_entry)
+
+        # Process primary data
+        for item in input_data.get("primary", {}).get("data", []):
+            parse_data(item, primary=True)
+
+        # Process secondary data
+        for secondary_group in input_data.get("secondary", []):
+            for item in secondary_group.get("data", []):
+                parse_data(item, primary=False)
+
+        return output
+
 
     def rank_predictor_workflow(self, request):
         """
         Handles the rank predictor workflow for other flow types.
         """
+        
+        # data = RpInputFlowMaster.objects.filter(id=5).values_list('id', 'input_flow_type','input_type', 'input_process_type').first()
         try:
-            # Extract parameters
+            # Extract form_id from the request
+            form_id = request.GET.get("form_id")
             
+            if not form_id:
+                return CustomErrorResponse(
+                    {"message": "form_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                form_id = int(form_id)
+            except (ValueError, TypeError):
+                return CustomErrorResponse(
+                    {"message": "Invalid data type for form_id"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        
         
             CATEGORY_MAP = {
                 2: "General", 
@@ -372,6 +531,7 @@ class RankPredictorAPI(APIView):
                 8: "OE", 
                 9: "EWS"
             }
+
             DISABILITY_MAP = {
                 1: "PWD",  # Person with disability
                 2: "N.A.", # No disability
@@ -384,95 +544,230 @@ class RankPredictorAPI(APIView):
                 9: "PH2",
                 10: "PH-AI"
             }
-            product_id = request.GET.get('product_id')
-            record_id = request.GET.get('id')
-            caste = request.GET.get('category_id', 'General')
-            disability = request.GET.get('disability_id', 'N.A.').lower()
-            slot = request.GET.get('slot', None)
-            score = request.GET.get('score')
 
-            if not product_id or not product_id.isdigit() or not record_id or not record_id.isdigit():
-                return CustomErrorResponse(
-                    {"message": "product_id and id are required and must be integers"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            record_id = 13
 
-            if not score or not score.isdigit():
-                return CustomErrorResponse(
-                    {"message": "score is required and must be an integer"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Fetch user_tracking data (assuming this part is working as per your original code)
+            user_tracking = (
+                CnextRpUserTracking.objects.filter(id=form_id)
+                .values("product_id", "category", "disability", "input_fields", "additional_info")
+                .first()
+            )
 
-            product_id = int(product_id)
-            record_id = int(record_id)
-            score = float(score)
+            # Extract the slot information from additional_info
+            additional_info = user_tracking.get("additional_info", [])
+            
+            slot = None  # Initialize slot as None by default
 
-            rp_helper = RPHelper()
+            if "Enter Slot" in additional_info:
+                slot = additional_info["Enter Slot"].get("id")
+            
+           
+            
+            
+            final_result_list = []
 
-            # Step 1: Fetch session data
-            session_data = rp_helper.get_session_data(product_id, record_id)
-            if not session_data:
-                return SuccessResponse(
-                    f"No session data found for product_id {product_id} and id {record_id}",
-                    status=status.HTTP_404_NOT_FOUND
-                )
+            # Get input fields from user_tracking
+            for item in user_tracking.get("input_fields", []):
+                score = item.get('value')
+                input_flow_type = item.get('input_flow_type')
+                
+               
 
-            difficulty = session_data["difficulty"]
-            year = session_data["year"]
+                
+                rp_flow = RpInputFlowMaster.objects.filter(id=input_flow_type).values('id', 'input_flow_type','input_type', 'input_process_type').first()
+            
+                if rp_flow:
+                    rp_flow_type = rp_flow['input_flow_type']
+                    rp_flow_input_type = rp_flow['input_type']
+                    rp_flow_input_process_type = rp_flow['input_process_type']
+                    
+                    user_input = {}
+                    user_input["input_flow_type"] = rp_flow_type
+                    user_input["input_type"] = rp_flow_input_type
+                    user_input["input_process_type"] = rp_flow_input_process_type
+                    user_input["score"] = score
+           
+                product_id = user_tracking.get('product_id')
+                
+                product_name = CPProductCampaign.objects.filter(id=product_id).values('name').first()
+                disclaimer = CPProductCampaign.objects.filter(id=product_id).values('disclaimer').first()
+               
+                caste = user_tracking.get('category')
+                disability = user_tracking.get('disability')
+
+
+                # Validate score
+                if not score or not score.isdigit():
+                    return CustomErrorResponse(
+                        {"message": "score is required and must be an integer"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                score = float(score)
+
+                # Initialize RPHelper
+                rp_helper = RPHelper()
+
+                # Fetch session data using previously set product_id and record_id
+                session_data = rp_helper.get_session_data(product_id, record_id)
             
 
-            # Step 2: Fetch Input Flow Types
-            input_flow_results = rp_helper.get_input_flow_type(caste, disability, slot, difficulty, year)
-            if not input_flow_results:
-                return SuccessResponse(
-                    {"message": "No input flow type found for the given parameters."},
-                    status=status.HTTP_404_NOT_FOUND
+                if not session_data:
+                    return SuccessResponse(
+                        f"No session data found for product_id {product_id} and id {record_id}",
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+
+                difficulty = session_data["difficulty"]
+                year = session_data["year"]
+
+                # Ensure input_flow_type is provided
+                if not input_flow_type:
+                    return SuccessResponse(
+                        {"message": "No input flow type provided by the user."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Process Input Flow Types to Fetch Mean and SD
+                mean, sd = rp_helper.get_mean_sd(product_id, year, input_flow_type)
+                
+                if not mean or not sd:
+
+                    continue  # Skip to the next input_flow_type
+                result = {
+                    "input_flow_type": input_flow_type,
+                    "mean": mean,
+                    "sd": sd
+                }
+                
+
+                # Calculate Z-Score and Fetch Closest Results
+                z_score, closest_result = rp_helper.calculate_z_score_and_fetch_result(
+                    score, mean, sd, year, caste, disability, product_id, difficulty, input_flow_type, slot
                 )
-
-            # Step 3: Process Input Flow Types to Fetch Mean and SD
-            for result in input_flow_results:
-                combination = result.get("combination", {})
-                product_id = combination.get("product_id")
-                year = combination.get("year")
-                input_flow_type = combination.get("input_flow_type")
-
-                if input_flow_type:
-                    mean, sd = rp_helper.get_mean_sd(product_id, year, input_flow_type)
-                    result.update({"mean": mean, "sd": sd})
-
-            # Step 4: Calculate Z-Score and Fetch Closest Results
-            for result in input_flow_results:
-                mean = result.get("mean")
-                sd = result.get("sd")
-                z_score, closest_result = rp_helper.calculate_z_score_and_fetch_result(score, mean, sd, year)
                 result.update({"z_score": z_score, "closest_result": closest_result})
 
-            # Step 5: Fetch Factors for Closest Results
-            for result in input_flow_results:
-                closest_result = result.get("closest_result")
-                if closest_result:
-                    result_value = closest_result.get("result_value")
-                    result_flow_type = closest_result.get("result_flow_type")
-                    factors = rp_helper.get_factors(product_id, result_flow_type, result_value)
-                    result.update({"factors": factors})
+                # Initialize the result list
+                result_list = []
+                no_results_found = []
 
-            # Step 6: Fetch Result Details for Input Flow Types
-            for result in input_flow_results:
-                result_flow_type = result.get("closest_result", {}).get("result_flow_type")
-                if result_flow_type:
-                    result_details = rp_helper.get_result_details(result_flow_type)
-                    result.update({"result_details": result_details})
+                try:
+                    # Iterate over the closest_result
+                    for closest_item in closest_result:
+                        closest_result_data = closest_item.get("closest_result")
+                        
+                        if not closest_result_data:
+                            no_results_found.append({
+                                "combination": closest_item.get("combination"),
+                                "message": "No result details found for this combination"
+                            })
+                            continue  # Skip to the next closest_item
+                        
+                        # Check if closest_result_data exists
+                        if closest_result_data:
+                            try:
+                                result_value = closest_result_data.get("result_value")
+                                result_flow_type = closest_result_data.get("result_flow_type")
 
-            return SuccessResponse(
-                {"message": "Rank Predictor Workflow executed successfully.", "data": input_flow_results},
+                                # Fetch the factors for the current combination
+                                factors = rp_helper.get_factors(product_id, result_flow_type, result_value)
+
+                                # Prepare the result for this combination
+                                combination = closest_item.get("combination")
+                                result_combination = {
+                                    "combination": combination,
+                                    "z_score": closest_result_data.get("z_score"),
+                                    "result_value": result_value,
+                                    "factors": factors
+                                }
+
+                                # Fetch result details
+                                result_details = rp_helper.get_result_details(result_flow_type)
+                                
+                                if not result_details:
+                                    no_results_found.append({
+                                        "combination": closest_item.get("combination"),
+                                        "message": "No result details found for this combination"
+                                    })
+                                    continue  # Skip to the next closest_item
+                                
+                                
+                                if result_details:
+                                    result_combination["result_details"] = result_details
+                                    
+                             
+                                
+                                # Append the combination to the result list
+                                result_list.append(result_combination)
+                                
+                            
+                                    
+                                if rp_flow:
+                                    rp_flow_type = rp_flow['input_flow_type']
+                                
+
+                                    result_list.append(user_input)
+                                    
+                            except Exception as e:
+                                print(f"Error processing closest_item {closest_item}: {e}")
+                                # Add this combination to no_results_found list in case of error
+                                no_results_found.append({
+                                    "combination": closest_item.get("combination"),
+                                    "message": f"Error processing this combination: {e}"
+                                })
+                                
+                        if not closest_result:
+                            continue
+                        
+                        # Append the result for this input_flow_type to the final result list
+
+                except Exception as e:
+                    print(f"Error processing closest_result: {e}")
+                    no_results_found.append({
+                        "message": f"Error processing closest_result: {e}"
+                    })
+                    
+                final_result_list.append({
+                    
+                    "data": result_list,
+                })
+
+                # Return the final response with the result list and no_results_found
+            primary = final_result_list[0] if final_result_list else None
+            secondary = final_result_list[1:] if len(final_result_list) > 1 else []   
+            response_data = {
+                        "product_name": product_name,
+                        "primary": primary,
+                        "secondary": secondary,
+                        "disclaimer": disclaimer,
+
+                        }
+            
+            data_prepare = self.transform_data(response_data) 
+
+
+            return Response(
+                {
+                    "result": True,
+                    "message": "Rank Predictor Score to Percentile Work flow.",
+                    "data": {
+                        "product_name": product_name,
+                        "primary": primary,
+                        "secondary": secondary,
+                        "disclaimer": disclaimer,
+
+                        }
+                },
                 status=status.HTTP_200_OK
             )
-        except Exception as e:
-            return CustomErrorResponse(
-                {"message": f"Error occurred while executing rank predictor workflow: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
+        except Exception as e:
+            # Handle unexpected exceptions
+            return CustomErrorResponse(
+                {"message": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class FaqSectionAPI(APIView):
     """
