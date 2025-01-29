@@ -737,7 +737,7 @@ class RankPredictorAPI(APIView):
                 })
 
                 # Return the final response with the result list and no_results_found
-            primary = final_result_list[0] if final_result_list else None
+            primary = final_result_list[0]["data"][0] if final_result_list else None
             secondary = final_result_list[1:] if len(final_result_list) > 1 else []   
             response_data = {
                         "product_name": product_name,
