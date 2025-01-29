@@ -25,6 +25,7 @@ from .college_compare_urls import urlpatterns as college_compare_urls
 from .rp_cms_urls import urlpatterns as rp_cms_urls
 
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 ]
@@ -37,3 +38,4 @@ urlpatterns += cms_api_urls
 urlpatterns += rp_api_urls
 urlpatterns+=college_compare_urls
 urlpatterns += rp_cms_urls
+

@@ -452,13 +452,17 @@ class RPHelper:
                     "classification": None,
                     "message": f"Error: {str(e)}"
                 })
-
+        primary = results[0] if results else None
+        secondary = results[1:] if len(results) > 1 else []
         return {
             "result": True,
-            "data": results
+            "data": {
+                "primary": primary,
+                "secondary": secondary,
+            }
         }
 
-    
+        
      
     """
     Helper class to fetch and process data related to Rank Predictor functionality.
@@ -507,24 +511,34 @@ class RPHelper:
             return {"id": disability_id, "name": "Invalid ID"}
         return {"id": disability_id, "name": self.DISABILITY_MAP.get(disability_id, "Unknown")}
 
-        
-
     def get_session_data(self, product_id, record_id):
         """Fetch data from CnextRpSession table."""
-        return CnextRpSession.objects.filter(product_id=product_id, id=record_id).values(
-        "difficulty",  # This is the correct field for CnextRpSession
-        "year", 
-        
+        DIFFICULTY_LEVEL = {1: "Easy", 2: "Moderately Easy", 3: "Moderate", 4: "Moderately Difficult", 5: "Difficult"}
+        MODERATE_ID = next(key for key, value in DIFFICULTY_LEVEL.items() if value == "Moderate")
+
+        session_data = CnextRpSession.objects.filter(product_id=product_id, id=record_id).values(
+            "difficulty",  # This is the correct field for CnextRpSession
+            "year", 
         ).first()
+
+        if session_data is None:
+            return None
+
+        # Default difficulty to Moderate ID (3) if not present
+        difficulty_id = session_data.get("difficulty", MODERATE_ID)
+        session_data["difficulty"] = difficulty_id
+
+        return session_data
+
         
  
  
-    def get_input_flow_type(self, caste_id, disability_id, slot, difficulty_level, year):
+    def get_input_flow_type(self, caste_id, disability_id, slot, difficulty_level, year, product_id):
         """Fetch input_flow_type from RpMeritList table."""
         query = {
             "difficulty_level": difficulty_level,  # Correct field for RpMeritList
             "year": year,
-            "product_id": 39,
+            "product_id": product_id,
         }
 
         results = []
@@ -569,7 +583,7 @@ class RPHelper:
                 })
 
             
-        # Return or print the accumulated results
+        # Return the accumulated results
         return result2
 
 
@@ -593,7 +607,7 @@ class RPHelper:
         
 
 
-    def calculate_z_score_and_fetch_result(self,score, mean, sd, year):
+    def calculate_z_score_and_fetch_result(self,score, mean, sd, year, caste_id, disability_id, product_id, difficulty_level, input_flow_type, slot=None):
         """Calculate Z-Score and fetch the closest result details."""
         if mean is None or sd is None or sd == 0:  # Handle missing or invalid data
             print("Invalid mean or standard deviation. Skipping calculation.")
@@ -601,34 +615,57 @@ class RPHelper:
 
         z_score = (score - mean) / sd
 
-        # Fetch all records for the specified year
-        result_data = RpMeritList.objects.filter(year=year).values(
-            "z_score", "result_flow_type", "result_value"
-        )
+        get_cast = self.get_caste_by_id(caste_id)
+        get_disability_id = self.get_disability_by_id(disability_id)
 
-        if not result_data:
-            print("No results found for the specified year.")
-            return z_score, None
+        user_category = get_cast['name']  # User-provided category name
+        user_disability = get_disability_id["name"]  # User-provided disability name
 
-        # Find the closest z_score
-        closest_result = min(
-            result_data,
-            key=lambda result: abs(float(result["z_score"]) - z_score)  # Convert Decimal to float
-        )
+        combinations = CombinationFactory.generate_combinations(user_category, user_disability)
 
-        return z_score, closest_result
+        # Step 3: Initialize a list to hold results
+        closest_results = []
 
+        # Step 4: Loop over combinations to fetch result data for each combination
+        for combination in combinations:
+            # Fetch all records for the specified year with the current combination
+            combination['product_id'] = product_id
+            combination['difficulty_level'] = difficulty_level
+            combination['input_flow_type'] = input_flow_type
+            
+            if slot is not None:   #Slot is optional
+                combination['slot'] = slot
+            result_data = RpMeritList.objects.filter(year=year, **combination,).values(
+                "z_score", "result_flow_type", "result_value"
+            )
+
+            if not result_data:
+                continue
+            
+            # Find the closest z_score for the current combination
+            closest_result = min(
+                result_data,
+                key=lambda result: abs(float(result["z_score"]) - z_score)  # Convert Decimal to float
+            )
+
+            closest_results.append({
+                "combination": combination,
+                "closest_result": closest_result,
+                
+            })
+
+        return z_score, closest_results
 
        
 
-    def get_factors(self,product_id, result_flow_type, result_value):
+    def get_factors(self, product_id, result_flow_type, result_value):
         """Fetch factors from CnextRpVariationFactor table."""
         factor = CnextRpVariationFactor.objects.filter(
             product_id=product_id,
             result_flow_type=result_flow_type,
             lower_val__lte=result_value,
             upper_val__gte=result_value
-        ).values("min_factor", "max_factor").first()
+        ).values("min_factor", "max_factor", "preset_type").first()
 
         if not factor:
             print(f"No factors found for result_value {result_value} and result_flow_type {result_flow_type}")
@@ -636,15 +673,19 @@ class RPHelper:
 
         min_factor = factor['min_factor']
         max_factor = factor['max_factor']
+        preset_type = factor['preset_type']  # Get the preset_type from the database
 
         return {
             "min_range": result_value - min_factor,
-            "max_range": result_value + max_factor
+            "max_range": result_value + max_factor,
+            "preset_type": preset_type  # Include preset_type in the returned dictionary
         }
+
 
 
         
     def get_result_details(self,input_flow_type):
+        
         """Fetch result details from RpResultFlowMaster table using input_flow_type."""
         result_details = RpResultFlowMaster.objects.filter(id=input_flow_type).values(
             "result_flow_type", "result_type", "result_process_type"
