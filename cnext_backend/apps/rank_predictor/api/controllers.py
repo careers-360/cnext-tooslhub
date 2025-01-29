@@ -1,8 +1,8 @@
 from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from cnext_backend.apps.rank_predictor.models import CnextRpUserTracking, RpInputFlowMaster
-from cnext_backend.apps.tools.models import CPProductCampaign
+from rank_predictor.models import CnextRpUserTracking, RpInputFlowMaster
+from tools.models import CPProductCampaign
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
