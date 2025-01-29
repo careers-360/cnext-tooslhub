@@ -855,6 +855,7 @@ class PrefillProductsAPI(APIView):
     permission_classes = [ApiKeyPermission]
     def get(self, request, version, **kwargs):
         product_id = request.GET.get('product_id')
+        exam_id = request.GET.get('exam_id')
         if not product_id or not product_id.isdigit():
             return CustomErrorResponse(
                 {"message": "product_id is required and should be an integer value"},
@@ -863,7 +864,7 @@ class PrefillProductsAPI(APIView):
         product_id = int(product_id)
         # Fetch colleges from the database
         prefill_helper = Prefill()
-        prefill_response = prefill_helper.get_prefill_fields(product_id=product_id)
+        prefill_response = prefill_helper.get_prefill_fields(product_id=product_id, exam_id=exam_id)
 
         return SuccessResponse(prefill_response, status=status.HTTP_200_OK)
 

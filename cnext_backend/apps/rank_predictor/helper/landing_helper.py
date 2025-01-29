@@ -5,7 +5,7 @@ from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpF
 from tools.models import CPFeedback, CPProductCampaign, ToolsFAQ
 
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain, PreferredEducationLevel
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
 import os
 from django.utils import timezone
@@ -806,7 +806,7 @@ class ProductHelper:
 
 class Prefill:
     
-    def get_prefill_fields(self, product_id=None):
+    def get_prefill_fields(self, product_id=None, exam_id=None):
         """
         Fetch product details for a specific product ID from CPProductCampaign table.
 
@@ -851,9 +851,31 @@ class Prefill:
             print("Session peak start or end date is missing.")
             field_list = [{}]
 
-        print(f"smart registration session {field_list}")
+        # print(f"smart registration session {field_list}")
 
-        return {'fields': field_list, 'session': session}
+        exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id').first()
+        level = exam_dict.get('preferred_education_level_id', None)
+
+        # print(f"got preffered education level as {level}")
+
+        if level != None:
+            preferred_education_level_dic = PreferredEducationLevel.objects.filter(id=level).values("id", "parent_id", "name").first()
+
+        id = preferred_education_level_dic.get('id', None)
+        parent_id = preferred_education_level_dic.get('parent_id', None)
+
+        # print(f"got parent id as {id}")
+
+        if id != None and parent_id == 0:
+            # print(f"inside parent level ")
+            education_level_name = preferred_education_level_dic.get('name', None)
+        else:
+            # print(f"inside parent level ")
+            preferred_education_parent_level_dic = PreferredEducationLevel.objects.filter(id=parent_id).values("id", "parent_id", "name").first()
+            education_level_name = preferred_education_parent_level_dic.get('name', None)
+            id = preferred_education_parent_level_dic.get('id', None)
+
+        return {'fields': field_list, 'session': session, 'education_level_name': education_level_name, 'preferred_education_level_id': id}
 
 
 class FeedbackHelper:
