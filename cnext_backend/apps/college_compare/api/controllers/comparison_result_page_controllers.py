@@ -9,7 +9,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -265,17 +265,18 @@ class RankingAccreditationCombinedComparisonView(APIView):
 
             # Rest of the code remains the same...
             combined_ranking_data_current_year = CollegeRankingService.get_state_and_ownership_ranks(
-                college_ids_list, course_ids_list, year
+                college_ids_list, course_ids_dict, year
             )
 
             combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(
-                college_ids_list, course_ids_list, year - 1
+                college_ids_list, course_ids_dict, year - 1
             )
 
             years = [year - i for i in range(5)]
             multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(
-                college_ids_list, course_ids_list, years
+                college_ids_list, course_ids_dict, years
             )
+
             result = {
                 "current_year_data": ranking_data_current_year,
                 "previous_year_data": ranking_data_previous_year,
@@ -283,6 +284,7 @@ class RankingAccreditationCombinedComparisonView(APIView):
                 "previous_combined_ranking_data": combined_ranking_data_previous_year,
                 "multi_year_ranking_data": multi_year_ranking_data,
             }
+            
 
     
 
@@ -396,6 +398,8 @@ class RankingGraphInsightsView(APIView):
 
             # Create mapping of college IDs to course IDs
             course_mapping = dict(zip(college_ids_list, selected_courses_list))
+
+            print(course_mapping)
 
             # Fetch ranking graph insights
             result = RankingGraphHelper.prepare_graph_insights(
@@ -1439,6 +1443,7 @@ class CollegeReviewsAIinsightsView(APIView):
             )
 
 
+
 class SingleCollegeReviewsView(APIView):
     permission_classes = [ApiKeyPermission]
     @extend_schema(
@@ -1906,3 +1911,160 @@ class FeedbackSubmitView(APIView):
                 "id": feedback.id
             }, status=status.HTTP_201_CREATED)
         return CustomErrorResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+
+class SlugCheckerView(APIView):
+    permission_classes = [ApiKeyPermission]  
+
+    @extend_schema(
+        summary="Get Parameterized Slug for College Comparison",
+        description="Retrieve the parameterized slug for comparing two colleges, with optional course parameters.",
+        parameters=[
+            OpenApiParameter(
+                name='college_ids',
+                type=int,
+                description='List of two college IDs to compare',
+                required=True
+            ),
+            OpenApiParameter(
+                name='course_ids',
+                type=int,
+                description='List of two course IDs to include in the comparison',
+                required=False
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved the alias and parameterized slug'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+       
+
+      
+        college_ids = request.query_params.get('college_ids')
+        
+        course_ids = request.query_params.get('course_ids')
+
+        
+
+      
+        try:
+            
+            
+            college_ids_list = [int(cid) for cid in college_ids.split(',')]
+
+            if course_ids:
+               
+                course_ids_list = [int(cid) for cid in course_ids.split(',')]
+                
+            else:
+                course_ids_list = None  
+            
+            
+           
+            slug_checker = SlugChecker(college_ids_list, course_ids_list)
+            result = slug_checker.get_result()  
+
+            if "error" in result:
+                return CustomErrorResponse(
+                    result,
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+
+           
+
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse(
+                {"error": str(ve)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error fetching alias: {e}")
+            return CustomErrorResponse(
+                {"error": str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AliasReverseCheckerView(APIView):
+    permission_classes = [ApiKeyPermission]
+    
+    @extend_schema(
+        summary="Get College IDs and Parameters from Alias",
+        description="Retrieve college IDs and generate parameterized URL from a comparison alias.",
+        parameters=[
+            OpenApiParameter(
+                name='alias',
+                type=str,
+                description='The alias to look up',
+                required=True
+            ),
+            OpenApiParameter(
+                name='college_ids',
+                type=int,
+                description='Optional list of two college IDs',
+                required=False
+            ),
+            OpenApiParameter(
+                name='course_ids',
+                type=int,
+                description='Optional list of two course IDs to include in the comparison',
+                required=False
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description='Successfully retrieved the college IDs and parameterized URL'),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        },
+    )
+    def get(self, request):
+        alias = request.query_params.get('alias')
+        college_ids = request.query_params.get('college_ids')
+        course_ids = request.query_params.get('course_ids')
+        
+        try:
+            # Process college_ids if provided
+            college_ids_list = None
+            if college_ids:
+                college_ids_list = [int(cid) for cid in college_ids.split(',')]
+            
+            # Process course_ids if provided
+            course_ids_list = None
+            if course_ids:
+                course_ids_list = [int(cid) for cid in course_ids.split(',')]
+            
+            # Initialize checker and get result
+            checker = AliasReverseChecker(alias, college_ids_list, course_ids_list)
+            result = checker.get_result()
+            
+            if "error" in result:
+                return CustomErrorResponse(
+                    result,
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            return SuccessResponse(result, status=status.HTTP_200_OK)
+            
+        except ValidationError as ve:
+            logger.error(f"Validation error: {ve}")
+            return CustomErrorResponse(
+                {"error": str(ve)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error processing alias: {e}")
+            return CustomErrorResponse(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+

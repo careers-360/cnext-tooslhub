@@ -8,7 +8,7 @@ from django.db.models.functions import Concat
 from django.core.cache import cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable,Optional
 from ..helpers.landing_page_helpers import DomainHelper
 
 
@@ -393,9 +393,11 @@ class QuickFactsService:
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600 * 24 * 7, cache_burst=cache_burst)
 
     
+
+
 class CardDisplayService:
     @staticmethod
-    def get_card_display_details(college_ids: List[int], course_ids: List[int], cache_burst: int = 0) -> Dict[str, Dict]:
+    def get_card_display_details(college_ids: List[int], course_ids: Optional[List[int]] = None, cache_burst: int = 0) -> Dict[str, Dict]:
         cache_key = CacheHelper.get_cache_key("cards_display_v4", college_ids, course_ids)
 
         def fetch_logo(college_id):
@@ -412,43 +414,43 @@ class CardDisplayService:
             logos = ParallelService.execute_parallel_tasks(tasks)
             logo_dict = {k: v for d in logos for k, v in d.items()}
 
-            # Fetch courses
-            courses = Course.objects.filter(
-                college_id__in=college_ids,
-                id__in=course_ids,
-                status=True
-            ).values(
-                'id', 'course_name', 'college_id', 'college__name',"college__short_name"
-            )
+            # Fetch college details (name & short name)
+            college_details = {
+                college["id"]: {"college_name": college["name"], "college_short_name": college["short_name"]}
+                for college in College.objects.filter(id__in=college_ids).values("id", "name", "short_name")
+            }
 
-            # Prepare results in the order of college_ids
+            # Fetch courses only if course_ids are provided
+            courses = []
+            if course_ids:
+                courses = Course.objects.filter(
+                    college_id__in=college_ids,
+                    id__in=course_ids,
+                    status=True
+                ).values(
+                    'id', 'course_name', 'college_id'
+                )
+
+            # Prepare results
             results = {}
             for idx, college_id in enumerate(college_ids, start=1):
                 key = f"college_{idx}"
                 matching_course = next(
                     (course for course in courses if course['college_id'] == college_id), None
                 )
-                if matching_course:
-                    logo_url = logo_dict.get(matching_course['college_id'], '')
-                    results[key] = {
-                        'id': matching_course['id'],
-                        'course_name': matching_course['course_name'],
-                        'college_id': matching_course['college_id'],
-                        'college_name': matching_course['college__name'],
-                        'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else '',
-                        "college_short_name":matching_course['college__short_name'],
-                    }
-                else:
-                
-                    results[key] = {
-                        'id': 'NA',
-                        'course_name': 'NA',
-                        'college_id': college_id,
-                        'college_name': 'NA',
-                        'logo': 'NA',
-                        "college_short_name":'NA'
-                    }
+
+                logo_url = logo_dict.get(college_id, '')
+                college_info = college_details.get(college_id, {"college_name": "NA", "college_short_name": "NA"})
+
+                results[key] = {
+                    'id': matching_course['id'] if matching_course else 'NA',
+                    'course_name': matching_course['course_name'] if matching_course else 'NA',
+                    'college_id': college_id,
+                    'college_name': college_info["college_name"],
+                    'logo': f"https://cache.careers360.mobi/media/{logo_url}" if logo_url else '',
+                    "college_short_name": college_info["college_short_name"],
+                }
+
             return results
 
         return CacheHelper.get_or_set(cache_key, fetch_data, timeout=3600, cache_burst=cache_burst)
-
