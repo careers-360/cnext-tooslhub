@@ -149,5 +149,13 @@ urlpatterns = [
     path(f'{compare_prefix}resultPage/user-preference-update/',
          comparison_result_page_controllers.UserPreferenceUpdateView.as_view(),
          name='user-preference-update'),
+    
+    path(f'{compare_prefix}resultPage/check-slug-url',
+         comparison_result_page_controllers.SlugCheckerView.as_view(),
+         name='check-slug-url'),
+    
+    path(f'{compare_prefix}resultPage/check-alias-url',
+         comparison_result_page_controllers.AliasReverseCheckerView.as_view(),
+         name='check-alias-url')
 
 ]

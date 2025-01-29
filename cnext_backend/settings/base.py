@@ -52,6 +52,7 @@ INSTALLED_APPS = [
 	'rest_framework',
 	'rest_framework.authtoken',
 	'rest_framework_simplejwt',
+	"django_celery_beat"
 ]
 
 PROJECT_APPS = [
@@ -186,15 +187,18 @@ AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'cnext_b
 LOGIN_REDIRECT_URL = '/'
 
 CELERY = {
-	'broker_url': 'redis://'+os.getenv('REDIS_HOST','localhost')+':6379/0',
-	'result_backend': 'redis://'+os.getenv('REDIS_HOST','localhost')+':6379/0',
+	'broker_url': 'redis://'+os.getenv('REDIS_HOST','localhost')+':6379',
+	'result_backend': 'redis://'+os.getenv('REDIS_HOST','localhost')+':6379',
 	'result_expires': None ,
 	'worker_send_task_events': True, # needed for worker monitoring
 	'timezone': 'Asia/Kolkata',
 	'task_ignore_result': False,
 	'task_time_limit':10,
-	'task_create_missing_queues':True
+	'task_create_missing_queues':True,
+	"broker_connection_retry_on_startup":True
 }
+
+CELERY_IMPORTS = ('college_compare.tasks',)
 
 CELERY_PRIORITY_QUEUE = 'fastlane'
 ADMINS = (
@@ -202,6 +206,19 @@ ADMINS = (
 			('Surya Dev Singh', 'surya.dev@careers360.com'),
 			('Ayush Jhajriya', 'ayush.jhajriya@careers360.com'),
 		)
+
+from celery.schedules import crontab
+
+# CELERY_BEAT_SCHEDULE = {
+#     'run-url-alias-every-week': {
+#         'task': 'apps.college_compare.tasks.run_url_alias_command',
+#         'schedule': crontab(16, 0, day_of_week='tue'),  # Every Monday at midnight
+#     },
+# }
+
+
+
+
 
 MANAGERS = ADMINS
 
@@ -227,6 +244,92 @@ CACHES={
     }
 }
 
+
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '%(levelname)s [%(asctime)s] %(module)s %(message)s'
+#         },
+#         # Adding a Celery-specific formatter to include task information
+#         'celery_formatter': {
+#             'format': '%(levelname)s [%(asctime)s] [%(task_name)s] %(message)s'
+#         },
+#     },
+#     'handlers': {
+#         'console': {
+#             'level': 'DEBUG',
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'verbose'
+#         },
+#         'mail_admins': {
+#             'level': 'ERROR',
+#             'class': 'django.utils.log.AdminEmailHandler'
+#         },
+#         'file': {
+#             'level': 'INFO',
+#             'class': 'logging.FileHandler',
+#             'filename': '/var/log/gunicorn/debug.log',
+#         },
+#         'gunicorn': {
+#             'level': 'DEBUG',
+#             'class': 'logging.handlers.RotatingFileHandler',
+#             'formatter': 'verbose',
+#             'filename': '/var/log/gunicorn/debug.log',
+#             'maxBytes': 1024 * 1024 * 200,  # 200 MB
+#         },
+#         # Adding a dedicated Celery log handler
+#         'celery_handler': {
+#             'level': 'DEBUG',
+#             'class': 'logging.handlers.RotatingFileHandler',
+#             'filename': '/var/log/gunicorn/celery.log',
+#             'formatter': 'celery_formatter',
+#             'maxBytes': 1024 * 1024 * 200,  # 200 MB
+#             'backupCount': 10,
+#         }
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console', 'mail_admins', 'file'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'custom': {
+#             'handlers': ['console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         # Adding Celery loggers
+#         'celery': {
+#             'handlers': ['celery_handler', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'celery.task': {
+#             'handlers': ['celery_handler', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'celery.worker': {
+#             'handlers': ['celery_handler', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'celery.beat': {
+#             'handlers': ['celery_handler', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         # Add a logger for your specific task module
+#         'college_compare.tasks': {
+#             'handlers': ['celery_handler', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
+
 LOGGING = {
 	'version': 1,
 	'disable_existing_loggers': False,
@@ -250,13 +353,13 @@ LOGGING = {
 	            'class': 'logging.FileHandler',
 	            'filename': '/var/log/gunicorn/debug.log',
 	        },
-		# 'gunicorn': {
-		# 	'level': 'DEBUG',
-		# 	'class': 'logging.handlers.RotatingFileHandler',
-		# 	'formatter': 'verbose',
-		# 	'filename': '/var/log/gunicorn/debug.log',
-		# 	'maxBytes': 1024 * 1024 * 200,  # 100 mb
-		# }
+		'gunicorn': {
+			'level': 'DEBUG',
+			'class': 'logging.handlers.RotatingFileHandler',
+			'formatter': 'verbose',
+			'filename': '/var/log/gunicorn/debug.log',
+			'maxBytes': 1024 * 1024 * 200,  # 100 mb
+		}
 	},
 	'loggers': {
 		'django': {

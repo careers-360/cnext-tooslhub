@@ -1354,3 +1354,146 @@ class UserReportPreferenceMatrix(models.Model):
             models.Index(fields=['preference_1', 'preference_2', 'preference_3', 'preference_4', 'preference_5']),
             models.Index(fields=['course_1', 'course_2', 'course_3']),
         ]
+
+
+from django.db import models
+from django.core.validators import MinLengthValidator
+from django.utils.timezone import now
+from django.db import transaction
+
+
+class UrlMetaPattern(models.Model):
+    """
+    Defines different types of URL patterns used throughout the application.
+    This model serves as a reference table for categorizing and organizing URLs.
+    Each pattern can be associated with multiple URL aliases.
+    """
+    id = models.AutoField(
+        primary_key=True,
+        help_text="Unique identifier for the URL pattern"
+    )
+    type = models.CharField(
+        max_length=255,
+        validators=[MinLengthValidator(1)],
+        help_text="Type of URL pattern (e.g., 'compare-colleges', 'profile')",
+        db_index=True
+    )
+
+    class Meta:
+        db_table = 'base_url_meta_pattern'
+        verbose_name = 'URL Meta Pattern'
+        verbose_name_plural = 'URL Meta Patterns'
+        indexes = [
+            models.Index(fields=['type'], name='url_pattern_type_idx')
+        ]
+
+    def __str__(self):
+        return f"URL Pattern: {self.type}"
+
+    @classmethod
+    def get_comparison_pattern(cls):
+        """Creates or retrieves the pattern used for college comparison URLs."""
+        return cls.objects.get_or_create(
+            type='compare-colleges',
+            defaults={'id': 102}
+        )[0]
+
+    def get_aliases(self):
+        """Returns all URL aliases using this pattern."""
+        return self.url_aliases.all()
+
+
+from django.db import models
+from django.utils import timezone
+
+
+class BaseUrlAlias(models.Model):
+    """
+    Manages URL aliases and their corresponding source URLs.
+    This model handles URL redirects and SEO-friendly URLs throughout the application.
+    Each alias is associated with a specific URL pattern and includes metadata
+    for tracking creation, updates, and SEO properties.
+    """
+    url_meta_pattern = models.ForeignKey(
+        'UrlMetaPattern',  # Use string reference for the related model
+        on_delete=models.CASCADE,
+        related_name='url_aliases',
+        help_text="The pattern type this URL follows"
+    )
+    source = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Original source URL path"
+    )
+    alias = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="SEO-friendly URL alias"
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Creation timestamp"
+    )
+    updated = models.DateTimeField(
+        auto_now=True,
+        help_text="Last update timestamp"
+    )
+    created_by = models.IntegerField(
+        help_text="User  ID of creator"
+    )
+    updated_by = models.IntegerField(
+        help_text="User  ID of last updater"
+    )
+    status = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Status flag (1=active, 0=inactive)"
+    )
+    facet_flag = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Indicates if this is a faceted URL (1=yes, 0=no)"
+    )
+    push_to_sitemap = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Include in sitemap (1=yes, 0=no)"
+    )
+    h1_tag = models.CharField(
+        max_length=255,
+        default="NA",
+        help_text="SEO H1 tag content"
+    )
+    status_code = models.PositiveSmallIntegerField(
+        default=200,
+        help_text="HTTP status code"
+    )
+
+    class Meta:
+        db_table = 'base_url_alias'
+        indexes = [
+            models.Index(fields=['source']),
+            models.Index(fields=['alias']),
+            models.Index(fields=['status']),
+            models.Index(fields=['url_meta_pattern'])
+        ]
+
+    def __str__(self):
+        return f"{self.alias} -> {self.source}"
+
+    @staticmethod
+    def bulk_create_aliases(aliases_data, user_id=1):
+        """
+        Efficiently creates multiple URL aliases in bulk.
+        
+        Args:
+            aliases_data: List of dicts with source and alias keys
+            user_id: ID of the user creating the aliases
+        """
+        return BaseUrlAlias.objects.bulk_create([
+            BaseUrlAlias(
+                source=data['source'],
+                alias=data['alias'],
+                h1_tag=data['h1_tag'],
+                url_meta_pattern_id=data['url_meta_pattern_id'],
+                created_by=user_id,
+                updated_by=user_id
+            ) for data in aliases_data
+        ])

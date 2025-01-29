@@ -218,13 +218,14 @@ class QuickFactsView(APIView):
 
 class CardDisplayServiceView(APIView):
     permission_classes = [ApiKeyPermission]
+
     @extend_schema(
         summary="Get Card Display Details",
         description="Retrieve card display details for colleges and courses, including social media links.",
         parameters=[
             OpenApiParameter(name='college_ids', type=str, description='Comma-separated list of college IDs', required=True),
-            OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs', required=True),
-             OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
+            OpenApiParameter(name='course_ids', type=str, description='Comma-separated list of course IDs (optional)', required=False),
+            OpenApiParameter(name='cache_burst', type=int, description='Set to 0 to bypass cache and recompute results', required=False),
         ],
         responses={
             200: OpenApiResponse(description='Successfully retrieved card display details'),
@@ -238,13 +239,13 @@ class CardDisplayServiceView(APIView):
         cache_burst = request.query_params.get('cache_burst') or 0
 
         try:
-            if not college_ids or not course_ids:
-                raise ValidationError("Both college_ids and course_ids are required")
+            if not college_ids:
+                raise ValidationError("college_ids is required")
 
             college_ids_list = list(map(int, college_ids.split(',')))
-            course_ids_list = list(map(int, course_ids.split(',')))
+            course_ids_list = list(map(int, course_ids.split(','))) if course_ids else None
 
-            result = CardDisplayService.get_card_display_details(college_ids_list, course_ids_list,int(cache_burst))
+            result = CardDisplayService.get_card_display_details(college_ids_list, course_ids_list, int(cache_burst))
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except ValidationError as ve:
             logger.error(f"Validation error: {ve}")
@@ -252,7 +253,6 @@ class CardDisplayServiceView(APIView):
         except Exception as e:
             logger.error(f"Error fetching card display details: {e}")
             return CustomErrorResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class CollegeCompareController(APIView):
     permission_classes = [ApiKeyPermission]
