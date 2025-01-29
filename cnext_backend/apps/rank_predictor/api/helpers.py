@@ -16,6 +16,7 @@ from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeed
 from .static_mappings import RP_DEFAULT_FEEDBACK
 from users.models import User
 from rest_framework.pagination import PageNumberPagination
+import chardet
 
 
 class CustomPaginator(PageNumberPagination):
