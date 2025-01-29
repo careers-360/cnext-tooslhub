@@ -203,8 +203,11 @@ class RPHelper:
     
     def _get_product__exam_from_alias(self , alias):
 
-        domain = ""
+        domain_id = ""
         level = ""
+        domain_name = ""
+        exam_id = ""
+        smart_registration = False
         
         base_url_alias = UrlAlias.objects.filter(alias=alias).first()
         split_string = base_url_alias.source.split("/")
@@ -213,20 +216,25 @@ class RPHelper:
 
         product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration").first()
 
-        exam_id = product_dict.get("exam", "")
-        smart_registration = product_dict.get("smart_registration", False)
+        # print(f"product dict {product_dict}")
+
+        if product_dict != None:
+            exam_id = product_dict.get("exam", "")
+            smart_registration = product_dict.get("smart_registration", False)
 
         exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
 
         if exam_dict != None:
-            domain_id = exam_dict.get('domain_id', "")
+            domain_id = exam_dict.get('domain_id', None)
             level = exam_dict.get('preferred_education_level_id', "")
         # print(f"exam dictionary {exam_dict}")
 
-        domain_dict = Domain.objects.filter(id=domain_id).values('name').first()
-
-        if domain_dict != None:
+        if domain_id:
+            domain_dict = Domain.objects.filter(id=domain_id).values('name').first()
             domain_name = domain_dict.get('name', "")
+
+        # if domain_dict != None:
+        #     domain_name = domain_dict.get('name', "")
 
         return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration}
         
