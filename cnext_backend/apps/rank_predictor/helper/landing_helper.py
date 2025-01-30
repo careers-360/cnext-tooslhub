@@ -213,20 +213,24 @@ class RPHelper:
         level = ""
         domain_name = ""
         exam_id = ""
-        smart_registration = False
+        smart_registration = False 
+        form_enable = False
         
         base_url_alias = UrlAlias.objects.filter(alias=alias).first()
         split_string = base_url_alias.source.split("/")
 
         product_id = int(split_string[1])
 
-        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration").first()
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration", "for_web").first()
 
         # print(f"product dict {product_dict}")
 
         if product_dict != None:
             exam_id = product_dict.get("exam", "")
             smart_registration = product_dict.get("smart_registration", False)
+            form_enable =  product_dict.get("for_web") 
+
+            # print(f"for web {form_enable}")
 
         exam_dict = Exam.objects.filter(id=exam_id).values('preferred_education_level_id', 'domain_id').first()
 
@@ -242,7 +246,7 @@ class RPHelper:
         # if domain_dict != None:
         #     domain_name = domain_dict.get('name', "")
 
-        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration}
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration, "form_enable": True if form_enable == 1 else False}
         
     def _related_products(self, product_id=None, alias=None):
         
