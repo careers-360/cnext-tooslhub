@@ -571,7 +571,6 @@ class RPCmsHelper:
             "count": 0,
             "custom_mean_sd_data": []
         }
-        # Fetch student appeared data from database
         rp_mean_sd_data = RpMeanSd.objects.filter(product_id=product_id, status=1)
         if year:
             rp_mean_sd_year_data = list(rp_mean_sd_data.filter(year=year).values("id", "product_id", "year", "input_flow_type",
@@ -1341,13 +1340,14 @@ class RPCmsHelper:
             ## Input Flow Type
             flow_type = item['flow_type'] if item['flow_type'] else None
             if flow_type and str(flow_type).isdigit():
+                flow_type_name = FORM_INPUT_PROCESS_TYPE.get(flow_type)
                 flow_type = int(flow_type)
                 if flow_type != 3:
                     flow_type = 1
 
                 flow_type_data = {
                     "id": flow_type,
-                    "name": FORM_INPUT_PROCESS_TYPE.get(flow_type)
+                    "name": flow_type_name
                 }
             else: continue
 
@@ -1372,7 +1372,9 @@ class RPCmsHelper:
             else: disability_data = None 
 
             ## Input fields
-            input_fields = item['input_fields'] if item['input_fields'] else []
+            # input_fields = item['input_fields'] if item['input_fields'] else []
+            input_flow_type_mapping = dict(RpInputFlowMaster.objects.filter(status=1).annotate(key=F('id'), value=F('input_flow_type')).values_list('key', 'value'))
+            input_fields = self.formate_input_data(flow_type_name, input_flow_type_mapping, item['input_fields']) if item['input_fields'] else []
 
             ## Output fields
             output_fields = self.formate_output_data(flow_type, item['result_predictions']) if item['result_predictions'] else []
@@ -1386,14 +1388,25 @@ class RPCmsHelper:
             ## Form submission
             form_submission_time = item['form_submission_at'].strftime('%Y-%m-%d %H:%M:%S')
 
+            ## updated time
+            form_updated_time = item['form_updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+
+            ##Addition data
+            additional_info = item.get('additional_info',{})
+
+            ## Slot
+            slot = additional_info.get("Enter Slot")
+            if slot.get("id"):
+                slot["id"] = int(slot.get("id"))
+
             ## dataset
             dataset = {
                 'uid': item['uid'],
                 'uuid': item['uuid'],
                 'login_status': item['login_status'],
                 'form_submission_time': form_submission_time,
-                'usage_duration': None,
-                'slot': None,
+                'usage_duration': form_updated_time,
+                'slot': slot,
                 'category': category_data,
                 'disability': disability_data,
                 'exam_session': exam_session,
@@ -1452,6 +1465,34 @@ class RPCmsHelper:
 
         return formated_data
 
+    def formate_input_data(self, flow_type_name, input_flow_type_mapping, data):
+        formated_data = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            input_value = item.get('value')
+            input_flow_type = item.get('input_flow_type')
+
+            if not input_value:
+                continue
+            
+
+            field_name = input_flow_type_mapping.get(input_flow_type)
+
+            if field_name and field_name != flow_type_name:
+                display_name = f"{field_name} {flow_type_name}: {input_value}"
+            else:
+                display_name = f"Overall {flow_type_name} : {input_value}"
+
+            obj = {
+                "field_name" : field_name,
+                "input_value" : input_value,
+                "display_name" : display_name
+            }
+            formated_data.append(obj)
+
+        return formated_data
+
     def get_date_object(self, *args, **kwargs):
 
         usage_date = kwargs.get("usage_date")
@@ -1504,6 +1545,7 @@ class RPCmsHelper:
         master_total_count = queryset.count()
 
         # total count
+        total_count = 0
         if device_type:
             queryset = queryset.filter(device_type = device_type)
             total_count = queryset.count()
@@ -1667,11 +1709,9 @@ class CommonDropDownHelper:
             dropdown = [{"id": year, "value": year} for year in year_range]
 
         elif field_name == "tools_author_name":
-            pass
-            # dropdown = UserGroups.objects.filter(product_id=product_id).annotate(key=F('input_process_type'), value=F('input_process_type')).values_list('key', 'value')
-            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(id=F('user__id'),value=F('user__name')).values('id', 'value')[:20])
-            print("thsi sis the dropdown  ", dropdown)
-            # dropdown = [{"id": key, "value": value} for key, value in dropdown]
+            # group_id=30 denotes Content Group 
+            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(author_id=F('user__id'),author_name=F('user__name')).values('author_id', 'author_name')[:20])
+            dropdown = [{"id": item["author_id"], "value": item["author_name"]} for item in dropdown]
 
         elif field_name == "tools_name":
             tools = CPProductCampaign.objects.filter(name__icontains=q).values("id", "name").order_by("name")
