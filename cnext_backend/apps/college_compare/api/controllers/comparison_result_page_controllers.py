@@ -9,7 +9,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,RankingInsightsCalculator,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -168,7 +168,7 @@ class RankingAccreditationComparisonView(APIView):
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
         course_ids_str = request.query_params.get('course_ids')
-        year = request.query_params.get('year') or current_year - 1
+        year = request.query_params.get('year') or current_year - 2
 
         try:
             if not college_ids_str:
@@ -237,7 +237,7 @@ class RankingAccreditationCombinedComparisonView(APIView):
         college_ids = request.query_params.get('college_ids')
         course_ids_str = request.query_params.get('course_ids')
         print(course_ids_str)
-        year_str = request.query_params.get('year') or current_year - 1
+        year_str = request.query_params.get('year') or current_year - 2
 
         try:
             if not college_ids or not course_ids_str or not year_str:
@@ -252,6 +252,8 @@ class RankingAccreditationCombinedComparisonView(APIView):
             # Create course_ids_dict using college_ids_list and course_ids_list
             course_ids_dict = dict(zip(college_ids_list, course_ids_list))
 
+            print(course_ids_dict)
+
             year = int(year_str)
 
             # Fetch ranking data for current and previous years
@@ -260,7 +262,7 @@ class RankingAccreditationCombinedComparisonView(APIView):
             )
             
             ranking_data_previous_year = RankingAccreditationHelper.fetch_ranking_data(
-                college_ids_list, course_ids_dict, year - 1
+                college_ids_list, course_ids_dict, year -1
             )
 
             # Rest of the code remains the same...
@@ -269,13 +271,14 @@ class RankingAccreditationCombinedComparisonView(APIView):
             )
 
             combined_ranking_data_previous_year = CollegeRankingService.get_state_and_ownership_ranks(
-                college_ids_list, course_ids_dict, year - 1
+                college_ids_list, course_ids_dict, year -1
             )
 
             years = [year - i for i in range(5)]
             multi_year_ranking_data = MultiYearRankingHelper.fetch_multi_year_ranking_data(
                 college_ids_list, course_ids_dict, years
             )
+            print(years)
 
             result = {
                 "current_year_data": ranking_data_current_year,
@@ -284,12 +287,14 @@ class RankingAccreditationCombinedComparisonView(APIView):
                 "previous_combined_ranking_data": combined_ranking_data_previous_year,
                 "multi_year_ranking_data": multi_year_ranking_data,
             }
+
+            print(result)
             
 
     
 
           
-            insights = RankingAiInsightHelper.generate_ranking_insights(result)
+            insights = RankingInsightsCalculator.calculate_ranking_insights(result)
             result['insights'] = insights
 
             # Return successful response with insights

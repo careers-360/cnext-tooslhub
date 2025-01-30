@@ -31,8 +31,13 @@ djangorestframework-simplejwt==5.3.1
 drf-spectacular==0.28.0
 ecs-logging==2.2.0
 elastic-apm==6.23.0
+<<<<<<< HEAD
 elastic-transport==8.4.0
 elasticsearch==8.11.0
+=======
+elastic-transport==8.15.1
+elasticsearch==8.17.0
+>>>>>>> college_compare
 geographiclib==2.0
 geopy==2.4.1
 gunicorn==23.0.0
@@ -66,7 +71,11 @@ sqlparse==0.5.2
 typing-extensions==4.12.2
 tzdata==2025.1
 uritemplate==4.1.1
+<<<<<<< HEAD
 urllib3>=1.26.2,<1.27
+=======
+urllib3==1.26.9
+>>>>>>> college_compare
 uWSGI==2.0.28
 vine==5.1.0
 wcwidth==0.2.13
