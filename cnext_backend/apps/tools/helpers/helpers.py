@@ -259,7 +259,6 @@ class ToolsHelper():
         serializer = ToolBasicDetailSerializer(instance=instance, data=request_data) if instance else ToolBasicDetailSerializer(data=request_data)
         if serializer.is_valid():
             obj = serializer.save()
-            #TODO verify by sahil
             product_id = obj.id
 
             if smart_registration:
@@ -377,8 +376,9 @@ class ToolsHelper():
         if not user.get('is_active') or not user.get('is_staff'):
             return False, {"error": "Author is not active or staff"}
 
-        needed_permissions = Permissions.objects.filter(name__in=["Manage Predictor Tools", "Edit Predictor Content SEO"]).values_list("id", flat=True)
-        user_permissions = UserPermissions.objects.filter(user_id=author_id, permission__in=needed_permissions, status=1)
+        # needed_permissions = Permissions.objects.filter(name__in=["Manage Predictor Tools", "Edit Predictor Content SEO"]).values_list("id", flat=True)
+        # user_permissions = UserPermissions.objects.filter(user_id=author_id, permission__in=needed_permissions, status=1)
+        user_permissions = UserGroups.objects.filter(user_id=author_id, group_id=30, status=1)
         if not user_permissions.exists():
             return False, {"error": "Author doesn't have necessary permissions"}
 
