@@ -65,3 +65,10 @@ DEVICE_TYPE = {
     4: "Ios"
 }
 
+DEVICE_TYPE_CHOICE = {
+    "Web": "Web",
+    "Mobile": "Mobile",
+    "Andriod": "Andriod",
+    "Ios": "Ios"
+}
+

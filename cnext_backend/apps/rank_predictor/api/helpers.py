@@ -10,7 +10,7 @@ from django.utils.timezone import now
 from django.conf import settings
 from django.db.models import Max,F, Q, Count
 from datetime import datetime, timedelta, date
-from utils.helpers.choices import CASTE_CATEGORY, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
+from utils.helpers.choices import CASTE_CATEGORY, DEVICE_TYPE_CHOICE, DIFFICULTY_LEVEL, DISABILITY_CATEGORY, FACTOR_TYPE, FORM_INPUT_PROCESS_TYPE, INPUT_TYPE, MAPPED_CATEGORY, RESULT_PROCESS_TYPE, RESULT_TYPE, RP_FIELD_TYPE, STUDENT_TYPE, FIELD_TYPE, TOOL_TYPE
 from rank_predictor.models import CnextRpCreateInputForm, RpContentSection, RpFormField, RpInputFlowMaster, RpMeritList, RpMeritSheet,\
       RpResultFlowMaster, CnextRpSession, CnextRpVariationFactor, RpMeanSd, RPStudentAppeared, CnextRpUserTracking
 from tools.models import CPProductCampaign, CasteCategory, CollegeCourse, CPFeedback, DisabilityCategory, Domain, Exam, UserGroups
@@ -1586,6 +1586,8 @@ class CommonDropDownHelper:
         selected_id = kwargs.get('selected_id')
         product_id = kwargs.get('product_id')
         product_type = kwargs.get('product_type','')
+        # page_size = int(kwargs.get("page_size", 20))
+        # page = int(kwargs.get("pages", 1))
 
         internal_limit = None
         dropdown_data = {
@@ -1632,6 +1634,22 @@ class CommonDropDownHelper:
         elif field_name == "factor_type":
             dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in FACTOR_TYPE.items()]
 
+        elif field_name == "device_type":
+            dropdown = [{"id": key, "value": val, "selected": selected_id == key} for key, val in DEVICE_TYPE_CHOICE.items()]
+
+        elif field_name == "email":
+            if q:
+                internal_limit = self.limit
+                self.offset = (self.page - 1) * self.limit
+                user_data = User.objects.filter(email__istartswith=q).values_list('id', 'email')[self.offset: self.offset + self.limit]
+                dropdown = [
+                    {
+                        "user_id": id,
+                        "email": email
+                    }
+                    for id, email in user_data
+                ]
+                
         elif field_name == "domain":
             dropdown = [
             {"id": domain.get("id"), "value": domain.get("name")}
