@@ -31,7 +31,7 @@ djangorestframework-simplejwt==5.3.1
 drf-spectacular==0.28.0
 ecs-logging==2.2.0
 elastic-apm==6.23.0
-elastic-transport==8.17.0
+elastic-transport==8.15.1
 elasticsearch==8.17.0
 geographiclib==2.0
 geopy==2.4.1
@@ -57,7 +57,7 @@ python-dotenv==0.21.1
 PyYAML==6.0.2
 redis==5.2.0
 referencing==0.35.1
-requests==2.32.3
+requests==2.31.0
 rpds-py==0.20.1
 s3transfer==0.10.4
 six==1.17.0
@@ -66,7 +66,7 @@ sqlparse==0.5.2
 typing-extensions==4.12.2
 tzdata==2025.1
 uritemplate==4.1.1
-urllib3==2.2.3
+urllib3==1.26.9
 uWSGI==2.0.28
 vine==5.1.0
 wcwidth==0.2.13

@@ -402,13 +402,390 @@ def get_ordinal_suffix(num: int) -> str:
 
 
 
+# class CollegeRankingService:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a cache key using MD5 hashing.
+#         """
+#         key = '__'.join(map(str, args))
+#         return md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def get_state_and_ownership_ranks(
+#         college_ids: List[int],
+#         course_ids: List[int],
+#         year: int
+#     ) -> Dict[str, Dict]:
+#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
+#         try:
+#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
+#             cached_result = cache.get(cache_key)
+#             if cached_result:
+#                 return cached_result
+            
+          
+            
+#             course_ids_values = list(course_ids.values())  # Extract course IDs
+#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
+#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
+#             domain_groups = {}
+
+#             for college_id in college_ids:
+#                 domain_id = None
+#                 if course_ids:
+#                     course_id = course_ids.get(college_id)  
+#                     if course_id:
+#                         domain_id = course_domain_map.get(course_id) 
+
+#                 domain_groups.setdefault(domain_id, []).append(college_id) 
+
+#                 result = {}
+
+#             for domain_id, domain_college_ids in domain_groups.items():
+
+            
+#                 base_queryset = RankingUploadList.objects.filter(
+#                     ranking__ranking_stream=domain_id,
+#                     ranking__year=year,
+#                     ranking__status=1
+#                 ).select_related('college', 'college__location')
+
+#                 if not base_queryset.exists():
+#                     popular_stream = (
+#                         College.objects.filter(id__in=domain_college_ids)
+#                         .values_list('popular_stream', flat=True)
+#                         .first()
+#                     )
+
+#                     if popular_stream:
+#                         base_queryset = RankingUploadList.objects.filter(
+#                             ranking__ranking_stream=popular_stream,
+#                             ranking__year=year,
+#                             ranking__status=1
+#                         ).select_related('college', 'college__location')
+
+
+             
+#                 total_counts = base_queryset.values(
+#                     'college__location__state_id',
+#                     'college__ownership'
+#                 )
+
+               
+
+#                 state_totals = {}
+#                 ownership_totals = {}
+#                 for college in total_counts:
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+#                     if state_id:
+#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
+#                     if ownership:
+#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
+
+#                 all_ranked_colleges = list(base_queryset.values(
+#                     'college_id',
+#                     'overall_rank',
+#                     'college__location__state_id',
+#                     'college__location__loc_string',
+#                     'college__ownership'
+#                 ).filter(
+#                     overall_rank__isnull=False
+#                 ).order_by('overall_rank'))
+
+#                 state_ranks = {}
+#                 college_details = {}
+#                 ownership_groups = {}
+
+#                 for college in all_ranked_colleges:
+#                     college_id = college['college_id']
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+#                     print(ownership)
+
+#                     overall_rank_str = college['overall_rank']
+
+#                     if overall_rank_str and overall_rank_str.isdigit():
+#                         overall_rank = int(overall_rank_str)
+#                     else:
+#                         # Skip processing if overall_rank is invalid
+#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
+#                         continue
+
+#                     if college_id in domain_college_ids:
+#                         college_details[college_id] = {
+#                             'state_id': state_id,
+#                             'state_name': college['college__location__loc_string'],
+#                             'ownership': ownership,
+#                             'overall_rank': overall_rank
+#                         }
+
+#                     if state_id not in state_ranks:
+#                         state_ranks[state_id] = {}
+#                     current_rank = len(state_ranks[state_id]) + 1
+#                     state_ranks[state_id][college_id] = current_rank
+
+#                     ownership_groups.setdefault(ownership, []).append({
+#                         'college_id': college_id,
+#                         'overall_rank': overall_rank
+#                     })
+
+#                 ownership_ranks = {}
+#                 for ownership, colleges in ownership_groups.items():
+#                     colleges.sort(key=lambda x: x['overall_rank'])
+#                     current_rank = 1
+#                     prev_rank = None
+#                     ownership_ranks[ownership] = {}
+                    
+#                     for idx, college in enumerate(colleges):
+#                         if idx > 0 and college['overall_rank'] > prev_rank:
+#                             current_rank = idx + 1
+#                         ownership_ranks[ownership][college['college_id']] = current_rank
+#                         prev_rank = college['overall_rank']
+
+#                 for idx, college_id in enumerate(domain_college_ids):
+#                     college_key = f"college_{idx + 1}"
+#                     details = college_details.get(college_id, {})
+
+#                     if details:
+#                         state_id = details['state_id']
+#                         ownership = details['ownership']
+#                         print(ownership,"-------")
+#                         state_name = details['state_name']
+
+#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
+#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
+
+#                         state_total = state_totals.get(state_id, 0)
+#                         ownership_total = ownership_totals.get(ownership, 0)
+#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
+#                     else:
+#                         state_rank = ownership_rank = "Not Available"
+#                         state_total = ownership_total = 0
+#                         state_name = ""
+#                         ownership_type = "Unknown"
+
+#                     result[college_key] = {
+#                         "college_id": college_id,
+#                         "domain": domain_id,
+#                         "state_rank_display": (
+#                             f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
+#                             if isinstance(state_rank, int) else "Not Available"
+#                         ),
+#                         "ownership_rank_display": (
+#                             f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
+#                             if isinstance(ownership_rank, int) else "Not Available"
+#                         ),
+#                     }
+
+#             # Cache the result for future use
+#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
+#             return result
+
+#         except NoDataAvailableError as nde:
+#             logger.warning(f"No data available: {nde}")
+#             raise
+
+#         except Exception as e:
+#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
+#             raise
+
+
+
+# class CollegeRankingService:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a cache key using MD5 hashing.
+#         """
+#         key = '_______'.join(map(str, args))
+#         return md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def get_state_and_ownership_ranks(
+#         college_ids: List[int],
+#         course_ids: List[int],
+#         year: int
+#     ) -> Dict[str, Dict]:
+#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
+#         try:
+#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
+#             cached_result = cache.get(cache_key)
+#             if cached_result:
+#                 return cached_result
+            
+#             course_ids_values = list(course_ids.values())  # Extract course IDs
+#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
+#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
+#             domain_groups = {}
+
+#             for college_id in college_ids:
+#                 domain_id = None
+#                 if course_ids:
+#                     course_id = course_ids.get(college_id)  
+#                     if course_id:
+#                         domain_id = course_domain_map.get(course_id) 
+
+#                 domain_groups.setdefault(domain_id, []).append(college_id) 
+
+#             # Initialize the result dictionary with all college IDs
+#             result = {f"college_{idx + 1}": {
+#                 "college_id": college_id,
+#                 "domain": None,
+#                 "state_rank_display": "Not Available",
+#                 "ownership_rank_display": "Not Available",
+#             } for idx, college_id in enumerate(college_ids)}
+
+#             for domain_id, domain_college_ids in domain_groups.items():
+#                 base_queryset = RankingUploadList.objects.filter(
+#                     ranking__ranking_stream=domain_id,
+#                     ranking__year=year,
+#                     ranking__status=1
+#                 ).select_related('college', 'college__location')
+
+#                 if not base_queryset.exists():
+#                     popular_stream = (
+#                         College.objects.filter(id__in=domain_college_ids)
+#                         .values_list('popular_stream', flat=True)
+#                         .first()
+#                     )
+
+#                     if popular_stream:
+#                         base_queryset = RankingUploadList.objects.filter(
+#                             ranking__ranking_stream=popular_stream,
+#                             ranking__year=year,
+#                             ranking__status=1
+#                         ).select_related('college', 'college__location')
+
+#                 total_counts = base_queryset.values(
+#                     'college__location__state_id',
+#                     'college__ownership'
+#                 )
+
+#                 state_totals = {}
+#                 ownership_totals = {}
+#                 for college in total_counts:
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+#                     if state_id:
+#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
+#                     if ownership:
+#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
+
+#                 all_ranked_colleges = list(base_queryset.values(
+#                     'college_id',
+#                     'overall_rank',
+#                     'college__location__state_id',
+#                     'college__location__loc_string',
+#                     'college__ownership'
+#                 ).filter(
+#                     overall_rank__isnull=False
+#                 ).order_by('overall_rank'))
+
+#                 state_ranks = {}
+#                 college_details = {}
+#                 ownership_groups = {}
+
+#                 for college in all_ranked_colleges:
+#                     college_id = college['college_id']
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+
+#                     overall_rank_str = college['overall_rank']
+
+#                     if overall_rank_str and overall_rank_str.isdigit():
+#                         overall_rank = int(overall_rank_str)
+#                     else:
+#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
+#                         continue
+
+#                     if college_id in domain_college_ids:
+#                         college_details[college_id] = {
+#                             'state_id': state_id,
+#                             'state_name': college['college__location__loc_string'],
+#                             'ownership': ownership,
+#                             'overall_rank': overall_rank
+#                         }
+
+#                     if state_id not in state_ranks:
+#                         state_ranks[state_id] = {}
+#                     current_rank = len(state_ranks[state_id]) + 1
+#                     state_ranks[state_id][college_id] = current_rank
+
+#                     ownership_groups.setdefault(ownership, []).append({
+#                         'college_id': college_id,
+#                         'overall_rank': overall_rank
+#                     })
+
+#                 ownership_ranks = {}
+#                 for ownership, colleges in ownership_groups.items():
+#                     colleges.sort(key=lambda x: x['overall_rank'])
+#                     current_rank = 1
+#                     prev_rank = None
+#                     ownership_ranks[ownership] = {}
+                    
+#                     for idx, college in enumerate(colleges):
+#                         if idx > 0 and college['overall_rank'] > prev_rank:
+#                             current_rank = idx + 1
+#                         ownership_ranks[ownership][college['college_id']] = current_rank
+#                         prev_rank = college['overall_rank']
+
+#                 for idx, college_id in enumerate(domain_college_ids):
+#                     details = college_details.get(college_id, {})
+
+#                     if details:
+#                         state_id = details['state_id']
+#                         ownership = details['ownership']
+#                         state_name = details['state_name']
+
+#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
+#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
+
+#                         state_total = state_totals.get(state_id, 0)
+#                         ownership_total = ownership_totals.get(ownership, 0)
+#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
+#                     else:
+#                         state_rank = ownership_rank = "Not Available"
+#                         state_total = ownership_total = 0
+#                         state_name = ""
+#                         ownership_type = "Unknown"
+
+#                     result[f"college_{idx + 1}"].update({
+#                         "domain": domain_id,
+#                         "state_rank_display": (
+#                             f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
+#                             if isinstance(state_rank, int) else "Not Available"
+#                         ),
+#                         "ownership_rank_display": (
+#                             f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
+#                             if isinstance(ownership_rank, int) else "Not Available"
+#                         ),
+#                     })
+
+#             # Cache the result for future use
+#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
+#             return result
+
+#         except NoDataAvailableError as nde:
+#             logger.warning(f"No data available: {nde}")
+#             raise
+
+#         except Exception as e:
+#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
+#             raise
+
+
+
 class CollegeRankingService:
     @staticmethod
     def get_cache_key(*args) -> str:
         """
         Generate a cache key using MD5 hashing.
         """
-        key = '__'.join(map(str, args))
+        key = '________'.join(map(str, args))
         return md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -423,29 +800,36 @@ class CollegeRankingService:
             cached_result = cache.get(cache_key)
             if cached_result:
                 return cached_result
-            
-          
-            
-            course_ids_values = list(course_ids.values())  # Extract course IDs
+
+            # Extract course IDs and create a mapping of college_id to domain
+            course_ids_values = list(course_ids.values())
             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
 
-            domain_groups = {}
-
+            # Create a mapping of college_id to domain
+            college_domain_map = {}
             for college_id in college_ids:
-                domain_id = None
-                if course_ids:
-                    course_id = course_ids.get(college_id)  
-                    if course_id:
-                        domain_id = course_domain_map.get(course_id) 
+                course_id = course_ids.get(college_id)
+                if course_id:
+                    college_domain_map[college_id] = course_domain_map.get(course_id)
+                else:
+                    college_domain_map[college_id] = None
 
-                domain_groups.setdefault(domain_id, []).append(college_id) 
+            # Initialize the result dictionary with all college IDs
+            result = {f"college_{idx + 1}": {
+                "college_id": college_id,
+                "domain": college_domain_map[college_id],
+                "state_rank_display": "Not Available",
+                "ownership_rank_display": "Not Available",
+            } for idx, college_id in enumerate(college_ids)}
 
-                result = {}
+            # Group colleges by domain
+            domain_groups = {}
+            for college_id in college_ids:
+                domain_id = college_domain_map[college_id]
+                domain_groups.setdefault(domain_id, []).append(college_id)
 
             for domain_id, domain_college_ids in domain_groups.items():
-
-            
                 base_queryset = RankingUploadList.objects.filter(
                     ranking__ranking_stream=domain_id,
                     ranking__year=year,
@@ -466,14 +850,10 @@ class CollegeRankingService:
                             ranking__status=1
                         ).select_related('college', 'college__location')
 
-
-             
                 total_counts = base_queryset.values(
                     'college__location__state_id',
                     'college__ownership'
                 )
-
-               
 
                 state_totals = {}
                 ownership_totals = {}
@@ -503,14 +883,12 @@ class CollegeRankingService:
                     college_id = college['college_id']
                     state_id = college['college__location__state_id']
                     ownership = college['college__ownership']
-                    print(ownership)
 
                     overall_rank_str = college['overall_rank']
 
                     if overall_rank_str and overall_rank_str.isdigit():
                         overall_rank = int(overall_rank_str)
                     else:
-                        # Skip processing if overall_rank is invalid
                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
                         continue
 
@@ -538,21 +916,19 @@ class CollegeRankingService:
                     current_rank = 1
                     prev_rank = None
                     ownership_ranks[ownership] = {}
-                    
+
                     for idx, college in enumerate(colleges):
                         if idx > 0 and college['overall_rank'] > prev_rank:
                             current_rank = idx + 1
                         ownership_ranks[ownership][college['college_id']] = current_rank
                         prev_rank = college['overall_rank']
 
-                for idx, college_id in enumerate(domain_college_ids):
-                    college_key = f"college_{idx + 1}"
+                for college_id in domain_college_ids:
                     details = college_details.get(college_id, {})
 
                     if details:
                         state_id = details['state_id']
                         ownership = details['ownership']
-                        print(ownership,"-------")
                         state_name = details['state_name']
 
                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
@@ -567,18 +943,21 @@ class CollegeRankingService:
                         state_name = ""
                         ownership_type = "Unknown"
 
-                    result[college_key] = {
-                        "college_id": college_id,
-                        "domain": domain_id,
-                        "state_rank_display": (
-                            f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
-                            if isinstance(state_rank, int) else "Not Available"
-                        ),
-                        "ownership_rank_display": (
-                            f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
-                            if isinstance(ownership_rank, int) else "Not Available"
-                        ),
-                    }
+                    # Update the result dictionary for the specific college
+                    for key, value in result.items():
+                        if value['college_id'] == college_id:
+                            value.update({
+                                "domain": domain_id,
+                                "state_rank_display": (
+                                    f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
+                                    if isinstance(state_rank, int) else "Not Available"
+                                ),
+                                "ownership_rank_display": (
+                                    f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
+                                    if isinstance(ownership_rank, int) else "Not Available"
+                                ),
+                            })
+                            break
 
             # Cache the result for future use
             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
@@ -591,7 +970,6 @@ class CollegeRankingService:
         except Exception as e:
             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
             raise
-
 
 
 class MultiYearRankingHelper:
@@ -994,7 +1372,145 @@ class RankingAiInsightHelper:
             logger.error(f"Error in generate_ranking_insights: {str(e)}")
             return None
 
- 
+
+
+
+
+import re
+
+class RankingInsightsCalculator:
+    @staticmethod
+    def is_valid_number(value):
+        return value not in {'NA', None, ''}
+
+    @staticmethod
+    def safe_int_conversion(value):
+        if RankingInsightsCalculator.is_valid_number(value):
+            try:
+                return int(value)
+            except ValueError:
+              
+                if isinstance(value, str):
+                    value = re.sub(r'(st|nd|rd|th)', '', value)
+                try:
+                    return int(value)
+                except ValueError:
+                    return None
+        return None
+
+    @staticmethod
+    def calculate_ranking_insights(ranking_data: dict) -> dict:
+        """
+        Calculates ranking insights, ensuring proper sorting.
+        Args:
+            ranking_data (dict): Dictionary containing college ranking data.
+        Returns:
+            dict: Dictionary containing valid insights.
+        """
+        insights = {}
+        try:
+            current_year = ranking_data['current_year_data']
+            previous_year = ranking_data['previous_year_data']
+            current_combined = ranking_data['current_combined_ranking_data']
+            multi_year = ranking_data['multi_year_ranking_data']
+
+            
+            graduation_parts = sorted(
+                [
+                    f"{data['college_short_name']} scores {data['graduation_outcome_score']} in {data['domain_name']}"
+                    for college_id, data in current_year.items()
+                    if RankingInsightsCalculator.is_valid_number(data.get('graduation_outcome_score'))
+                ],
+                key=lambda x: float(x.split("scores ")[1].split(" ")[0]),  
+                reverse=True  
+            )
+            if graduation_parts:
+                insights["graduation_outcome"] = "Based on current graduation outcomes, " + ", followed by ".join(graduation_parts)
+
+          
+            ownership_types = {data['ownership'] for data in current_year.values() if 'ownership' in data}
+
+            state_ranking_parts = sorted(
+                [
+                    f"{current_year[college_id]['college_short_name']} is ranked {combined_data['state_rank_display']}"
+                    for college_id, combined_data in current_combined.items()
+                    if combined_data.get('state_rank_display') and combined_data['state_rank_display'] != 'Not Available'
+                ],
+                key=lambda x: RankingInsightsCalculator.safe_int_conversion(x.split("ranked ")[1].split(" ")[0])  
+            )
+
+            ownership_ranking_parts = sorted(
+                [
+                    f"{current_year[college_id]['college_short_name']} ranks {combined_data['ownership_rank_display']}"
+                    for college_id, combined_data in current_combined.items()
+                    if combined_data.get('ownership_rank_display') and combined_data['ownership_rank_display'] != 'Not Available'
+                ],
+                key=lambda x: RankingInsightsCalculator.safe_int_conversion(x.split("ranks ")[1].split(" ")[0]) 
+            )
+
+            if state_ranking_parts:
+                insights['state_specific_rankings'] = ", followed by ".join(state_ranking_parts)
+
+            if ownership_ranking_parts:
+                ownership_desc = "varied ownership types" if len(ownership_types) > 1 else next(iter(ownership_types), "institutes")
+                insights['ownership_rankings'] = f"Among {ownership_desc}, {', followed by '.join(ownership_ranking_parts)}"
+
+           
+
+            change_parts = []
+            for college_id, data in current_year.items():
+                current_rank = RankingInsightsCalculator.safe_int_conversion(data.get('nirf_overall_rank'))
+                previous_rank = RankingInsightsCalculator.safe_int_conversion(previous_year.get(college_id, {}).get('nirf_overall_rank'))
+
+                if current_rank is not None and previous_rank is not None:
+                    change = previous_rank - current_rank
+                    change_parts.append((data['college_short_name'], change))
+
+            if change_parts:
+                past_year_changes = ", followed by ".join(
+                    f"{college[0]} {'dips by' if college[1] < 0 else 'improves by'} {abs(college[1])} spots"
+                    for college in sorted(change_parts, key=lambda x: x[1], reverse=True)  # Descending Order
+                )
+                insights["past_year_changes"] = past_year_changes
+
+               
+                max_change_college = max(change_parts, key=lambda x: abs(x[1]))
+                insights["highest_changes"] = (
+                    f"{max_change_college[0]} shows the highest {'dip' if max_change_college[1] < 0 else 'increase'} "
+                    f"of {abs(max_change_college[1])} spots among all colleges"
+                )
+
+           
+            trends = sorted(
+                [
+                    (current_year[college_id]['college_short_name'], trend)
+                    for college_id, data in multi_year.items()
+                    if (ranks := [RankingInsightsCalculator.safe_int_conversion(r) for r in data['nirf_overall_rank']])
+                    and (valid_ranks := [r for r in ranks if r is not None])
+                    and (
+                        trend := (
+                            "improving" if all(valid_ranks[i] <= valid_ranks[i + 1] for i in range(len(valid_ranks) - 1))
+                            else "declining" if all(valid_ranks[i] >= valid_ranks[i + 1] for i in range(len(valid_ranks) - 1))
+                            else "fluctuating"
+                        )
+                    )
+                ],
+                reverse=True  # Descending Order
+            )
+
+            if trends:
+                insights["yearly_trends"] = ", followed by ".join(
+                    f"{college[0]} shows a {college[1]} trend"
+                    for college in trends
+                )
+
+            return insights
+
+        except Exception as e:
+            print(f"Error calculating insights: {str(e)}")
+            return {}
+
+
 
 
 class PlacementInsightHelper:
@@ -2932,7 +3448,7 @@ class CollegeAmenitiesHelper:
         """
         Generate a cache key by hashing the joined string of arguments.
         """
-        key = '_'.join(str(arg) for arg in args)
+        key = '_____'.join(str(arg) for arg in args)
         return md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -2967,7 +3483,7 @@ class CollegeAmenitiesHelper:
             Fetch amenities data from Elasticsearch.
             """
             try:
-                es_client = Elasticsearch([es_host], retry_on_timeout=True, max_retries=3)
+                es_client = Elasticsearch([es_host], retry_on_timeout=True, max_retries=3,verify_certs=False)
 
                 query = {
                     "query": {
