@@ -289,6 +289,20 @@ class UserTrackingAPI(APIView):
         user_data_id = rp_helper._user_tracking(product_id=product_id, alias=alias, user_data=user_data)
 
         return SuccessResponse({"id": user_data_id}, status=status.HTTP_200_OK)
+    
+    def get(self, request, version, **kwargs):
+        form_id = request.GET.get('form_id')
+        form_id = int(form_id)
+        rp_helper = RPHelper()
+        user_data = rp_helper.get_user_tracking_by_id(form_id=form_id)
+
+        if user_data != None:
+            return SuccessResponse(user_data, status=status.HTTP_200_OK)
+        else:
+            message = f"no user with form_id : {form_id} exists"
+            return CustomErrorResponse({"message": message}, status=status.HTTP_204_NO_CONTENT)
+            # SuccessResponse({response}, status=status.HTTP_204_NO_CONTENT)
+
 
 class ProductFromAliasAPI(APIView):
     """
@@ -971,6 +985,7 @@ class FeedbackSubmitAPI(APIView):
             {"message": "Feedback submitted successfully.", "feedback_data": response_data},
             status=status.HTTP_201_CREATED
         )
+
         
 
 class FeedbackAPI(APIView):
