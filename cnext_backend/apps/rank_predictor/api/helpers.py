@@ -1710,7 +1710,10 @@ class CommonDropDownHelper:
 
         elif field_name == "tools_author_name":
             # group_id=30 denotes Content Group 
-            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q).annotate(author_id=F('user__id'),author_name=F('user__name')).values('author_id', 'author_name')[:20])
+            dropdown = list(UserGroups.objects.filter(group_id=30, user__name__icontains=q, user__is_staff=1, user__is_active=1)
+                            .annotate(author_id=F('user__id'), author_name=F('user__name'))
+                            .values('author_id', 'author_name')[:20])
+
             dropdown = [{"id": item["author_id"], "value": item["author_name"]} for item in dropdown]
 
         elif field_name == "tools_name":
