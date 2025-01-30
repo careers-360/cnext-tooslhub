@@ -241,7 +241,7 @@ class ToolsFAQ(models.Model):
     updated_by = models.IntegerField(verbose_name="Product ID")
     created_by = models.IntegerField(verbose_name="Product ID")
     class Meta:
-        db_table = "cnext_tools_faq_section" #TODO change the table name 
+        db_table = "cnext_tools_faq" #TODO change the table name 
         verbose_name = "FAQ Section"
         verbose_name_plural = "FAQ Sections"
         ordering = ["-updated"]
