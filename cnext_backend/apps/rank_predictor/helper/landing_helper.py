@@ -348,6 +348,15 @@ class RPHelper:
             )
             user_tracking.save()
             return user_tracking.id
+    
+    def get_user_tracking_by_id(self, form_id=None,**kwargs):
+
+        user_data =  CnextRpUserTracking.objects.filter(id=form_id).values().first()
+
+        # print(f"user data {user_data}")
+
+        return user_data
+
 
     def calculate_rank(self, exam_id, percentile, category_id=None, disability_id=None):
         """
@@ -811,6 +820,7 @@ class Prefill:
         Fetch product details for a specific product ID from CPProductCampaign table.
 
         :param product_id: ID of the product
+        :param exam_id: ID of the exam
         :return: A dictionary containing product details
         """
         now = timezone.now()  # Use Django's timezone-aware datetime

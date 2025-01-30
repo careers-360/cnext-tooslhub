@@ -36,6 +36,7 @@ urlpatterns = [
 
 
     path("api/<int:version>/feedback", rp_controller.FeedbackAPI.as_view(), name="feedback"),
+    path("api/<int:version>/rank-predictor/form-prefill", rp_controller.UserTrackingAPI.as_view(), name='form prefill for reuse case'),
 
     
 ]
