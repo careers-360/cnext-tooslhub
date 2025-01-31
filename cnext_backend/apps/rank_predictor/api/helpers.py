@@ -1334,6 +1334,9 @@ class RPCmsHelper:
 
         if len(queryset) == 0:
             return True, usage_data
+        
+        input_flow_type_mapping = list(RpInputFlowMaster.objects.filter(status=1).values('id', 'input_flow_type', 'input_type'))
+        input_flow_type_mapping = {item['id'] : {'input_flow_type' : item['input_flow_type'], 'input_type' : item['input_type']} for item in input_flow_type_mapping}
 
         for item in queryset:
 
@@ -1373,8 +1376,7 @@ class RPCmsHelper:
 
             ## Input fields
             # input_fields = item['input_fields'] if item['input_fields'] else []
-            input_flow_type_mapping = dict(RpInputFlowMaster.objects.filter(status=1).annotate(key=F('id'), value=F('input_flow_type')).values_list('key', 'value'))
-            input_fields = self.formate_input_data(flow_type_name, input_flow_type_mapping, item['input_fields']) if item['input_fields'] else []
+            input_fields = self.formate_input_data(input_flow_type_mapping, item['input_fields']) if item['input_fields'] else []
 
             ## Output fields
             output_fields = self.formate_output_data(flow_type, item['result_predictions']) if item['result_predictions'] else []
@@ -1401,6 +1403,7 @@ class RPCmsHelper:
 
             ## dataset
             dataset = {
+                'id': item['id'],
                 'uid': item['uid'],
                 'uuid': item['uuid'],
                 'login_status': item['login_status'],
@@ -1465,27 +1468,26 @@ class RPCmsHelper:
 
         return formated_data
 
-    def formate_input_data(self, flow_type_name, input_flow_type_mapping, data):
+    def formate_input_data(self, input_flow_type_mapping, data):
         formated_data = []
         for item in data:
             if not isinstance(item, dict):
                 continue
             input_value = item.get('value')
-            input_flow_type = item.get('input_flow_type')
+            input_flow_type_id = item.get('input_flow_type')
+            flow_type_map = input_flow_type_mapping.get(input_flow_type_id)
 
-            if not input_value:
+            if not flow_type_map or not input_value:
                 continue
-            
 
-            field_name = input_flow_type_mapping.get(input_flow_type)
+            input_flow_type_name = flow_type_map.get('input_flow_type')
+            input_type = flow_type_map.get('input_type')
 
-            if field_name and field_name != flow_type_name:
-                display_name = f"{field_name} {flow_type_name}: {input_value}"
-            else:
-                display_name = f"Overall {flow_type_name} : {input_value}"
+            display_name = f"{input_type} {input_flow_type_name}: {input_value}"
 
             obj = {
-                "field_name" : field_name,
+                "input_type" : input_type,
+                "input_flow_type_name" : input_flow_type_name,
                 "input_value" : input_value,
                 "display_name" : display_name
             }
