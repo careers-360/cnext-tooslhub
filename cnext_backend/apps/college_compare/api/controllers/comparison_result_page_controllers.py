@@ -9,7 +9,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,RankingInsightsCalculator,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,FeesInsightsCalculator,PlacementInsightsCalculator,RankingInsightsCalculator,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -552,8 +552,8 @@ class PlacementStatsAIinsightsComparisonView(APIView):
 
             result = PlacementInsightHelper.fetch_placement_stats(college_ids, selected_courses, year)
 
-            ai_helper = PlacementAiInsightHelper()
-            insights = ai_helper.get_ai_insights(result)
+        
+            insights = PlacementInsightsCalculator.calculate_placement_insights(result)
 
             result['insights'] = insights
             return SuccessResponse(result['insights'], status=status.HTTP_200_OK)
@@ -748,7 +748,7 @@ class FeesAIinsightsComparisonView(APIView):
             result = FeesHelper.fetch_fees_details(course_ids_list,college_ids_list,intake_year)
             # helper = FeesAiInsightHelper()
 
-            insights=FeesAiInsightHelper.get_fees_insights(fees_data=result)
+            insights=FeesInsightsCalculator.calculate_fees_insights(fees_data=result)
             result['insights']=insights
             return SuccessResponse( result['insights'], status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
