@@ -265,11 +265,17 @@ class RPHelper:
             preferred_education_level_id=exam_domain_education_level['preferred_education_level_id']
         )[:4].values('id', 'ecb_logo', 'domain')
 
+        # print(f"exam_id and logo {exam_ids_and_logos_domain}")
+
         # Extract the ids of the exams for further querying
         exam_ids = [exam['id'] for exam in exam_ids_and_logos_domain]
 
+        # print(f"exam_ids {exam_ids}")
+
         # Fetch all the related products in a single query for the matching exam ids
         products = CPProductCampaign.objects.filter(exam__in=exam_ids).values("id", "exam", "custom_exam_name", "custom_flow_type", "custom_year", "alias")
+
+        # print(f"exam in product {products}")
 
         # Get the UrlAlias for all the sources in bulk (this is for optimization as well)
         sources = [f"result-predictor/{product['id']}" for product in products]
@@ -292,6 +298,8 @@ class RPHelper:
             exam_logo = exam['ecb_logo']
             domain_id = exam['domain']
 
+            # print(f"ecb logo : {exam_logo} for exam_id {exam_id}")
+
             # Get the product matching the current exam_id
             product = next((product for product in products if product['exam'] == exam_id), None)
 
@@ -307,7 +315,13 @@ class RPHelper:
 
                 # Build the URL and append the logo URL
                 url = f"https://{domain}/{alias}" if alias else ''
-                product['logo'] = self.exam_logo_base_url + exam_logo
+                # print(f"ecb logo {exam_logo}")
+                if exam_logo != None:
+                    # send logo url 
+                    product['logo'] = self.exam_logo_base_url + exam_logo
+                else:
+                   # handling case when there is no logo
+                   product['logo'] = None
                 product['url'] = url
 
                 # Add the product to the list
