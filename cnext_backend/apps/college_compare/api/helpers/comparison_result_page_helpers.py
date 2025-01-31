@@ -400,385 +400,6 @@ def get_ordinal_suffix(num: int) -> str:
 
 
 
-
-
-# class CollegeRankingService:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a cache key using MD5 hashing.
-#         """
-#         key = '__'.join(map(str, args))
-#         return md5(key.encode()).hexdigest()
-
-#     @staticmethod
-#     def get_state_and_ownership_ranks(
-#         college_ids: List[int],
-#         course_ids: List[int],
-#         year: int
-#     ) -> Dict[str, Dict]:
-#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
-#         try:
-#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
-#             cached_result = cache.get(cache_key)
-#             if cached_result:
-#                 return cached_result
-            
-          
-            
-#             course_ids_values = list(course_ids.values())  # Extract course IDs
-#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
-#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-
-#             domain_groups = {}
-
-#             for college_id in college_ids:
-#                 domain_id = None
-#                 if course_ids:
-#                     course_id = course_ids.get(college_id)  
-#                     if course_id:
-#                         domain_id = course_domain_map.get(course_id) 
-
-#                 domain_groups.setdefault(domain_id, []).append(college_id) 
-
-#                 result = {}
-
-#             for domain_id, domain_college_ids in domain_groups.items():
-
-            
-#                 base_queryset = RankingUploadList.objects.filter(
-#                     ranking__ranking_stream=domain_id,
-#                     ranking__year=year,
-#                     ranking__status=1
-#                 ).select_related('college', 'college__location')
-
-#                 if not base_queryset.exists():
-#                     popular_stream = (
-#                         College.objects.filter(id__in=domain_college_ids)
-#                         .values_list('popular_stream', flat=True)
-#                         .first()
-#                     )
-
-#                     if popular_stream:
-#                         base_queryset = RankingUploadList.objects.filter(
-#                             ranking__ranking_stream=popular_stream,
-#                             ranking__year=year,
-#                             ranking__status=1
-#                         ).select_related('college', 'college__location')
-
-
-             
-#                 total_counts = base_queryset.values(
-#                     'college__location__state_id',
-#                     'college__ownership'
-#                 )
-
-               
-
-#                 state_totals = {}
-#                 ownership_totals = {}
-#                 for college in total_counts:
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-#                     if state_id:
-#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
-#                     if ownership:
-#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
-
-#                 all_ranked_colleges = list(base_queryset.values(
-#                     'college_id',
-#                     'overall_rank',
-#                     'college__location__state_id',
-#                     'college__location__loc_string',
-#                     'college__ownership'
-#                 ).filter(
-#                     overall_rank__isnull=False
-#                 ).order_by('overall_rank'))
-
-#                 state_ranks = {}
-#                 college_details = {}
-#                 ownership_groups = {}
-
-#                 for college in all_ranked_colleges:
-#                     college_id = college['college_id']
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-#                     print(ownership)
-
-#                     overall_rank_str = college['overall_rank']
-
-#                     if overall_rank_str and overall_rank_str.isdigit():
-#                         overall_rank = int(overall_rank_str)
-#                     else:
-#                         # Skip processing if overall_rank is invalid
-#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
-#                         continue
-
-#                     if college_id in domain_college_ids:
-#                         college_details[college_id] = {
-#                             'state_id': state_id,
-#                             'state_name': college['college__location__loc_string'],
-#                             'ownership': ownership,
-#                             'overall_rank': overall_rank
-#                         }
-
-#                     if state_id not in state_ranks:
-#                         state_ranks[state_id] = {}
-#                     current_rank = len(state_ranks[state_id]) + 1
-#                     state_ranks[state_id][college_id] = current_rank
-
-#                     ownership_groups.setdefault(ownership, []).append({
-#                         'college_id': college_id,
-#                         'overall_rank': overall_rank
-#                     })
-
-#                 ownership_ranks = {}
-#                 for ownership, colleges in ownership_groups.items():
-#                     colleges.sort(key=lambda x: x['overall_rank'])
-#                     current_rank = 1
-#                     prev_rank = None
-#                     ownership_ranks[ownership] = {}
-                    
-#                     for idx, college in enumerate(colleges):
-#                         if idx > 0 and college['overall_rank'] > prev_rank:
-#                             current_rank = idx + 1
-#                         ownership_ranks[ownership][college['college_id']] = current_rank
-#                         prev_rank = college['overall_rank']
-
-#                 for idx, college_id in enumerate(domain_college_ids):
-#                     college_key = f"college_{idx + 1}"
-#                     details = college_details.get(college_id, {})
-
-#                     if details:
-#                         state_id = details['state_id']
-#                         ownership = details['ownership']
-#                         print(ownership,"-------")
-#                         state_name = details['state_name']
-
-#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
-#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
-
-#                         state_total = state_totals.get(state_id, 0)
-#                         ownership_total = ownership_totals.get(ownership, 0)
-#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
-#                     else:
-#                         state_rank = ownership_rank = "Not Available"
-#                         state_total = ownership_total = 0
-#                         state_name = ""
-#                         ownership_type = "Unknown"
-
-#                     result[college_key] = {
-#                         "college_id": college_id,
-#                         "domain": domain_id,
-#                         "state_rank_display": (
-#                             f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
-#                             if isinstance(state_rank, int) else "Not Available"
-#                         ),
-#                         "ownership_rank_display": (
-#                             f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
-#                             if isinstance(ownership_rank, int) else "Not Available"
-#                         ),
-#                     }
-
-#             # Cache the result for future use
-#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
-#             return result
-
-#         except NoDataAvailableError as nde:
-#             logger.warning(f"No data available: {nde}")
-#             raise
-
-#         except Exception as e:
-#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
-#             raise
-
-
-
-# class CollegeRankingService:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a cache key using MD5 hashing.
-#         """
-#         key = '_______'.join(map(str, args))
-#         return md5(key.encode()).hexdigest()
-
-#     @staticmethod
-#     def get_state_and_ownership_ranks(
-#         college_ids: List[int],
-#         course_ids: List[int],
-#         year: int
-#     ) -> Dict[str, Dict]:
-#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
-#         try:
-#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
-#             cached_result = cache.get(cache_key)
-#             if cached_result:
-#                 return cached_result
-            
-#             course_ids_values = list(course_ids.values())  # Extract course IDs
-#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
-#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-
-#             domain_groups = {}
-
-#             for college_id in college_ids:
-#                 domain_id = None
-#                 if course_ids:
-#                     course_id = course_ids.get(college_id)  
-#                     if course_id:
-#                         domain_id = course_domain_map.get(course_id) 
-
-#                 domain_groups.setdefault(domain_id, []).append(college_id) 
-
-#             # Initialize the result dictionary with all college IDs
-#             result = {f"college_{idx + 1}": {
-#                 "college_id": college_id,
-#                 "domain": None,
-#                 "state_rank_display": "Not Available",
-#                 "ownership_rank_display": "Not Available",
-#             } for idx, college_id in enumerate(college_ids)}
-
-#             for domain_id, domain_college_ids in domain_groups.items():
-#                 base_queryset = RankingUploadList.objects.filter(
-#                     ranking__ranking_stream=domain_id,
-#                     ranking__year=year,
-#                     ranking__status=1
-#                 ).select_related('college', 'college__location')
-
-#                 if not base_queryset.exists():
-#                     popular_stream = (
-#                         College.objects.filter(id__in=domain_college_ids)
-#                         .values_list('popular_stream', flat=True)
-#                         .first()
-#                     )
-
-#                     if popular_stream:
-#                         base_queryset = RankingUploadList.objects.filter(
-#                             ranking__ranking_stream=popular_stream,
-#                             ranking__year=year,
-#                             ranking__status=1
-#                         ).select_related('college', 'college__location')
-
-#                 total_counts = base_queryset.values(
-#                     'college__location__state_id',
-#                     'college__ownership'
-#                 )
-
-#                 state_totals = {}
-#                 ownership_totals = {}
-#                 for college in total_counts:
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-#                     if state_id:
-#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
-#                     if ownership:
-#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
-
-#                 all_ranked_colleges = list(base_queryset.values(
-#                     'college_id',
-#                     'overall_rank',
-#                     'college__location__state_id',
-#                     'college__location__loc_string',
-#                     'college__ownership'
-#                 ).filter(
-#                     overall_rank__isnull=False
-#                 ).order_by('overall_rank'))
-
-#                 state_ranks = {}
-#                 college_details = {}
-#                 ownership_groups = {}
-
-#                 for college in all_ranked_colleges:
-#                     college_id = college['college_id']
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-
-#                     overall_rank_str = college['overall_rank']
-
-#                     if overall_rank_str and overall_rank_str.isdigit():
-#                         overall_rank = int(overall_rank_str)
-#                     else:
-#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
-#                         continue
-
-#                     if college_id in domain_college_ids:
-#                         college_details[college_id] = {
-#                             'state_id': state_id,
-#                             'state_name': college['college__location__loc_string'],
-#                             'ownership': ownership,
-#                             'overall_rank': overall_rank
-#                         }
-
-#                     if state_id not in state_ranks:
-#                         state_ranks[state_id] = {}
-#                     current_rank = len(state_ranks[state_id]) + 1
-#                     state_ranks[state_id][college_id] = current_rank
-
-#                     ownership_groups.setdefault(ownership, []).append({
-#                         'college_id': college_id,
-#                         'overall_rank': overall_rank
-#                     })
-
-#                 ownership_ranks = {}
-#                 for ownership, colleges in ownership_groups.items():
-#                     colleges.sort(key=lambda x: x['overall_rank'])
-#                     current_rank = 1
-#                     prev_rank = None
-#                     ownership_ranks[ownership] = {}
-                    
-#                     for idx, college in enumerate(colleges):
-#                         if idx > 0 and college['overall_rank'] > prev_rank:
-#                             current_rank = idx + 1
-#                         ownership_ranks[ownership][college['college_id']] = current_rank
-#                         prev_rank = college['overall_rank']
-
-#                 for idx, college_id in enumerate(domain_college_ids):
-#                     details = college_details.get(college_id, {})
-
-#                     if details:
-#                         state_id = details['state_id']
-#                         ownership = details['ownership']
-#                         state_name = details['state_name']
-
-#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
-#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
-
-#                         state_total = state_totals.get(state_id, 0)
-#                         ownership_total = ownership_totals.get(ownership, 0)
-#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
-#                     else:
-#                         state_rank = ownership_rank = "Not Available"
-#                         state_total = ownership_total = 0
-#                         state_name = ""
-#                         ownership_type = "Unknown"
-
-#                     result[f"college_{idx + 1}"].update({
-#                         "domain": domain_id,
-#                         "state_rank_display": (
-#                             f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
-#                             if isinstance(state_rank, int) else "Not Available"
-#                         ),
-#                         "ownership_rank_display": (
-#                             f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
-#                             if isinstance(ownership_rank, int) else "Not Available"
-#                         ),
-#                     })
-
-#             # Cache the result for future use
-#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
-#             return result
-
-#         except NoDataAvailableError as nde:
-#             logger.warning(f"No data available: {nde}")
-#             raise
-
-#         except Exception as e:
-#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
-#             raise
-
-
-
 class CollegeRankingService:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -1560,7 +1181,7 @@ class PlacementInsightHelper:
                 raise NoDataAvailableError("No valid college IDs provided.")
 
             # Prepare cache key parts
-            cache_key_parts = ['placement__stats_____insights_v3', year, '-'.join(map(str, college_ids))]
+            cache_key_parts = ['___placement__stats_____insights_v3', year, '-'.join(map(str, college_ids))]
             if selected_courses:
                 for cid in college_ids:
                     cache_key_parts.append(f"{cid}-{selected_courses.get(cid, 'NA')}")
@@ -1617,6 +1238,24 @@ class PlacementInsightHelper:
                         domain_name = DomainHelper.format_domain_name(domain.old_domain_name) if domain else None
 
                         # Fetch placement data
+                        # college_placement_data = (
+                        #     CollegePlacement.objects.filter(
+                        #         college_id=college_id,
+                        #         year=year,
+                        #         intake_year=year - 3,
+                        #         stream_id=domain_id
+                        #     ).values(
+                        #         'college_id',
+                        #         'max_salary_dom',
+                        #         'max_salary_inter',
+                        #         'avg_salary',
+                        #         'median_salary',
+                        #         'no_placed',
+                        #         'inter_offers',
+                        #         'total_offers',
+                        #         'stream_id'
+                        #     ).first()
+                        # )
                         college_placement_data = (
                             CollegePlacement.objects.filter(
                                 college_id=college_id,
@@ -1635,6 +1274,29 @@ class PlacementInsightHelper:
                                 'stream_id'
                             ).first()
                         )
+
+                        # Fallback query without stream_id if no data found
+                        if not college_placement_data:
+                            college_placement_data = (
+                                CollegePlacement.objects.filter(
+                                    college_id=college_id,
+                                    year=year,
+                                    intake_year=year - 3
+                                ).values(
+                                    'college_id',
+                                    'max_salary_dom',
+                                    'max_salary_inter',
+                                    'avg_salary',
+                                    'median_salary',
+                                    'no_placed',
+                                    'inter_offers',
+                                    'total_offers',
+                                    'stream_id'
+                                ).order_by('-no_placed','median_salary')  # Get the record with highest offers
+                                .first()
+                            )
+
+
 
                         if college_placement_data:
                             college_placement_data['domain_name'] = domain_name
@@ -1659,10 +1321,10 @@ class PlacementInsightHelper:
                     # Fetch college details
                     college_details = {
                         college['id']: {
-                            'name': college['name'],
+                            'short_name': college['short_name'],
                         }
                         for college in College.objects.filter(id__in=college_ids)
-                        .values('id', 'name')
+                        .values('id', 'short_name')
                     }
 
                     # Prepare result dictionary
@@ -1673,7 +1335,7 @@ class PlacementInsightHelper:
 
                         result_dict[f"college_{idx}"] = {
                             "college_id": college_id,
-                            "college_name": college_data.get('name', 'NA') or 'NA',
+                            "college_short_name": college_data.get('short_name', 'NA') or 'NA',
                             "total_offers": stats.get('total_offers', 0) or 0,
                             "total_students_placed_in_domain": stats.get('no_placed', "NA") or "NA",
                             "highest_domestic_salary_lpa": stats.get('max_salary_dom', 0) or 0,
@@ -1878,6 +1540,155 @@ class PlacementAiInsightHelper:
             logger.error(f"Error in get_ai_insights: {str(e)}")
             return None
 
+
+
+class PlacementInsightsCalculator:
+    @staticmethod
+    def is_valid_number(value):
+        """Check if a value is valid for numerical processing."""
+        if isinstance(value, (int, float)):
+            return True
+        if isinstance(value, str):
+            cleaned = value.replace('₹', '').replace(',', '').strip()
+            try:
+                float(cleaned)
+                return True
+            except ValueError:
+                return False
+        return value not in {'NA', None, '', 0}
+
+    @staticmethod
+    def convert_salary_to_float(value):
+        """Convert salary string to float value."""
+        if not PlacementInsightsCalculator.is_valid_number(value):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        cleaned = value.replace('₹', '').replace(',', '').strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def format_salary_lpa(salary):
+        """Convert salary to LPA format (divide by 100000)"""
+        return salary / 100000
+
+    @staticmethod
+    def format_number(value):
+        """Format number to remove .00 if whole number, keep decimals otherwise"""
+        if value == int(value):
+            return f"{int(value)}"
+        return f"{value:.2f}"
+
+    @staticmethod
+    def calculate_placement_insights(placement_data: dict) -> dict:
+        insights = {}
+        try:
+            domain_name = next(iter(placement_data.values()))['domain_name']
+
+            # Sort colleges by domestic placement salary
+            domestic_parts = []
+            for college_id, data in placement_data.items():
+                salary = PlacementInsightsCalculator.convert_salary_to_float(data.get('highest_domestic_salary_lpa'))
+                if salary and salary > 0:
+                    domestic_parts.append((data['college_short_name'], salary))
+
+            if domestic_parts:
+                domestic_text = [
+                    f"{college} reported ₹{PlacementInsightsCalculator.format_number(PlacementInsightsCalculator.format_salary_lpa(salary))} LPA"
+                    for college, salary in sorted(domestic_parts, key=lambda x: x[1], reverse=True)
+                ]
+                if domestic_text:
+                    insights["highest_domestic_placement"] = (
+                        f"Based on domestic package trends referring to placement data, {', followed by '.join(domestic_text)} "
+                        f"in {domain_name}"
+                    )
+
+            # Sort colleges by international placement salary
+            international_parts = []
+            for college_id, data in placement_data.items():
+                salary = PlacementInsightsCalculator.convert_salary_to_float(data.get('highest_international_salary_cr'))
+                if salary and salary > 0:
+                    international_parts.append((data['college_short_name'], salary))
+
+            if international_parts:
+                international_text = [
+                    f"{college} reported ₹{PlacementInsightsCalculator.format_number(salary)} Cr"
+                    for college, salary in sorted(international_parts, key=lambda x: x[1], reverse=True)
+                ]
+                if international_text:
+                    insights["highest_international_placement"] = (
+                        f"Based on international package distribution, {', followed by '.join(international_text)} "
+                        f"in {domain_name}"
+                    )
+
+            # Sort colleges by total offers
+            offer_parts = []
+            for college_id, data in placement_data.items():
+                try:
+                    offers = int(data.get('total_offers', 0))
+                    if offers and offers > 0:
+                        offer_parts.append((data['college_short_name'], offers))
+                except (ValueError, TypeError):
+                    continue
+
+            if offer_parts:
+                offer_text = [
+                    f"{college} reported {offers} offers"
+                    for college, offers in sorted(offer_parts, key=lambda x: x[1], reverse=True)
+                ]
+                if offer_text:
+                    insights["total_offers"] = (
+                        f"Based on placement offers, {', followed by '.join(offer_text)} "
+                        f"in {domain_name}"
+                    )
+
+            # Sort colleges by students placed
+            placed_parts = []
+            for college_id, data in placement_data.items():
+                try:
+                    placed = int(data.get('total_students_placed_in_domain', 0))
+                    if placed and placed > 0:
+                        placed_parts.append((data['college_short_name'], placed))
+                except (ValueError, TypeError):
+                    continue
+
+            if placed_parts:
+                placed_text = [
+                    f"{college} reported {placed} students placed"
+                    for college, placed in sorted(placed_parts, key=lambda x: x[1], reverse=True)
+                ]
+                if placed_text:
+                    insights["students_placed_min_time"] = (
+                        f"Based on placement success, {', followed by '.join(placed_text)} "
+                        f"in {domain_name}"
+                    )
+
+            # Sort colleges by median salary
+            avg_salary_parts = []
+            for college_id, data in placement_data.items():
+                salary = PlacementInsightsCalculator.convert_salary_to_float(data.get('median_salary_lpa'))
+                if salary and salary > 0:
+                    avg_salary_parts.append((data['college_short_name'], salary))
+
+            if avg_salary_parts:
+                avg_salary_text = [
+                    f"{college} reported average package of ₹{PlacementInsightsCalculator.format_number(PlacementInsightsCalculator.format_salary_lpa(salary))} LPA"
+                    for college, salary in sorted(avg_salary_parts, key=lambda x: x[1], reverse=True)
+                ]
+                if avg_salary_text:
+                    insights["average_salary"] = (
+                        f"Based on average compensation, {', followed by '.join(avg_salary_text)} "
+                        f"in {domain_name}"
+                    )
+
+            return insights
+
+        except Exception as e:
+            print(f"Error calculating placement insights: {str(e)}")
+            return {}
 
 
 
@@ -2446,7 +2257,7 @@ class FeesHelper:
                     }
                     for data in scholarships_data         
                 }
-                colleges = {college.id: college.name for college in College.objects.filter(id__in=college_ids)}
+                colleges = {college.id: college.short_name for college in College.objects.filter(id__in=college_ids)}
 
        
                 result_dict = {}
@@ -2472,7 +2283,7 @@ class FeesHelper:
                     if fee_detail:
                         result_dict[f"college_{idx + 1}"] = {
                             "college_id": college_id,
-                            "college_name": colleges.get(college_id, 'Unknown College'),
+                            "college_short_name": colleges.get(college_id, 'Unknown College'),
                             "gn_fees": format_fee(fee_detail['gn_fees']),
                             "obc_fees": format_fee(fee_detail['obc_fees']),
                             "sc_fees": format_fee(fee_detail['sc_fees']),
@@ -2485,7 +2296,7 @@ class FeesHelper:
                     else:
                         result_dict[f"college_{idx + 1}"] = {
                             "college_id": college_id,
-                            "college_name": colleges.get(college_id, 'Unknown College'),
+                            "college_short_name": colleges.get(college_id, 'Unknown College'),
                             "gn_fees": "NA",
                             "obc_fees": "NA",
                             "sc_fees": "NA",
@@ -2645,8 +2456,8 @@ class FeesAiInsightHelper:
         The agent is provided with the fee details of atmost 3 colleges.
         Generate detailed fee insights comparing the provided colleges. Return the insights as a JSON object where keys represent the specific categories, and values are descriptive sentences in **plain string format** (not lists or bullet points). Use the following structure:
         {{
-            "highest_tuition_fees": "Analyze ONLY the direct fee fields (gn_fees, obc_fees, sc_fees, nq_fees, st_fees). Provide a detailed sentence comparing colleges in descending order based on their general category fees. Include specific fee amounts where available and explicitly mention if data is missing. Start each college reference with the institution's name.",
-            "highest_fees_element": "Analyze the total fee fields (total_tuition_fee_general, total_tuition_fee_sc, total_tuition_fee_st, total_tuition_fee_obc). Format the response as: 'For general category, [Institution Name] charges the highest at ₹X, followed by [Institution Name] at ₹Y, and [Institution Name] at ₹Z. The SC, ST, and OBC category fees vary significantly, with [mention specific variations or missing data].' Maintain strictly descending order by category fees. Include all three institutions. Do not use the words,'total' 'tuition' in the response.",
+            "highest_tuition_fees": "Analyze ONLY the direct fee fields (gn_fees, obc_fees, sc_fees, nq_fees, st_fees). Provide a detailed sentence comparing colleges in descending order based on their highest category fees. Include specific fee amounts where available and explicitly mention if data is missing. Start each college reference with the institution's name.",
+            "highest_fees_element": "Analyze the total fee fields (total_tuition_fee_general, total_tuition_fee_sc, total_tuition_fee_st, total_tuition_fee_obc). Format the response as: 'For higest category fees, [Institution Name] charges the highest at ₹X, followed by [Institution Name] at ₹Y, and [Institution Name] at ₹Z. The SC, ST, and OBC category fees vary significantly, with [mention specific variations or missing data].' Maintain strictly descending order by category fees. Include all three institutions. Do not use the words,'total' 'tuition' in the response.",
             "scholarships_available": "[fetch data from 'scholarship_available' it denotes the number of students] write a descriptive sentence or paragraph summarizing the number of students availing scholarship for each college, or mentioning missing data if applicable.",
             "scholarship_granting_authority": "A descriptive sentence or paragraph summarizing the authority granting scholarships at each college, highlighting any missing or incomplete information."
         }}
@@ -2680,6 +2491,151 @@ class FeesAiInsightHelper:
         except Exception as e:
             logger.error(f"Error in get_fees_insights: {str(e)}")
             return None
+
+
+
+class FeesInsightsCalculator:
+    CATEGORY_MAPPING = {
+        'gn_fees': 'General',
+        'obc_fees': 'OBC',
+        'sc_fees': 'SC',
+        'st_fees': 'ST'
+    }
+
+    @staticmethod
+    def is_valid_fee(value):
+        """Check if a fee value is valid for numerical processing."""
+        if isinstance(value, (int, float)):
+            return True
+        if isinstance(value, str):
+            cleaned = value.replace('₹', '').replace(',', '').strip()
+            try:
+                float(cleaned)
+                return True
+            except ValueError:
+                return False
+        return value not in {'NA', None, '', 0}
+
+    @staticmethod
+    def convert_fee_to_float(value):
+        """Convert fee string to float value."""
+        if not FeesInsightsCalculator.is_valid_fee(value):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        cleaned = value.replace('₹', '').replace(',', '').strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+        
+    @staticmethod
+    def format_fee(value):
+        """Format fee to a string with Indian currency notation."""
+        if value is None:
+            return "NA"
+        locale.setlocale(locale.LC_ALL, 'en_IN')  # Set Indian locale
+        return f"₹ {locale.format_string('%d', value, grouping=True)}.00"
+
+
+    
+
+    @staticmethod
+    def find_highest_fees_category(fees_data: dict) -> dict:
+        """Find the college with the highest fees in any category."""
+        highest_fees_info = {
+            "college_name": None,
+            "highest_fees": 0,
+            "category": None
+        }
+
+        for college_id, data in fees_data.items():
+            for category, label in FeesInsightsCalculator.CATEGORY_MAPPING.items():
+                fee_value = FeesInsightsCalculator.convert_fee_to_float(data.get(category))
+                if fee_value is not None and fee_value > highest_fees_info["highest_fees"]:
+                    highest_fees_info["highest_fees"] = fee_value
+                    highest_fees_info["college_name"] = data.get('college_short_name', 'Unknown')
+                    highest_fees_info["category"] = label
+
+        return highest_fees_info
+
+    @staticmethod
+    def calculate_fees_insights(fees_data: dict) -> dict:
+        insights = {}
+        try:
+            general_fees_parts = []
+            scholarship_parts = []
+            authority_parts = []
+
+            for college_id, data in fees_data.items():
+                college_name = data.get('college_short_name', 'Unknown')
+
+                # Find highest tuition fee across all categories
+                max_fee = max(
+                    filter(None, [
+                        FeesInsightsCalculator.convert_fee_to_float(data.get('gn_fees')),
+                        FeesInsightsCalculator.convert_fee_to_float(data.get('obc_fees')),
+                        FeesInsightsCalculator.convert_fee_to_float(data.get('sc_fees')),
+                        FeesInsightsCalculator.convert_fee_to_float(data.get('st_fees'))
+                    ]),
+                    default=None
+                )
+
+                if max_fee is not None:
+                    general_fees_parts.append((college_name, max_fee))
+
+                # Collect scholarship-related data
+                total_scholarship = data.get('total_scholarship_given', 0)
+                if isinstance(total_scholarship, int) and total_scholarship > 0:
+                    scholarship_parts.append((college_name, total_scholarship))
+
+                # Scholarship granting authority
+                authority = data.get('high_scholarship_authority', 'NA')
+                if authority != 'NA':
+                    authority_parts.append((college_name, authority))
+
+            # Highest tuition fees insight
+            if general_fees_parts:
+                sorted_fees = sorted(general_fees_parts, key=lambda x: x[1], reverse=True)
+                top_colleges = [college for college, _ in sorted_fees]
+                insights["highest_tuition_fees"] = (
+                    f"{top_colleges[0]} has the highest tuition fees among all {len(general_fees_parts)} colleges, followed by "
+                    f"{', '.join(top_colleges[1:])}."
+                )
+
+            # Highest fees category insight
+            highest_fees_info = FeesInsightsCalculator.find_highest_fees_category(fees_data)
+            if highest_fees_info["college_name"]:
+                insights["highest_fees_element"] = (
+                    f"The highest fees are for {highest_fees_info['college_name']} in the "
+                    f"{highest_fees_info['category']} category with fees of {FeesInsightsCalculator.format_fee(highest_fees_info['highest_fees'])}."
+                )
+
+            # Scholarship availability insight
+            if scholarship_parts:
+                scholarship_text = [
+                    f"{college} has provided scholarships to {scholarships} students"
+                    for college, scholarships in sorted(scholarship_parts, key=lambda x: x[1], reverse=True)
+                ]
+                insights["scholarships_available"] = (
+                    f"Based on scholarship data, {', followed by '.join(scholarship_text)}."
+                )
+
+            
+            if authority_parts:
+                authority_text = [
+                    f"{college} has scholarships granted by {authority}"
+                    for college, authority in authority_parts
+                ]
+                insights["scholarship_granting_authority"] = (
+                    f"Scholarship granting authorities include {', followed by '.join(authority_text)}."
+                )
+
+            return insights
+
+        except Exception as e:
+            print(f"Error calculating fees insights: {str(e)}")
+            return {}
 
 
 class FeesGraphHelper:
