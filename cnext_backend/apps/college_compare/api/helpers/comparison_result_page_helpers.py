@@ -2914,71 +2914,36 @@ class ProfileInsightsHelper:
             raise TypeError("selected_domains must be a dictionary with college_id as keys and domain_id as values.")
 
     @staticmethod
-    def fetch_student_faculty_ratio(
-        college_ids: List[int],
-        course_ids: List[int],  # Changed from selected_domains to course_ids
-        year: int,
-        intake_year: int,
-        level: int = 1,
-    ) -> Dict[str, Dict]:
-        # Validate that course_ids is not empty
+    def fetch_student_faculty_ratio(college_ids: List[int], course_ids: List[int], year: int, intake_year: int, level: int = 1) -> Dict[str, Dict]:
         if not course_ids:
             raise ValueError("course_ids must be provided and cannot be empty.")
 
-        # Fetch course details to get domain and level
         courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain', 'level')
         course_domain_map = {course['id']: (course['degree_domain'], course['level']) for course in courses}
 
-        cache_key = ProfileInsightsHelper.get_cache_key(
-            'student___faculty___new', '-'.join(map(str, college_ids)), year, intake_year, level
-        )
+        cache_key = ProfileInsightsHelper.get_cache_key('__student___faculty___new', '-'.join(map(str, college_ids)), year, intake_year, level)
 
         def fetch_data():
-            latest_year = (
-                CollegePlacement.objects
-                .filter(college_id__in=college_ids)
-                .aggregate(Max('year'))['year__max'] or year
-            )
+            latest_year = CollegePlacement.objects.filter(college_id__in=college_ids).aggregate(Max('year'))['year__max'] or year
 
             query_result = []
             total_students = 0
             total_faculty = 0
 
             for college_id in college_ids:
-                # Get the domain and level from the course_domain_map
                 domain_id, level = course_domain_map.get(college_id, (None, None))
                 if not domain_id:
                     continue
 
-                result = (
-                    College.objects.filter(id=college_id, collegeplacement__levels=level)
-                    .annotate(
-                        students=Coalesce(
-                            Max(
-                                Case(
-                                    When(
-                                        Q(collegeplacement__intake_year=intake_year) &
-                                        Q(collegeplacement__stream_id=domain_id),
-                                        then='collegeplacement__total_students'
-                                    ),
-                                    default=Value(0, output_field=IntegerField())
-                                )
-                            ),
-                            Value(0, output_field=IntegerField())
-                        ),
-                        faculty=Coalesce(
-                            Max('total_faculty'),
-                            Value(0, output_field=IntegerField())
-                        ),
-                    )
-                    .values('id', 'students', 'faculty')
-                )
+                result = College.objects.filter(id=college_id).annotate(
+                    students=Coalesce(Max(Case(When(Q(collegeplacement__intake_year=intake_year) & Q(collegeplacement__stream_id=domain_id), then='collegeplacement__total_students'), default=Value(0, output_field=IntegerField()))), Value(0, output_field=IntegerField())),
+                    faculty=Coalesce(Max('total_faculty'), Value(0, output_field=IntegerField()))
+                ).values('id', 'students', 'faculty')
 
                 query_result.extend(result)
                 total_students += sum(data['students'] for data in result)
                 total_faculty += sum(data['faculty'] for data in result)
 
-            # Calculate the average student-faculty ratio
             average_ratio = (total_faculty / total_students * 100) if total_students else 0
 
             import time
@@ -2993,7 +2958,6 @@ class ProfileInsightsHelper:
                     ratio = None
                     visualization_type = "tabular"
 
-                # Calculate difference from the average ratio
                 ownership_ratio_difference_from_avg = round(ratio - average_ratio, 2) if ratio is not None else "NA"
 
                 result[f"college_{idx}"] = {
@@ -3011,76 +2975,44 @@ class ProfileInsightsHelper:
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
 
     @staticmethod
-    def fetch_student_demographics(
-        college_ids: List[int],
-        course_ids: List[int],  # Changed from selected_domains to course_ids
-        year: int,
-        intake_year: int,
-        level: int = 1
-    ) -> Dict[str, Dict]:
-        # Validate that course_ids is not empty
+    def fetch_student_demographics(college_ids: List[int], course_ids: List[int], year: int, intake_year: int, level: int = 1) -> Dict[str, Dict]:
         if not course_ids:
             raise ValueError("course_ids must be provided and cannot be empty.")
 
-        # Fetch course details to get domain and level
         courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain', 'level')
         course_domain_map = {course['id']: (course['degree_domain'], course['level']) for course in courses}
 
-        cache_key = ProfileInsightsHelper.get_cache_key(
-            'student____demographics_new', '-'.join(map(str, college_ids)), year, intake_year, level
-        )
+        cache_key = ProfileInsightsHelper.get_cache_key('__student____demographics_new', '-'.join(map(str, college_ids)), year, intake_year, level)
 
         def fetch_data():
-            latest_year = (
-                CollegePlacement.objects
-                .filter(college_id__in=college_ids)
-                .aggregate(Max('year'))['year__max'] or year
-            )
+            latest_year = CollegePlacement.objects.filter(college_id__in=college_ids).aggregate(Max('year'))['year__max'] or year
 
             query_result = []
             for college_id in college_ids:
-                # Get the domain and level from the course_domain_map
                 domain_id, level = course_domain_map.get(college_id, (None, None))
                 if not domain_id:
                     continue
 
-                result = (
-                    CollegePlacement.objects.filter(
-                        college_id=college_id,
-                        intake_year=intake_year,
-                        stream_id=domain_id,
-                        levels=level,
-                    )
-                    .values('college_id')
-                    .annotate(
-                        total_students=Coalesce(Max('total_students'), Value(0, output_field=IntegerField())),
-                        outside_state=Coalesce(Max('outside_state'), Value(0, output_field=IntegerField()))
-                    )
+                result = CollegePlacement.objects.filter(
+                    college_id=college_id,
+                    intake_year=intake_year,
+                    stream_id=domain_id
+                ).values('college_id').annotate(
+                    total_students=Coalesce(Max('total_students'), Value(0, output_field=IntegerField())),
+                    outside_state=Coalesce(Max('outside_state'), Value(0, output_field=IntegerField()))
                 )
 
-                # Check if results are found, else handle missing data
                 if not result:
-                    query_result.append({
-                        'college_id': college_id,
-                        'total_students': 0,
-                        'outside_state': 0
-                    })
+                    query_result.append({'college_id': college_id, 'total_students': 0, 'outside_state': 0})
                 else:
                     query_result.extend(result)
 
             import time
             current_year = time.localtime().tm_year
-            visualization_type = "horizontal bar"
             result = {"year_tag": current_year - 1}
 
             for idx, data in enumerate(query_result, 1):
-                outside_state_percentage = (
-                    (data['outside_state'] / data['total_students'] * 100)
-                    if data['total_students'] > 0 else None
-                )
-
-                if outside_state_percentage is None:
-                    visualization_type = "tabular"
+                outside_state_percentage = (data['outside_state'] / data['total_students'] * 100) if data['total_students'] > 0 else None
 
                 result[f"college_{idx}"] = {
                     "college_id": str(data['college_id']),
@@ -3090,37 +3022,23 @@ class ProfileInsightsHelper:
                     "data_status": "complete" if outside_state_percentage is not None else "incomplete"
                 }
 
-            result["type"] = visualization_type
+            result["type"] = "tabular" if any(result[f"college_{i}"]["data_status"] == "incomplete" for i in range(1, len(query_result) + 1)) else "horizontal bar"
             return result
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24)
 
     @staticmethod
-    def fetch_gender_diversity(
-        college_ids: List[int],
-        course_ids: List[int],  # Changed from selected_domains to course_ids
-        year: int,
-        intake_year: int,
-        level: int = 1
-    ) -> Dict[str, Dict]:
-        # Validate that course_ids is not empty
+    def fetch_gender_diversity(college_ids: List[int], course_ids: List[int], year: int, intake_year: int, level: int = 1) -> Dict[str, Dict]:
         if not course_ids:
             raise ValueError("course_ids must be provided and cannot be empty.")
 
-        # Fetch course details to get domain and level
         courses = Course.objects.filter(id__in=course_ids).values('id', 'degree_domain', 'level')
         course_domain_map = {course['id']: (course['degree_domain'], course['level']) for course in courses}
 
-        cache_key = ProfileInsightsHelper.get_cache_key(
-            'Gender____Diversity', '-'.join(map(str, college_ids)), year, intake_year, level
-        )
+        cache_key = ProfileInsightsHelper.get_cache_key('___Gender____Diversity', '-'.join(map(str, college_ids)), year, intake_year, level)
 
         def fetch_data():
-            latest_year = (
-                CollegePlacement.objects
-                .filter(college_id__in=college_ids)
-                .aggregate(Max('year'))['year__max'] or year
-            )
+            latest_year = CollegePlacement.objects.filter(college_id__in=college_ids).aggregate(Max('year'))['year__max'] or year
 
             query_result = []
             total_male_students = 0
@@ -3131,24 +3049,18 @@ class ProfileInsightsHelper:
             institute_type_differences = {}
 
             for college_id in college_ids:
-                # Get the domain and level from the course_domain_map
                 domain_id, level = course_domain_map.get(college_id, (None, None))
                 if not domain_id:
                     continue
 
-                result = (
-                    CollegePlacement.objects.filter(
-                        college_id=college_id,
-                        intake_year=intake_year,
-                        stream_id=domain_id,
-                        levels=level
-                    )
-                    .values('college_id')
-                    .annotate(
-                        male_students=Coalesce(Max('male_students'), Value(0, output_field=IntegerField())),
-                        female_students=Coalesce(Max('female_students'), Value(0, output_field=IntegerField())),
-                        total_students=F('male_students') + F('female_students')
-                    )
+                result = CollegePlacement.objects.filter(
+                    college_id=college_id,
+                    intake_year=intake_year,
+                    stream_id=domain_id
+                ).values('college_id').annotate(
+                    male_students=Coalesce(Max('male_students'), Value(0, output_field=IntegerField())),
+                    female_students=Coalesce(Max('female_students'), Value(0, output_field=IntegerField())),
+                    total_students=F('male_students') + F('female_students')
                 )
 
                 query_result.extend(result)
@@ -3164,7 +3076,6 @@ class ProfileInsightsHelper:
                         male_differences.append(male_percentage)
                         female_differences.append(female_percentage)
 
-                        # Group by institute type for calculating differences per institute type
                         college = College.objects.get(id=college_id)
                         institute_type = college.type_of_institute(college.institute_type_1, college.institute_type_2) or 'Not Available'
                         if institute_type not in institute_type_differences:
@@ -3173,15 +3084,12 @@ class ProfileInsightsHelper:
                         institute_type_differences[institute_type]['male'].append(male_percentage)
                         institute_type_differences[institute_type]['female'].append(female_percentage)
 
-            # Calculate average male and female percentages
             average_male_percentage = (total_male_students / total_students * 100) if total_students else 0
             average_female_percentage = (total_female_students / total_students * 100) if total_students else 0
 
-            # Calculate the overall average difference from the average male and female percentages
             avg_male_difference = (sum(male_differences) / len(male_differences) - average_male_percentage) if male_differences else 0
             avg_female_difference = (sum(female_differences) / len(female_differences) - average_female_percentage) if female_differences else 0
 
-            # Calculate type of institute-based gender diversity difference
             institute_type_differences_from_avg = {}
             for institute_type, differences in institute_type_differences.items():
                 avg_male_type_diff = (sum(differences['male']) / len(differences['male']) - average_male_percentage) if differences['male'] else 0
@@ -3193,36 +3101,47 @@ class ProfileInsightsHelper:
 
             import time
             current_year = time.localtime().tm_year
-            visualization_type = "horizontal bar"
-            result = {"year_tag": current_year - 1, "average_male_percentage": round(average_male_percentage, 2), "average_female_percentage": round(average_female_percentage, 2)}
+            result = {
+                "year_tag": current_year - 1,
+                "average_male_percentage": round(average_male_percentage, 2),
+                "average_female_percentage": round(average_female_percentage, 2)
+            }
 
-            for idx, data in enumerate(query_result, 1):
-                male_percentage = (data['male_students'] / data['total_students'] * 100) if data['total_students'] > 0 else None
-                female_percentage = (data['female_students'] / data['total_students'] * 100) if data['total_students'] > 0 else None
+            for college_id in college_ids:
+                idx = college_ids.index(college_id) + 1
+                college_data = next((data for data in query_result if data['college_id'] == college_id), None)
 
-                # Calculate difference from average gender percentages
-                ownership_male_difference_from_avg = round(male_percentage - avg_male_difference, 2) if male_percentage is not None else "NA"
-                ownership_female_difference_from_avg = round(female_percentage - avg_female_difference, 2) if female_percentage is not None else "NA"
+                if college_data and college_data['total_students'] > 0:
+                    male_percentage = (college_data['male_students'] / college_data['total_students'] * 100)
+                    female_percentage = (college_data['female_students'] / college_data['total_students'] * 100)
 
-                # Get the college's institute type
-                college = College.objects.get(id=data['college_id'])
-                institute_type = college.type_of_institute(college.institute_type_1, college.institute_type_2) or 'Not Available'
+                    college = College.objects.get(id=college_id)
+                    institute_type = college.type_of_institute(college.institute_type_1, college.institute_type_2) or 'Not Available'
+                    institute_gender_diversity_diff = institute_type_differences_from_avg.get(institute_type, {"male_difference_from_avg": "NA", "female_difference_from_avg": "NA"})
 
-                # Get the gender diversity difference for the type of institute
-                institute_gender_diversity_diff = institute_type_differences_from_avg.get(institute_type, {"male_difference_from_avg": "NA", "female_difference_from_avg": "NA"})
+                    result[f"college_{idx}"] = {
+                        "college_id": str(college_id),
+                        "male_students": college_data['male_students'],
+                        "female_students": college_data['female_students'],
+                        "percentage_male": round(male_percentage, 2),
+                        "percentage_female": round(female_percentage, 2),
+                        "data_status": "complete",
+                        "ownership_gender_diversity_difference": round(female_percentage - avg_female_difference, 2),
+                        "type_of_institute_gender_diversity_difference_from_avg": institute_gender_diversity_diff['female_difference_from_avg']
+                    }
+                else:
+                    result[f"college_{idx}"] = {
+                        "college_id": str(college_id),
+                        "male_students": "NA",
+                        "female_students": "NA",
+                        "percentage_male": "NA",
+                        "percentage_female": "NA",
+                        "data_status": "incomplete",
+                        "ownership_gender_diversity_difference": "NA",
+                        "type_of_institute_gender_diversity_difference_from_avg": "NA"
+                    }
 
-                result[f"college_{idx}"] = {
-                    "college_id": str(data['college_id']),
-                    "male_students": data['male_students'] or "NA",
-                    "female_students": data['female_students'] or "NA",
-                    "percentage_male": round(male_percentage, 2) if male_percentage is not None else "NA",
-                    "percentage_female": round(female_percentage, 2) if female_percentage is not None else "NA",
-                    "data_status": "complete" if male_percentage is not None else "incomplete",
-                    "ownership_gender_diversity_difference": ownership_female_difference_from_avg,
-                    "type_of_institute_gender_diversity_difference_from_avg": institute_gender_diversity_diff['female_difference_from_avg']
-                }
-
-            result["type"] = visualization_type
+            result["type"] = "tabular" if any(result[f"college_{i}"]["data_status"] == "incomplete" for i in range(1, len(college_ids) + 1)) else "horizontal bar"
             return result
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
@@ -3500,18 +3419,13 @@ class CollegeAmenitiesHelper:
 
 
 
-class ClassProfileAiInsightHelper:
-    # Class-level constants
-    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_ACCESS_SECRET_KEY")
-    REGION_NAME = 'us-east-1'
-    MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0"
 
-    @staticmethod
-    def get_cache_key(profile_data: Dict) -> str:
-        """Generate a unique cache key based on the input profile data."""
-        data_str = json.dumps(profile_data, sort_keys=True)
-        return f"class_profile_ai_insights_{hash(data_str)}"
+
+
+class ClassProfileAiInsightHelper:
+
+    _cache = {}  # Simple in-memory cache
+    CACHE_TIMEOUT = 3600 * 24 * 7  # Cache for 180 days (in seconds)
 
     @staticmethod
     def _get_college_name(college_id: str, college_details: list) -> str:
@@ -3524,6 +3438,11 @@ class ClassProfileAiInsightHelper:
         return next((c["ownership_display"] for c in college_details if str(c["id"]) == str(college_id)), "Unknown")
 
     @staticmethod
+    def _has_non_zero_values(colleges_data: list) -> bool:
+        """Check if any college in the list has a non-zero value."""
+        return any(abs(college[1]["ownership_ratio_difference_from_avg"]) > 0.001 for college in colleges_data)
+
+    @staticmethod
     def _create_sorted_insights(data: Dict) -> Dict:
         """Create sorted insights for different metrics."""
         sorted_insights = {
@@ -3531,170 +3450,95 @@ class ClassProfileAiInsightHelper:
             "gender_diversity_sorted": [],
             "ownership_gender_diversity_sorted": []
         }
-        
+
         # Sort and process student faculty ratio
-        colleges = [(k, v) for k, v in data["data"]["student_faculty_ratio"].items() 
-                   if k.startswith("college_") and v["data_status"] == "complete"]
-        for k, v in sorted(colleges, key=lambda x: x[1]["ownership_ratio_difference_from_avg"], reverse=True):
-            college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
-            ownership_display = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
-            ratio = v["ownership_ratio_difference_from_avg"]
-            ratio_text = f"lower by {abs(ratio):.2f}%" if ratio < 0 else f"higher by {ratio:.2f}%"
-            sorted_insights["student_faculty_sorted"].append(
-                f"{college_name} ({ownership_display}) shows a student-faculty ratio {ratio_text} than the average"
-            )
-        
+        colleges = [(k, v) for k, v in data["data"]["student_faculty_ratio"].items()
+                    if k.startswith("college_") and v["data_status"] == "complete"]
+
+        if ClassProfileAiInsightHelper._has_non_zero_values(colleges):
+            sorted_colleges_faculty = sorted(colleges, key=lambda x: x[1]["ownership_ratio_difference_from_avg"], reverse=True)
+
+            for k, v in sorted_colleges_faculty:
+                ratio = v["ownership_ratio_difference_from_avg"]
+                if abs(ratio) > 0.001:  # Skip individual entries with 0.00%
+                    college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
+                    ownership_display = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
+                    ratio_text = f"lower by {abs(ratio):.2f}%" if ratio < 0 else f"higher by {ratio:.2f}%"
+                    sorted_insights["student_faculty_sorted"].append(
+                        f"{college_name} ({ownership_display}) shows a student-faculty ratio {ratio_text} than the average"
+                    )
+
         # Sort and process gender diversity
-        colleges = [(k, v) for k, v in data["data"]["gender_diversity"].items() 
-                   if k.startswith("college_") and v["data_status"] == "complete"]
-        for metric, sort_key in [
-            ("gender_diversity_sorted", "type_of_institute_gender_diversity_difference_from_avg"),
-            ("ownership_gender_diversity_sorted", "ownership_gender_diversity_difference")
-        ]:
-            for k, v in sorted(colleges, key=lambda x: x[1][sort_key], reverse=True):
-                college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
-                if metric == "gender_diversity_sorted":
-                    college_type = next((c["type_of_institute"] for c in data["college_details"] 
-                                      if str(c["id"]) == str(v["college_id"])), "Unknown")
+        colleges = [(k, v) for k, v in data["data"]["gender_diversity"].items()
+                    if k.startswith("college_") and v["data_status"] == "complete"]
+
+        metrics_map = {
+            "gender_diversity_sorted": "type_of_institute_gender_diversity_difference_from_avg",
+            "ownership_gender_diversity_sorted": "ownership_gender_diversity_difference"
+        }
+
+        for metric, sort_key in metrics_map.items():
+            if any(abs(college[1][sort_key]) > 0.001 for college in colleges):
+                sorted_colleges_gender = sorted(colleges, key=lambda x: x[1][sort_key], reverse=True)
+                for k, v in sorted_colleges_gender:
                     diff = v[sort_key]
-                    sorted_insights[metric].append(
-                        f"{college_name} ({college_type}) demonstrates a gender diversity metric {abs(diff):.2f}% "
-                        f"{'below' if diff < 0 else 'above'} the average"
-                    )
-                else:
-                    ownership = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
-                    diff = v[sort_key]
-                    diff_text = f"trails by {abs(diff):.2f}%" if diff < 0 else f"leads by {diff:.2f}%"
-                    sorted_insights[metric].append(
-                        f"{college_name} ({ownership}) {diff_text} in ownership gender diversity metrics"
-                    )
-        
+                    if abs(diff) > 0.001:  # Skip individual entries with 0.00%
+                        college_name = ClassProfileAiInsightHelper._get_college_name(v["college_id"], data["college_details"])
+                        if metric == "gender_diversity_sorted":
+                            college_type = next((c["type_of_institute"] for c in data["college_details"]
+                                            if str(c["id"]) == str(v["college_id"])), "Unknown")
+                            sorted_insights[metric].append(
+                                f"{college_name} ({college_type}) demonstrates a gender diversity metric {abs(diff):.2f}% "
+                                f"{'below' if diff < 0 else 'above'} the average"
+                            )
+                        else:
+                            ownership = ClassProfileAiInsightHelper._get_ownership_display(v["college_id"], data["college_details"])
+                            diff_text = f"trails by {abs(diff):.2f}%" if diff < 0 else f"leads by {diff:.2f}%"
+                            sorted_insights[metric].append(
+                                f"{college_name} ({ownership}) {diff_text} in ownership gender diversity metrics"
+                            )
         return sorted_insights
 
     @staticmethod
-    def _generate_prompt(sorted_insights: Dict) -> str:
-        """Generate an enhanced prompt for the Bedrock model."""
-        return f"""
-        Create impactful and data-driven insights from the class profile metrics below. Frame the insights to be concise, 
-        engaging, and easy to understand while maintaining analytical depth.
-
-        Key Requirements:
-        - Use modern, professional language
-        - Highlight significant variations and trends
-        - Focus on actionable insights
-        - Be impactful & compelling in delivery
-        - Maintain objective analysis
-        -mention metric of each mentioned college's (not the highest only ,followed by desc order) by mentioning college_details.short_name (but not use abbreviations like iitr)  by desc order for all insights
-
-        Format the response as a JSON object with the following structure:
-
-        {{
-            "student_faculty_ownership_ratio_difference_from_avg": 
-                {'. '.join(sorted_insights['student_faculty_sorted'])}",
-            
-            "type_of_institute_gender_diversity_difference_from_avg": 
-                {'. '.join(sorted_insights['gender_diversity_sorted'])}",
-            
-            "ownership_gender_diversity_difference": 
-                {'. '.join(sorted_insights['ownership_gender_diversity_sorted'])}"
-        }}
-
-        Style Guidelines:
-        1. Use active voice and present tense
-        2. Employ precise, quantitative language
-        3. Highlight standout metrics and notable patterns
-        4. Use professional yet engaging terminology
-        5. Maintain clarity while being concise
-        6. Focus on comparative insights
-        """
-
-    @staticmethod
-    def create_profile_insights(prompt: str) -> str:
-        """Generate insights using Bedrock model."""
-        try:
-            logger.info("Creating profile insights using AWS Bedrock model.")
-            client = boto3.client(
-                "bedrock-runtime",
-                region_name=ClassProfileAiInsightHelper.REGION_NAME,
-                aws_access_key_id=ClassProfileAiInsightHelper.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=ClassProfileAiInsightHelper.AWS_SECRET_ACCESS_KEY
-            )
-
-            request = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,
-                "temperature": 0.6,
-                "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": prompt}]}
-                ]
-            }
-
-            logger.debug(f"Bedrock request payload: {json.dumps(request, indent=2)}")
-            
-            response = client.invoke_model(
-                modelId=ClassProfileAiInsightHelper.MODEL_ID,
-                body=json.dumps(request, ensure_ascii=False).encode('utf-8')
-            )
-            
-            response_body = json.loads(response["body"].read().decode('utf-8'))
-            logger.debug(f"Bedrock raw response: {response_body}")
-            
-            return response_body["content"][0]["text"]
-            
-        except Exception as e:
-            logger.error(f"Error in create_profile_insights: {str(e)}")
-            return json.dumps({"error": str(e)})
-
-    @staticmethod
-    def format_insights(raw_insights: str) -> Dict:
-        """Format the raw insights into structured format."""
-        try:
-            logger.debug(f"Raw insights before processing: {raw_insights}")
-
-            # Clean up JSON string if needed
-            if raw_insights.startswith("```json") and raw_insights.endswith("```"):
-                raw_insights = raw_insights[7:-3].strip()
-
-            insights = json.loads(raw_insights)
-            return insights
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decoding failed: {e}")
-            logger.error(f"Raw insights: {raw_insights}")
-            return {"error": f"JSON decoding failed: {str(e)}"}
-        except Exception as e:
-            logger.error(f"Error formatting insights: {e}")
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+    def get_cache_key(data: Dict) -> str:
+        """Generate a unique cache key based on the input profile data."""
+        data_str = json.dumps(data, sort_keys=True)
+        return f"class_profile_ai_insights_{hashlib.md5(data_str.encode()).hexdigest()}"
 
     @staticmethod
     def get_profile_insights(data: Dict) -> Optional[Dict]:
         """Generate and process profile insights with caching."""
         try:
-            # Check cache first
             cache_key = ClassProfileAiInsightHelper.get_cache_key(data)
-            cached_result = cache.get(cache_key)
+            cached_result = ClassProfileAiInsightHelper._cache.get(cache_key)
 
             if cached_result:
-                logger.info("Returning cached profile insights.")
-                return cached_result
+                print("Returning cached profile insights.")
+                return cached_result["insights"]
 
-            logger.info("Generating new profile insights.")
-
-            # Generate sorted insights
+            print("Generating new profile insights.")
             sorted_insights = ClassProfileAiInsightHelper._create_sorted_insights(data)
             
-            # Generate and process insights
-            prompt = ClassProfileAiInsightHelper._generate_prompt(sorted_insights)
-            raw_insights = ClassProfileAiInsightHelper.create_profile_insights(prompt)
-            insights = ClassProfileAiInsightHelper.format_insights(raw_insights)
+            # Only include keys that have non-empty insights
+            formatted_insights = {}
             
-            # Cache the results
-            cache.set(cache_key, insights, timeout=3600 * 24 * 180)  # Cache for 180 days
+            insight_mapping = {
+                "student_faculty_sorted": "student_faculty_ownership_ratio_difference_from_avg",
+                "gender_diversity_sorted": "type_of_institute_gender_diversity_difference_from_avg",
+                "ownership_gender_diversity_sorted": "ownership_gender_diversity_difference"
+            }
             
-            return insights
-            
+            for sort_key, insight_key in insight_mapping.items():
+                if sorted_insights[sort_key]:  # Only add if there are insights
+                    formatted_insights[insight_key] = ". ".join(sorted_insights[sort_key])
+
+            ClassProfileAiInsightHelper._cache[cache_key] = {
+                "insights": formatted_insights,
+                "timestamp": time.time()
+            }
+            return formatted_insights
         except Exception as e:
-            logger.error(f"Error in get_profile_insights: {str(e)}")
+            print(f"Error in get_profile_insights: {e}")
             return None
 
     @staticmethod
@@ -3712,7 +3556,6 @@ class ClassProfileAiInsightHelper:
             return f"{float(value):.2f}" if value is not None else "NA"
         except (ValueError, TypeError):
             return "NA"
-
 
 
 class CollegeReviewsHelper:
@@ -5391,6 +5234,25 @@ class AliasReverseChecker:
         """
         return self.provided_college_ids if self.provided_college_ids else self.source_college_ids
     
+    def get_college_details(self, college_ids: List[int]) -> List[Dict]:
+        """
+        Get college details for the given college IDs in the same sequence as input college_ids.
+        
+        Args:
+            college_ids (List[int]): List of college IDs
+            
+        Returns:
+            List[Dict]: List of college details including id, name, and short_name in same order as college_ids
+        """
+        # Fetch all colleges in one query
+        colleges_dict = {
+            college['id']: college 
+            for college in College.objects.filter(id__in=college_ids).values('id', 'name', 'short_name')
+        }
+        
+        # Return colleges in the same order as college_ids
+        return [colleges_dict[college_id] for college_id in college_ids]
+    
     def generate_alias_parameterized(self) -> str:
         """
         Generate the parameterized alias with parameters.
@@ -5416,7 +5278,7 @@ class AliasReverseChecker:
     
     def get_result(self) -> Dict:
         """
-        Get the final result containing alias and parameterized alias with caching.
+        Get the final result containing alias, parameterized alias, and college details with caching.
         
         Returns:
             Dict: Dictionary containing alias information or error message
@@ -5437,11 +5299,13 @@ class AliasReverseChecker:
             alias_data = self.get_alias_data()
             alias_parameterized = self.generate_alias_parameterized()
             final_college_ids = self.get_final_college_ids()
+            college_details = self.get_college_details(final_college_ids)
             
             result = {
                 "alias": self.alias,
                 "alias_parameterized": alias_parameterized,
                 "college_ids": final_college_ids,
+                "college_details": college_details,
                 "course_ids": self.course_ids or 'NA'
             }
 
@@ -5452,8 +5316,196 @@ class AliasReverseChecker:
         except NoDataAvailableError as e:
             logger.warning(f"No data available: {str(e)}")
             error_result = {"error": str(e)}
-            cache.set(cache_key, error_result, timeout=3600*24)  # 5 minutes cache for errors
+            cache.set(cache_key, error_result, timeout=3600*24)  # 24 hour cache for errors
             return error_result
         except Exception as e:
             logger.error(f"Error in get_result: {str(e)}", exc_info=True)
             raise
+
+# class AliasReverseChecker:
+#     """Helper class for reverse checking aliases and handling parameterization."""
+    
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """Generate a cache key using MD5 hashing."""
+#         key = "_".join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+        
+#     def __init__(self, alias: str, college_ids: Optional[List[int]] = None, 
+#                  course_ids: Optional[List[int]] = None):
+#         """
+#         Initialize AliasReverseChecker with alias and optional IDs.
+        
+#         Args:
+#             alias (str): The alias to check
+#             college_ids (Optional[List[int]]): Optional list of two college IDs
+#             course_ids (Optional[List[int]]): Optional list of two course IDs
+#         """
+#         logger.debug(f"Initializing AliasReverseChecker with alias: {alias}, "
+#                     f"colleges: {college_ids}, courses: {course_ids}")
+#         self.alias = alias
+#         self.provided_college_ids = college_ids
+#         self.course_ids = course_ids
+#         self.source_college_ids = None
+#         self.validate_input()
+    
+#     def validate_input(self):
+#         """
+#         Validate the alias and optional parameters.
+        
+#         Raises:
+#             ValueError: If input validation fails
+#         """
+#         if not self.alias:
+#             raise ValueError("Alias must be provided.")
+            
+#         if self.provided_college_ids is not None:
+#             if not isinstance(self.provided_college_ids, list):
+#                 raise ValueError("college_ids must be a list.")
+#             if len(self.provided_college_ids) != 2:
+#                 raise ValueError("college_ids must contain exactly two college IDs.")
+            
+#         if self.course_ids is not None:
+#             if not isinstance(self.course_ids, list):
+#                 raise ValueError("course_ids must be a list.")
+#             if len(self.course_ids) != 2:
+#                 raise ValueError("course_ids must contain exactly two course IDs.")
+    
+#     def extract_college_ids(self, source: str) -> Optional[List[int]]:
+#         """
+#         Extract college IDs from the source field.
+        
+#         Args:
+#             source (str): Source string containing college IDs
+            
+#         Returns:
+#             Optional[List[int]]: List of extracted college IDs or None
+#         """
+#         try:
+#             parts = source.split('/')
+#             if len(parts) >= 3:
+#                 return [int(parts[-2]), int(parts[-1])]
+#         except (IndexError, ValueError) as e:
+#             logger.warning(f"Error extracting college IDs from source {source}: {str(e)}")
+#             return None
+#         return None
+    
+#     def validate_college_ids_match(self):
+#         """
+#         Validate that provided college IDs match the source if both exist.
+        
+#         Raises:
+#             ValueError: If college IDs don't match
+#         """
+#         if self.provided_college_ids and self.source_college_ids:
+#             provided_set = set(self.provided_college_ids)
+#             source_set = set(self.source_college_ids)
+#             if provided_set != source_set:
+#                 raise ValueError(
+#                     f"Provided college IDs {self.provided_college_ids} do not match "
+#                     f"the IDs in the source {self.source_college_ids}"
+#                 )
+    
+#     def get_alias_data(self) -> Dict:
+#         """
+#         Get alias data and extract college IDs from source.
+        
+#         Returns:
+#             Dict: Alias data dictionary
+            
+#         Raises:
+#             NoDataAvailableError: If no matching record is found
+#             ValueError: If college IDs cannot be extracted
+#         """
+#         alias_data = BaseUrlAlias.objects.filter(
+#             alias=self.alias,
+#             url_meta_pattern_id=102
+#         ).values('source', 'alias').first()
+        
+#         if not alias_data:
+#             raise NoDataAvailableError(
+#                 f"No matching record found for the provided alias: {self.alias}"
+#             )
+        
+#         self.source_college_ids = self.extract_college_ids(alias_data['source'])
+#         if not self.source_college_ids:
+#             raise ValueError(f"Could not extract college IDs from source: {alias_data['source']}")
+        
+#         self.validate_college_ids_match()
+#         return alias_data
+    
+#     def get_final_college_ids(self) -> List[int]:
+#         """
+#         Get the final college IDs to use, preferring provided IDs if they exist.
+        
+#         Returns:
+#             List[int]: Final list of college IDs to use
+#         """
+#         return self.provided_college_ids if self.provided_college_ids else self.source_college_ids
+    
+#     def generate_alias_parameterized(self) -> str:
+#         """
+#         Generate the parameterized alias with parameters.
+        
+#         Returns:
+#             str: Parameterized alias string
+            
+#         Raises:
+#             ValueError: If college IDs are not available
+#         """
+#         college_ids = self.get_final_college_ids()
+#         if not college_ids:
+#             raise ValueError("College IDs must be available before generating parameterized alias.")
+        
+#         college_ids_str = ",".join(map(str, college_ids))
+#         parameterized = f"{self.alias}?college_ids={college_ids_str}"
+        
+#         if self.course_ids:
+#             course_ids_str = ",".join(map(str, self.course_ids))
+#             parameterized = f"{parameterized}&course_ids={course_ids_str}"
+        
+#         return parameterized
+    
+#     def get_result(self) -> Dict:
+#         """
+#         Get the final result containing alias and parameterized alias with caching.
+        
+#         Returns:
+#             Dict: Dictionary containing alias information or error message
+#         """
+#         cache_key = self.get_cache_key(
+#             'alias_reverse_v1',
+#             self.alias,
+#             '_'.join(map(str, sorted(self.provided_college_ids))) if self.provided_college_ids else 'no_colleges',
+#             '_'.join(map(str, sorted(self.course_ids))) if self.course_ids else 'no_courses'
+#         )
+
+#         cached_result = cache.get(cache_key)
+#         if cached_result:
+#             logger.debug(f"Cache hit for key: {cache_key}")
+#             return cached_result
+
+#         try:
+#             alias_data = self.get_alias_data()
+#             alias_parameterized = self.generate_alias_parameterized()
+#             final_college_ids = self.get_final_college_ids()
+            
+#             result = {
+#                 "alias": self.alias,
+#                 "alias_parameterized": alias_parameterized,
+#                 "college_ids": final_college_ids,
+#                 "course_ids": self.course_ids or 'NA'
+#             }
+
+#             logger.debug(f"Caching result for key: {cache_key}")
+#             cache.set(cache_key, result, timeout=3600)  # 1 hour cache
+#             return result
+            
+#         except NoDataAvailableError as e:
+#             logger.warning(f"No data available: {str(e)}")
+#             error_result = {"error": str(e)}
+#             cache.set(cache_key, error_result, timeout=3600*24)  # 5 minutes cache for errors
+#             return error_result
+#         except Exception as e:
+#             logger.error(f"Error in get_result: {str(e)}", exc_info=True)
+#             raise
