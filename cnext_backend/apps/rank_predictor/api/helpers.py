@@ -1398,7 +1398,7 @@ class RPCmsHelper:
 
             ## Slot
             slot = additional_info.get("Enter Slot")
-            if slot.get("id"):
+            if slot and slot.get("id"):
                 slot["id"] = int(slot.get("id"))
 
             ## dataset
