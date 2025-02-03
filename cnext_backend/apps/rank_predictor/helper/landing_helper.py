@@ -278,7 +278,7 @@ class RPHelper:
             user_tracking.save()
             return user_tracking.id
 
-    def calculate_rank(self, exam_id, percentile, category_id=None, disability_id=None):
+    def calculate_rank(self, exam_id, product_id, percentile, category_id=None, disability_id=None):
         """
         Calculate ranks for the given combination of category and disability according to specific rules.
         :param exam_id: ID of the exam
@@ -317,7 +317,9 @@ class RPHelper:
 
 
         user_category = get_cast['name']  
-        user_disability = get_disability_id["name"]  
+        user_disability = get_disability_id["name"] 
+        # product_name = CPProductCampaign.objects.filter(id=product_id).values('name').first()
+        disclaimer = CPProductCampaign.objects.filter(id=product_id).values('disclaimer').first() 
 
         combinations = CombinationFactory.generate_combinations(user_category, user_disability)
 
@@ -365,12 +367,14 @@ class RPHelper:
                     classification = "Very Bad"
 
                 results.append({
+                    # "product_name": product_name,
                     "category": CATEGORY_MAP.get(category, "Unknown"),
                     "disability": DISABILITY_MAP.get(disability, "Unknown"),
                     "max_rank": round(rank, 2),
                     "min_rank": round(rank2, 2),
                     "appeared_candidates": appeared_candidates,
-                    "classification": classification
+                    "classification": classification,
+                    # "disclaimer": disclaimer,
                 })
             except Exception as e:
                 results.append({
@@ -386,12 +390,14 @@ class RPHelper:
         return {
             "result": True,
             "data": {
+                # "product_name": product_name,
                 "primary": primary,
                 "secondary": secondary,
+                "disclaimer": disclaimer,
             }
         }
 
-        
+    
      
     """
     Helper class to fetch and process data related to Rank Predictor functionality.
@@ -456,6 +462,7 @@ class RPHelper:
         # Default difficulty to Moderate ID (3) if not present
         difficulty_id = session_data.get("difficulty", MODERATE_ID)
         session_data["difficulty"] = difficulty_id
+        
 
         return session_data
 

@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rank_predictor.models import CnextRpUserTracking, RpInputFlowMaster
+from rank_predictor.models import CnextRpSession, CnextRpUserTracking, RpInputFlowMaster
 from tools.models import CPProductCampaign
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 from utils.helpers.custom_permission import ApiKeyPermission
@@ -381,6 +381,8 @@ class RankPredictorAPI(APIView):
             category_id = user_tracking.category  # 'category' column exists
             disability_id = user_tracking.disability  # 'disability' column exists
             input_fields = user_tracking.input_fields  # 'input_fields' column exists
+            product_id = user_tracking.product_id
+            
             
             
             
@@ -438,11 +440,15 @@ class RankPredictorAPI(APIView):
             percentile=percentile,
             category_id=category_id,
             disability_id=disability_id,
+            product_id=product_id,
         )
-
+        product_name = CPProductCampaign.objects.filter(id=product_id).values('name').first()
         # Format the response data
         formatted_data = {
             "message": "Rank Predictor Percentile to Rank Work flow.",
+            "result_details": "Overall CRL Rank",
+            "Product_id": product_id,
+            "product_name": product_name,
             "exam_id": exam_id,
             "percentile": percentile,
             "rank_data": rank_data.get("data"),
@@ -545,17 +551,19 @@ class RankPredictorAPI(APIView):
                 10: "PH-AI"
             }
 
-            record_id = 13
+            # record_id = 13
 
             # Fetch user_tracking data (assuming this part is working as per your original code)
             user_tracking = (
                 CnextRpUserTracking.objects.filter(id=form_id)
-                .values("product_id", "category", "disability", "input_fields", "additional_info")
+                .values("product_id", "category", "disability", "input_fields", "additional_info", "exam_session")
                 .first()
             )
-
+            
             # Extract the slot information from additional_info
             additional_info = user_tracking.get("additional_info", [])
+            record_id = user_tracking["exam_session"] if user_tracking else None
+            exam_shift = CnextRpSession.objects.filter(id=record_id).values('session_date').first()
             
             slot = None  # Initialize slot as None by default
 
@@ -675,6 +683,7 @@ class RankPredictorAPI(APIView):
 
                                 # Prepare the result for this combination
                                 combination = closest_item.get("combination")
+                                # print("combination", combination)
                                 result_combination = {
                                     "combination": combination,
                                     "z_score": closest_result_data.get("z_score"),
@@ -701,7 +710,24 @@ class RankPredictorAPI(APIView):
                                 # Append the combination to the result list
                                 result_list.append(result_combination)
                                 
-                            
+                                DIFFICULTY_LEVEL = {
+                                    1: "Easy",
+                                    2: "Moderately Easy",
+                                    3: "Moderate",
+                                    4: "Moderately Difficult",
+                                    5: "Difficult"
+                                }
+
+                                # Function to replace difficulty_level ID with its value
+                                def replace_difficulty_level(result_list):
+                                    for result in result_list:
+                                        if 'combination' in result and 'difficulty_level' in result['combination']:
+                                            difficulty_id = result['combination']['difficulty_level']
+                                            if difficulty_id in DIFFICULTY_LEVEL:
+                                                result['combination']['difficulty_level'] = DIFFICULTY_LEVEL[difficulty_id]
+                                    return result_list
+                                
+                                result_list = replace_difficulty_level(result_list)
                                     
                                 if rp_flow:
                                     rp_flow_type = rp_flow['input_flow_type']
@@ -734,6 +760,7 @@ class RankPredictorAPI(APIView):
                 })
 
                 # Return the final response with the result list and no_results_found
+            # print("final_results+++++++", final_result_list)
             primary = final_result_list[0]["data"][0] if final_result_list else None
             secondary = final_result_list[1:] if len(final_result_list) > 1 else []   
             response_data = {
@@ -752,6 +779,7 @@ class RankPredictorAPI(APIView):
                     "result": True,
                     "message": "Rank Predictor Score to Percentile Work flow.",
                     "data": {
+                        "exam_shift": exam_shift,
                         "product_name": product_name,
                         "primary": primary,
                         "secondary": secondary,
@@ -768,6 +796,7 @@ class RankPredictorAPI(APIView):
                 {"message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class FaqSectionAPI(APIView):
     """
