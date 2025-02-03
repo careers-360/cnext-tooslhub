@@ -1697,7 +1697,7 @@ class CommonDropDownHelper:
         elif field_name == "domain":
             dropdown = [
             {"id": domain.get("id"), "value": domain.get("name")}
-            for domain in Domain.objects.filter(is_stream=1).values("id", "name")
+            for domain in Domain.objects.filter(is_stream=1).values("id", "name").order_by("name")
         ]
 
         elif field_name == "category":
