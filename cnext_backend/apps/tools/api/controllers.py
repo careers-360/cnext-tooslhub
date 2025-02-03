@@ -1,5 +1,3 @@
-from rank_predictor.models import RpContentSection
-from tools.api.serializers import ToolBasicDetailSerializer
 from tools.helpers.helpers import ToolsHelper
 from rest_framework.views import APIView
 from utils.helpers.response import SuccessResponse,ErrorResponse, CustomErrorResponse
@@ -7,7 +5,6 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from rest_framework import status
 from rest_framework.response import Response
 import json
-from django.http import JsonResponse
 from tools.helpers.helpers import ToolsHelper
 from tools.models import CPProductCampaign, Domain, Exam, ToolsFAQ
 from utils.helpers.choices import TOOL_TYPE, CONSUMPTION_TYPE, PUBLISHING_TYPE
