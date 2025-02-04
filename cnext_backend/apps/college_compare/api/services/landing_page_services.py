@@ -40,7 +40,7 @@ import multiprocessing
 class CacheHelper:
     @staticmethod
     def get_cache_key(*args):
-        key = '___'.join(str(arg) for arg in args)
+        key = '__'.join(str(arg) for arg in args)
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -71,12 +71,12 @@ class PeerComparisonService:
     def get_peer_comparisons(cls, uid=None, cache_burst=0):
         user_context = UserContextHelper.get_user_context(uid)
         cache_key = CacheHelper.get_cache_key(
-            "peer_____Comparison", user_context.get('domain_id'), user_context.get('education_level')
+            "Peer___Comparison", user_context.get('domain_id'), user_context.get('education_level')
         )
         
         # If cache_burst is 1, clear the cache using CacheHelper
         if cache_burst == 1:
-            CacheHelper.burst_cache("peer___Comparison", user_context.get('domain_id'), user_context.get('education_level'))
+            CacheHelper.burst_cache("Peer___Comparison", user_context.get('domain_id'), user_context.get('education_level'))
 
         cached_result = cache.get(cache_key)
         if cached_result:
@@ -92,10 +92,11 @@ class PeerComparisonService:
                 "valid_course_ids", lambda: CollegeDomain.objects.filter(
                     status=True, domain__in=valid_domains
                 ).values_list('college_course_id', flat=True).distinct(), timeout=3600 * 24 * 31 *6
+
             )
 
             domain_level_combinations = CacheHelper.get_or_set(
-                "domain____level_combinations",
+                "domain_level_combinations",
                 lambda: CollegeCompareData.objects.filter(
                     college_1__isnull=False, college_2__isnull=False,
                     course_1__in=valid_course_ids, course_2__in=valid_course_ids
@@ -189,7 +190,7 @@ class PeerComparisonService:
     def _fetch_comparisons_for_domain_level(combo, valid_course_ids,cache_burst=0):
         domain_id = combo['domain_id']
         level = combo['level']
-        cache_key = f"domain___level_comparisons_{domain_id}_{level}"
+        cache_key = f"domain_level_comparisons_{domain_id}_{level}"
         
        
         if cache_burst == 1:
@@ -232,30 +233,26 @@ class PeerComparisonService:
 
 
 
-
-
 class TopCollegesCoursesService:
-    BATCH_SIZE = 800
+    BATCH_SIZE = 1000
     CACHE_TIMEOUT = 3600 * 168
     MAX_WORKERS = 10
 
     @classmethod
-    def get_top_colleges_courses(cls, uid: int = None, cache_burst: int = 0) -> Dict:
+    def get_top_colleges_courses(cls, uid: int = None, cache_burst: int = 0) -> dict:
         """Get top colleges and courses with optimized batch processing using multiprocessing."""
         try:
             user_context = UserContextHelper.get_user_context(uid)
-            cache_key = f"top_colleges_courses_v23_{user_context.get('domain_id')}"
-
+            domain_id = user_context.get('domain_id')
+            cache_key = f"top_colleges_courses_v25_{domain_id}"
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v23", user_context.get('domain_id'))
-
+                CacheHelper.burst_cache("top_colleges_courses_v15_", domain_id)
             if cached := cache.get(cache_key):
                 return cached
 
             with Pool(processes=cls.MAX_WORKERS) as pool:
                 colleges_future = pool.apply_async(partial(cls._get_top_colleges, user_context, cache_burst))
                 courses_future = pool.apply_async(partial(cls._get_top_courses, user_context, cache_burst))
-
                 result = {
                     'colleges': colleges_future.get(),
                     'courses': courses_future.get()
@@ -264,21 +261,18 @@ class TopCollegesCoursesService:
             # Cache the result
             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
             return result
-
         except Exception as e:
             logger.error(f"Error in get_top_colleges_courses: {str(e)}", exc_info=True)
             return {"error": str(e)}
-    
+
     @classmethod
-    def _get_top_colleges(cls, user_context: Dict, cache_burst: int) -> List[Dict]:
+    def _get_top_colleges(cls, user_context: dict, cache_burst: int) -> list:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v23_{domain_id}"
-
+            cache_key = f"top_colleges_v25_{domain_id}"
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_v23_", domain_id)
-
+                CacheHelper.burst_cache("top_colleges_v15_", domain_id)
             if cached := cache.get(cache_key):
                 return cached
 
@@ -301,7 +295,7 @@ class TopCollegesCoursesService:
                 comparisons_as_college_2=Coalesce(Subquery(comparison_counts_2), 0),
                 total_comparisons=(
                     F('comparisons_as_college_1') +
-                    F('comparisons_as_college_2') 
+                    F('comparisons_as_college_2')
                 )
             ).select_related('location')
 
@@ -317,22 +311,19 @@ class TopCollegesCoursesService:
             # Cache the result
             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
             return result
-
         except Exception as e:
             logger.error(f"Error in _get_top_colleges: {str(e)}", exc_info=True)
             return []
 
     @classmethod
-    def _get_top_courses(cls, user_context: Dict, cache_burst: int) -> List[Dict]:
+    def _get_top_courses(cls, user_context: dict, cache_burst: int) -> list:
         """Get top courses using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v23_{domain_id}"
-
+            cache_key = f"top_courses_v25_{domain_id}"
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_courses_v23_", domain_id)
-
+                CacheHelper.burst_cache("top_courses_v15_", domain_id)
             if cached := cache.get(cache_key):
                 return cached
 
@@ -355,7 +346,7 @@ class TopCollegesCoursesService:
                 comparisons_as_course_2=Coalesce(Subquery(comparison_counts_2), 0),
                 total_comparisons=(
                     F('comparisons_as_course_1') +
-                    F('comparisons_as_course_2') 
+                    F('comparisons_as_course_2')
                 )
             ).select_related(
                 'college', 'degree'
@@ -372,14 +363,12 @@ class TopCollegesCoursesService:
 
             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
             return result
-
         except Exception as e:
             logger.error(f"Error in _get_top_courses: {str(e)}", exc_info=True)
             return []
 
-
     @staticmethod
-    def _process_college(college: College) -> Dict:
+    def _process_college(college: 'College') -> dict:
         """Process college details."""
         try:
             return {
@@ -397,9 +386,8 @@ class TopCollegesCoursesService:
             logger.error(f"Error processing college {college.id}: {str(e)}")
             return {}
 
-
     @staticmethod
-    def _process_course(course: Course) -> Dict:
+    def _process_course(course: 'Course') -> dict:
         """Process course details."""
         try:
             return {
@@ -420,3 +408,191 @@ class TopCollegesCoursesService:
         except Exception as e:
             logger.error(f"Error processing course {course.id}: {str(e)}")
             return {}
+
+
+# class TopCollegesCoursesService:
+#     BATCH_SIZE = 1000
+#     CACHE_TIMEOUT = 3600 * 168
+#     MAX_WORKERS = 10
+
+#     @classmethod
+#     def get_top_colleges_courses(cls, uid: int = None, cache_burst: int = 0) -> Dict:
+#         """Get top colleges and courses with optimized batch processing using multiprocessing."""
+#         try:
+#             user_context = UserContextHelper.get_user_context(uid)
+#             cache_key = f"top_colleges_courses_v15_{user_context.get('domain_id')}"
+
+#             if cache_burst == 1:
+#                 CacheHelper.burst_cache("top_colleges_courses_v15_", user_context.get('domain_id'))
+
+#             if cached := cache.get(cache_key):
+#                 return cached
+
+#             with Pool(processes=cls.MAX_WORKERS) as pool:
+#                 colleges_future = pool.apply_async(partial(cls._get_top_colleges, user_context, cache_burst))
+#                 courses_future = pool.apply_async(partial(cls._get_top_courses, user_context, cache_burst))
+
+#                 result = {
+#                     'colleges': colleges_future.get(),
+#                     'courses': courses_future.get()
+#                 }
+
+#             # Cache the result
+#             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
+#             return result
+
+#         except Exception as e:
+#             logger.error(f"Error in get_top_colleges_courses: {str(e)}", exc_info=True)
+#             return {"error": str(e)}
+    
+#     @classmethod
+#     def _get_top_colleges(cls, user_context: Dict, cache_burst: int) -> List[Dict]:
+#         """Get top colleges using batch processing with caching."""
+#         try:
+#             domain_id = user_context.get('domain_id')
+#             cache_key = f"top_colleges_v15_{domain_id}"
+
+#             if cache_burst == 1:
+#                 CacheHelper.burst_cache("top_colleges_v15_", domain_id)
+
+#             if cached := cache.get(cache_key):
+#                 return cached
+
+#             comparison_counts_1 = CollegeCompareData.objects.filter(
+#                 college_1=OuterRef('id')
+#             ).values('college_1').annotate(
+#                 count=Count('*')
+#             ).values('count')
+
+#             comparison_counts_2 = CollegeCompareData.objects.filter(
+#                 college_2=OuterRef('id')
+#             ).values('college_2').annotate(
+#                 count=Count('*')
+#             ).values('count')
+
+#             colleges = College.objects.filter(
+#                 published='published'
+#             ).annotate(
+#                 comparisons_as_college_1=Coalesce(Subquery(comparison_counts_1), 0),
+#                 comparisons_as_college_2=Coalesce(Subquery(comparison_counts_2), 0),
+#                 total_comparisons=(
+#                     F('comparisons_as_college_1') +
+#                     F('comparisons_as_college_2') 
+#                 )
+#             ).select_related('location')
+
+#             if domain_id:
+#                 colleges = colleges.filter(
+#                     collegedomain__domain_id=domain_id,
+#                     collegedomain__status=True
+#                 ).distinct()
+
+#             colleges = colleges.order_by('-total_comparisons')[:10]
+#             result = [cls._process_college(college) for college in colleges]
+
+#             # Cache the result
+#             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
+#             return result
+
+#         except Exception as e:
+#             logger.error(f"Error in _get_top_colleges: {str(e)}", exc_info=True)
+#             return []
+
+#     @classmethod
+#     def _get_top_courses(cls, user_context: Dict, cache_burst: int) -> List[Dict]:
+#         """Get top courses using batch processing with caching."""
+#         try:
+#             domain_id = user_context.get('domain_id')
+#             education_level = user_context.get('education_level')
+#             cache_key = f"top_courses_v15_{domain_id}"
+
+#             if cache_burst == 1:
+#                 CacheHelper.burst_cache("top_courses_v15_", domain_id)
+
+#             if cached := cache.get(cache_key):
+#                 return cached
+
+#             comparison_counts_1 = CollegeCompareData.objects.filter(
+#                 course_1=OuterRef('id')
+#             ).values('course_1').annotate(
+#                 count=Count('*')
+#             ).values('count')
+
+#             comparison_counts_2 = CollegeCompareData.objects.filter(
+#                 course_2=OuterRef('id')
+#             ).values('course_2').annotate(
+#                 count=Count('*')
+#             ).values('count')
+
+#             courses = Course.objects.filter(
+#                 status=True
+#             ).annotate(
+#                 comparisons_as_course_1=Coalesce(Subquery(comparison_counts_1), 0),
+#                 comparisons_as_course_2=Coalesce(Subquery(comparison_counts_2), 0),
+#                 total_comparisons=(
+#                     F('comparisons_as_course_1') +
+#                     F('comparisons_as_course_2') 
+#                 )
+#             ).select_related(
+#                 'college', 'degree'
+#             )
+
+#             if domain_id:
+#                 courses = courses.filter(
+#                     collegedomain_course__domain_id=domain_id,
+#                     collegedomain_course__status=True
+#                 ).distinct()
+
+#             courses = courses.order_by('-total_comparisons')[:10]
+#             result = [cls._process_course(course) for course in courses]
+
+#             cache.set(cache_key, result, cls.CACHE_TIMEOUT)
+#             return result
+
+#         except Exception as e:
+#             logger.error(f"Error in _get_top_courses: {str(e)}", exc_info=True)
+#             return []
+
+
+#     @staticmethod
+#     def _process_college(college: College) -> Dict:
+#         """Process college details."""
+#         try:
+#             return {
+#                 'college_short_name': college.short_name or 'NA',
+#                 'college_full_name': college.name,
+#                 'college_id': college.id,
+#                 'location': college.location.loc_string if college.location else "N/A",
+#                 'ownership': college.get_ownership_display(),
+#                 'nirf_rank': CollegeDataHelper.get_nirf_rank(college.id),
+#                 'college_logo': CollegeDataHelper.get_college_logo(college.id),
+#                 'total_comparisons': college.total_comparisons,
+#                 'avg_review_rating': CollegeDataHelper.get_avg_rating(college.id)
+#             }
+#         except Exception as e:
+#             logger.error(f"Error processing college {college.id}: {str(e)}")
+#             return {}
+
+
+#     @staticmethod
+#     def _process_course(course: Course) -> Dict:
+#         """Process course details."""
+#         try:
+#             return {
+#                 'course_name': course.course_name,
+#                 'college_short_name': course.college.short_name or 'NA',
+#                 'college_full_name': course.college.name,
+#                 'course_id': course.id,
+#                 'college_id': course.college.id,
+#                 'ownership': course.college.get_ownership_display(),
+#                 'nirf_rank': CollegeDataHelper.get_nirf_rank(course.college.id),
+#                 'college_logo': CollegeDataHelper.get_college_logo(course.college.id),
+#                 'total_comparisons': course.total_comparisons,
+#                 'degree_name': course.degree.name if course.degree else 'NA',
+#                 'degree_id': course.degree.id if course.degree else None,
+#                 "level": course.level,
+#                 "degree_domain": course.degree_domain.id if course.degree_domain else 'NA'
+#             }
+#         except Exception as e:
+#             logger.error(f"Error processing course {course.id}: {str(e)}")
+#             return {}

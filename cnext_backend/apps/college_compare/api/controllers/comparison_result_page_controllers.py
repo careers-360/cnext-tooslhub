@@ -168,7 +168,7 @@ class RankingAccreditationComparisonView(APIView):
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
         course_ids_str = request.query_params.get('course_ids')
-        year = request.query_params.get('year') or current_year - 2
+        year = request.query_params.get('year') or current_year - 1
 
         try:
             if not college_ids_str:
@@ -237,7 +237,7 @@ class RankingAccreditationCombinedComparisonView(APIView):
         college_ids = request.query_params.get('college_ids')
         course_ids_str = request.query_params.get('course_ids')
         print(course_ids_str)
-        year_str = request.query_params.get('year') or current_year - 2
+        year_str = request.query_params.get('year') or current_year - 1
 
         try:
             if not college_ids or not course_ids_str or not year_str:
@@ -498,6 +498,7 @@ class PlacementStatsComparisonView(APIView):
            
 
             result = PlacementInsightHelper.fetch_placement_stats(college_ids, course_ids_dict, year)
+            result['year']=year
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
         except NoDataAvailableError as e:
@@ -895,6 +896,7 @@ class ClassProfileComparisonView(APIView):
                 intake_year=intake_year,
                 selected_courses=selected_courses  # Pass course mapping (can be None)
             )
+            result['year']=year
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
         except NoDataAvailableError as e:
@@ -1006,7 +1008,7 @@ class ProfileInsightsView(APIView):
                 college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                course_ids=selected_courses,  # Pass course_ids instead of selected_domains
+                selected_courses=selected_courses,  # Pass course_ids instead of selected_domains
                 level=level,
             )
 
@@ -1115,7 +1117,7 @@ class classProfileAIInsightsView(APIView):
                 college_ids=college_ids,
                 year=year,
                 intake_year=intake_year,
-                course_ids=selected_courses,  # Pass course_ids instead of selected_domains
+                selected_courses=selected_courses,  # Pass course_ids instead of selected_domains
                 level=level,
             )
 
@@ -1712,6 +1714,9 @@ class ExamCutoffView(APIView):
                 course_ids=course_ids_list,
                 **optional_params
             )
+
+            if 'error' in result:
+                print("---------")
 
         
 
