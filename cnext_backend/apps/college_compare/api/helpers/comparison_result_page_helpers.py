@@ -140,7 +140,7 @@ class RankingAccreditationHelper:
         """
         Generate a cache key using MD5 hashing.
         """
-        key = '+++++++_________________+++++'.join(map(str, args))
+        key = '+++++++deee_________________+++++'.join(map(str, args))
         return md5(key.encode()).hexdigest()
     
 
@@ -267,7 +267,7 @@ class RankingAccreditationHelper:
 
             cache_key_parts = ['ranking_comparison_data', year, '-'.join(map(str, college_ids))]
             if course_ids:
-                cache_key_parts.append('-__---------------'.join(map(str, course_ids)))
+                cache_key_parts.append('-ss__---------------'.join(map(str, course_ids)))
             cache_key = RankingAccreditationHelper.get_cache_key(*cache_key_parts)
 
             def fetch_data():
@@ -350,26 +350,71 @@ class RankingAccreditationHelper:
                                     ),
                                     Value('NA', output_field=CharField())
                                 ),
-                                nirf_overall_rank=Coalesce(
-                                    Cast(
-                                        Min(Case(
-                                            When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_entity='Overall'), then=F('overall_rank')),
-                                            default=None
-                                        )),
-                                        output_field=CharField()
-                                    ),
-                                    Value('NA', output_field=CharField())
-                                ),
-                                nirf_domain_rank=Coalesce(
-                                    Cast(
-                                        Min(Case(
-                                            When(Q(ranking__ranking_authority='NIRF') & Q(ranking__ranking_stream=selected_domain), then=F('overall_rank')),
-                                            default=None
-                                        )),
-                                        output_field=CharField()
-                                    ),
-                                    Value('NA', output_field=CharField())
-                                ),
+                                  nirf_overall_rank = Coalesce(
+            # First attempt: Get overall_rank from NIRF Overall
+            Cast(
+                Min(Case(
+                    When(
+                        Q(ranking__ranking_authority='NIRF') & 
+                        Q(ranking__ranking_entity='Stream Wise Colleges') & 
+                          # Exclude empty strings
+                        ~Q(overall_rank__isnull=True) &  # Exclude NULL values
+                        Q(overall_rank__regex=r'^\d+$'),  # Ensure it's a valid number
+                        then=F('overall_rank')
+                    ),
+                    default=None
+                )),
+                output_field=CharField()
+            ),
+            # Second attempt: Get rank_band if overall_rank is not available
+            Cast(
+                Min(Case(
+                    When(
+                        Q(ranking__ranking_authority='NIRF') & 
+                        Q(ranking__ranking_entity='Stream Wise Colleges') & 
+                     Q(overall_rank__isnull=True) &  # Check for empty or NULL
+                      # Exclude empty strings
+                        ~Q(rank_band__isnull=True),  # Exclude NULL values
+                        then=F('rank_band')
+                    ),
+                    default=None
+                )),
+                output_field=CharField()
+            ),
+            Value('NA', output_field=CharField())
+        ),
+        nirf_domain_rank = Coalesce(
+            # First attempt: Get overall_rank for domain
+            Cast(
+                Min(Case(
+                    When(
+                        Q(ranking__ranking_authority='NIRF') & 
+                        Q(ranking__ranking_stream=selected_domain) & 
+                      
+                        ~Q(overall_rank__isnull=True) &  # Exclude NULL values
+                        Q(overall_rank__regex=r'^\d+$'),  # Ensure it's a valid number
+                        then=F('overall_rank')
+                    ),
+                    default=None
+                )),
+                output_field=CharField()
+            ),
+            # Second attempt: Get rank_band for domain if overall_rank is not available
+            Cast(
+                Min(Case(
+                    When(
+                        Q(ranking__ranking_authority='NIRF') & 
+                        Q(ranking__ranking_stream=selected_domain) & 
+                        Q(overall_rank__isnull=True) &  # Check for empty or NULL
+                        ~Q(rank_band__isnull=True),  # Exclude NULL values
+                        then=F('rank_band')
+                    ),
+                    default=None
+                )),
+                output_field=CharField()
+            ),
+            Value('NA', output_field=CharField())
+        ),
                                 other_ranked_domain=Coalesce(
                                     Cast(
                                         Subquery(min_other_ranked_domain),
@@ -484,19 +529,216 @@ def get_ordinal_suffix(num: int) -> str:
 
 
 
+
+
+# class CollegeRankingService:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a cache key using MD5 hashing.
+#         """
+#         key = '________'.join(map(str, args))
+#         return md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def get_state_and_ownership_ranks(
+#         college_ids: List[int],
+#         course_ids: List[int],
+#         year: int
+#     ) -> Dict[str, Dict]:
+#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
+#         try:
+#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
+#             cached_result = cache.get(cache_key)
+#             if cached_result:
+#                 return cached_result
+
+#             # Extract course IDs and create a mapping of college_id to domain
+#             course_ids_values = list(course_ids.values())
+#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
+#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+
+#             # Create a mapping of college_id to domain
+#             college_domain_map = {}
+#             for college_id in college_ids:
+#                 course_id = course_ids.get(college_id)
+#                 if course_id:
+#                     college_domain_map[college_id] = course_domain_map.get(course_id)
+#                 else:
+#                     college_domain_map[college_id] = None
+
+#             # Initialize the result dictionary with all college IDs
+#             result = {f"college_{idx + 1}": {
+#                 "college_id": college_id,
+#                 "domain": college_domain_map[college_id],
+#                 "state_rank_display": "Not Available",
+#                 "ownership_rank_display": "Not Available",
+#             } for idx, college_id in enumerate(college_ids)}
+
+#             # Group colleges by domain
+#             domain_groups = {}
+#             for college_id in college_ids:
+#                 domain_id = college_domain_map[college_id]
+#                 domain_groups.setdefault(domain_id, []).append(college_id)
+
+#             for domain_id, domain_college_ids in domain_groups.items():
+#                 base_queryset = RankingUploadList.objects.filter(
+#                     ranking__ranking_stream=domain_id,
+#                     ranking__year=year,
+#                     ranking__status=1
+#                 ).select_related('college', 'college__location')
+
+#                 if not base_queryset.exists():
+#                     popular_stream = (
+#                         College.objects.filter(id__in=domain_college_ids)
+#                         .values_list('popular_stream', flat=True)
+#                         .first()
+#                     )
+
+#                     if popular_stream:
+#                         base_queryset = RankingUploadList.objects.filter(
+#                             ranking__ranking_stream=popular_stream,
+#                             ranking__year=year,
+#                             ranking__status=1
+#                         ).select_related('college', 'college__location')
+
+#                 total_counts = base_queryset.values(
+#                     'college__location__state_id',
+#                     'college__ownership'
+#                 )
+
+#                 state_totals = {}
+#                 ownership_totals = {}
+#                 for college in total_counts:
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+#                     if state_id:
+#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
+#                     if ownership:
+#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
+
+#                 all_ranked_colleges = list(base_queryset.values(
+#                     'college_id',
+#                     'overall_rank',
+#                     'college__location__state_id',
+#                     'college__location__loc_string',
+#                     'college__ownership'
+#                 ).filter(
+#                     overall_rank__isnull=False
+#                 ).order_by('overall_rank'))
+
+#                 state_ranks = {}
+#                 college_details = {}
+#                 ownership_groups = {}
+
+#                 for college in all_ranked_colleges:
+#                     college_id = college['college_id']
+#                     state_id = college['college__location__state_id']
+#                     ownership = college['college__ownership']
+
+#                     overall_rank_str = college['overall_rank']
+
+#                     if overall_rank_str and overall_rank_str.isdigit():
+#                         overall_rank = int(overall_rank_str)
+#                     else:
+#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
+#                         continue
+
+#                     if college_id in domain_college_ids:
+#                         college_details[college_id] = {
+#                             'state_id': state_id,
+#                             'state_name': college['college__location__loc_string'],
+#                             'ownership': ownership,
+#                             'overall_rank': overall_rank
+#                         }
+
+#                     if state_id not in state_ranks:
+#                         state_ranks[state_id] = {}
+#                     current_rank = len(state_ranks[state_id]) + 1
+#                     state_ranks[state_id][college_id] = current_rank
+
+#                     ownership_groups.setdefault(ownership, []).append({
+#                         'college_id': college_id,
+#                         'overall_rank': overall_rank
+#                     })
+
+#                 ownership_ranks = {}
+#                 for ownership, colleges in ownership_groups.items():
+#                     colleges.sort(key=lambda x: x['overall_rank'])
+#                     current_rank = 1
+#                     prev_rank = None
+#                     ownership_ranks[ownership] = {}
+
+#                     for idx, college in enumerate(colleges):
+#                         if idx > 0 and college['overall_rank'] > prev_rank:
+#                             current_rank = idx + 1
+#                         ownership_ranks[ownership][college['college_id']] = current_rank
+#                         prev_rank = college['overall_rank']
+
+#                 for college_id in domain_college_ids:
+#                     details = college_details.get(college_id, {})
+
+#                     if details:
+#                         state_id = details['state_id']
+#                         ownership = details['ownership']
+#                         state_name = details['state_name']
+
+#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
+#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
+
+#                         state_total = state_totals.get(state_id, 0)
+#                         ownership_total = ownership_totals.get(ownership, 0)
+#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
+#                     else:
+#                         state_rank = ownership_rank = "Not Available"
+#                         state_total = ownership_total = 0
+#                         state_name = ""
+#                         ownership_type = "Unknown"
+
+#                     # Update the result dictionary for the specific college
+#                     for key, value in result.items():
+#                         if value['college_id'] == college_id:
+#                             value.update({
+#                                 "domain": domain_id,
+#                                 "state_rank_display": (
+#                                     f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
+#                                     if isinstance(state_rank, int) else "Not Available"
+#                                 ),
+#                                 "ownership_rank_display": (
+#                                     f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
+#                                     if isinstance(ownership_rank, int) else "Not Available"
+#                                 ),
+#                             })
+#                             break
+
+#             # Cache the result for future use
+#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
+#             return result
+
+#         except NoDataAvailableError as nde:
+#             logger.warning(f"No data available: {nde}")
+#             raise
+
+#         except Exception as e:
+#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
+#             raise
+
+
+
+
 class CollegeRankingService:
     @staticmethod
     def get_cache_key(*args) -> str:
         """
         Generate a cache key using MD5 hashing.
         """
-        key = '________'.join(map(str, args))
+        key = '+++'.join(map(str, args))
         return md5(key.encode()).hexdigest()
 
     @staticmethod
     def get_state_and_ownership_ranks(
         college_ids: List[int],
-        course_ids: List[int],
+        course_ids: List[Dict],
         year: int
     ) -> Dict[str, Dict]:
         """Gets state-wise and ownership-wise ranks based on overall ranks."""
@@ -570,15 +812,30 @@ class CollegeRankingService:
                     if ownership:
                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
 
-                all_ranked_colleges = list(base_queryset.values(
+                all_ranked_colleges = list(base_queryset.annotate(
+                    # Combined logic for overall_rank and rank_band
+                    ranking_value=Case(
+                        When(
+                            Q(ranking__ranking_authority='NIRF') &
+                            Q(overall_rank__regex=r'^\d+$'),  # Ensure it's a valid number
+                            then=F('overall_rank')
+                        ),
+                        When(
+                            Q(ranking__ranking_authority='NIRF') &
+                            Q(overall_rank__isnull=True) &  # Check for empty or NULL
+                            ~Q(rank_band__isnull=True),  # Exclude NULL values
+                            then=F('rank_band')
+                        ),
+                        default=None,
+                        output_field=CharField()
+                    )
+                ).values(
                     'college_id',
-                    'overall_rank',
+                    'ranking_value',
                     'college__location__state_id',
                     'college__location__loc_string',
                     'college__ownership'
-                ).filter(
-                    overall_rank__isnull=False
-                ).order_by('overall_rank'))
+                ))
 
                 state_ranks = {}
                 college_details = {}
@@ -588,13 +845,21 @@ class CollegeRankingService:
                     college_id = college['college_id']
                     state_id = college['college__location__state_id']
                     ownership = college['college__ownership']
+                    ranking_value = college['ranking_value']
 
-                    overall_rank_str = college['overall_rank']
+                    overall_rank = None
 
-                    if overall_rank_str and overall_rank_str.isdigit():
-                        overall_rank = int(overall_rank_str)
+                    if ranking_value and ranking_value.isdigit():
+                        overall_rank = int(ranking_value)
+                    elif ranking_value and '-' in ranking_value:
+                        # Handle rank band values like "101-150"
+                        try:
+                            lower_rank, upper_rank = map(int, ranking_value.split('-'))
+                            overall_rank = lower_rank  # Use the lower bound as the rank
+                        except ValueError:
+                            logger.warning(f"Invalid rank_band for college_id={college_id}: {ranking_value}")
                     else:
-                        logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
+                        logger.warning(f"Invalid ranking value for college_id={college_id}: {ranking_value}")
                         continue
 
                     if college_id in domain_college_ids:
@@ -1081,13 +1346,13 @@ class RankingAiInsightHelper:
 
 
 
-
 import re
+
 
 class RankingInsightsCalculator:
     @staticmethod
     def is_valid_number(value):
-        return value not in {'NA', None, ''}
+        return value not in {"NA", None, ""}
 
     @staticmethod
     def safe_int_conversion(value):
@@ -1095,9 +1360,8 @@ class RankingInsightsCalculator:
             try:
                 return int(value)
             except ValueError:
-              
                 if isinstance(value, str):
-                    value = re.sub(r'(st|nd|rd|th)', '', value)
+                    value = re.sub(r"(st|nd|rd|th)", "", value)
                 try:
                     return int(value)
                 except ValueError:
@@ -1115,99 +1379,176 @@ class RankingInsightsCalculator:
         """
         insights = {}
         try:
-            current_year = ranking_data['current_year_data']
-            previous_year = ranking_data['previous_year_data']
-            current_combined = ranking_data['current_combined_ranking_data']
-            multi_year = ranking_data['multi_year_ranking_data']
+            current_year = ranking_data["current_year_data"]
+            previous_year = ranking_data["previous_year_data"]
+            current_combined = ranking_data["current_combined_ranking_data"]
+            multi_year = ranking_data["multi_year_ranking_data"]
 
-            
+            # Graduation Outcome Insights
+            graduation_parts = []
+            graduation_data = {}
+
+            for college_id, data in current_year.items():
+                if RankingInsightsCalculator.is_valid_number(
+                    data.get("graduation_outcome_score")
+                ):
+                    graduation_data[college_id] = {
+                        "college_short_name": data["college_short_name"],
+                        "score": data["graduation_outcome_score"],
+                        "domain_name": data["domain_name"],
+                    }
+
+            for college_id, data in multi_year.items():
+                if college_id not in graduation_data and data.get(
+                    "graduation_outcome_scores"
+                ):
+                    valid_graduation_scores = [
+                        score
+                        for score in data["graduation_outcome_scores"]
+                        if score != "NA"
+                        and RankingInsightsCalculator.is_valid_number(score)
+                    ]
+                    if valid_graduation_scores:
+                        first_valid_score = valid_graduation_scores[0]
+                        college_short_name = current_year.get(college_id, {}).get(
+                            "college_short_name"
+                        )
+                        domain_name = current_year.get(college_id, {}).get(
+                            "domain_name"
+                        )
+                        if college_short_name and domain_name:
+                            graduation_data[college_id] = {
+                                "college_short_name": college_short_name,
+                                "score": first_valid_score,
+                                "domain_name": domain_name,
+                            }
+
             graduation_parts = sorted(
                 [
-                    f"{data['college_short_name']} scores {data['graduation_outcome_score']} in {data['domain_name']}"
-                    for college_id, data in current_year.items()
-                    if RankingInsightsCalculator.is_valid_number(data.get('graduation_outcome_score'))
+                    f"{data['college_short_name']} scores {data['score']} in {data['domain_name']}"
+                    for data in graduation_data.values()
                 ],
-                key=lambda x: float(x.split("scores ")[1].split(" ")[0]),  
-                reverse=True  
+                key=lambda x: float(x.split("scores ")[1].split(" ")[0]),
+                reverse=True,
             )
-            if graduation_parts:
-                insights["graduation_outcome"] = "Based on current graduation outcomes, " + ", followed by ".join(graduation_parts)
 
-          
-            ownership_types = {data['ownership'] for data in current_year.values() if 'ownership' in data}
+            if graduation_parts:
+                insights["graduation_outcome"] = (
+                    "Based on current graduation outcomes, "
+                    + ", followed by ".join(graduation_parts)
+                )
+
+            # State and Ownership Ranking Insights
+            ownership_types = {
+                data["ownership"] for data in current_year.values() if "ownership" in data
+            }
 
             state_ranking_parts = sorted(
                 [
                     f"{current_year[college_id]['college_short_name']} is ranked {combined_data['state_rank_display']}"
                     for college_id, combined_data in current_combined.items()
-                    if combined_data.get('state_rank_display') and combined_data['state_rank_display'] != 'Not Available'
+                    if combined_data.get("state_rank_display")
+                    and combined_data["state_rank_display"] != "Not Available"
                 ],
-                key=lambda x: RankingInsightsCalculator.safe_int_conversion(x.split("ranked ")[1].split(" ")[0])  
+                key=lambda x: RankingInsightsCalculator.safe_int_conversion(
+                    x.split("ranked ")[1].split(" ")[0]
+                ),
             )
 
             ownership_ranking_parts = sorted(
                 [
                     f"{current_year[college_id]['college_short_name']} ranks {combined_data['ownership_rank_display']}"
                     for college_id, combined_data in current_combined.items()
-                    if combined_data.get('ownership_rank_display') and combined_data['ownership_rank_display'] != 'Not Available'
+                    if combined_data.get("ownership_rank_display")
+                    and combined_data["ownership_rank_display"] != "Not Available"
                 ],
-                key=lambda x: RankingInsightsCalculator.safe_int_conversion(x.split("ranks ")[1].split(" ")[0]) 
+                key=lambda x: RankingInsightsCalculator.safe_int_conversion(
+                    x.split("ranks ")[1].split(" ")[0]
+                ),
             )
 
             if state_ranking_parts:
-                insights['state_specific_rankings'] = ", followed by ".join(state_ranking_parts)
+                insights["state_specific_rankings"] = ", followed by ".join(
+                    state_ranking_parts
+                )
 
             if ownership_ranking_parts:
-                ownership_desc = "varied ownership types" if len(ownership_types) > 1 else next(iter(ownership_types), "institutes")
-                insights['ownership_rankings'] = f"Among {ownership_desc}, {', followed by '.join(ownership_ranking_parts)}"
+                ownership_desc = (
+                    "varied ownership types"
+                    if len(ownership_types) > 1
+                    else next(iter(ownership_types), "institutes")
+                )
+                insights["ownership_rankings"] = (
+                    f"Among {ownership_desc}, {', followed by '.join(ownership_ranking_parts)}"
+                )
 
-           
-
+            # Past Year Changes Insights
             change_parts = []
             for college_id, data in current_year.items():
-                current_rank = RankingInsightsCalculator.safe_int_conversion(data.get('nirf_overall_rank'))
-                previous_rank = RankingInsightsCalculator.safe_int_conversion(previous_year.get(college_id, {}).get('nirf_overall_rank'))
+                current_rank = RankingInsightsCalculator.safe_int_conversion(
+                    data.get("nirf_overall_rank")
+                )
+                previous_rank = RankingInsightsCalculator.safe_int_conversion(
+                    previous_year.get(college_id, {}).get("nirf_overall_rank")
+                )
 
                 if current_rank is not None and previous_rank is not None:
                     change = previous_rank - current_rank
-                    change_parts.append((data['college_short_name'], change))
+                    if change != 0:  # Only consider changes that are not zero
+                        change_parts.append((data["college_short_name"], change))
 
             if change_parts:
                 past_year_changes = ", followed by ".join(
                     f"{college[0]} {'dips by' if college[1] < 0 else 'improves by'} {abs(college[1])} spots"
-                    for college in sorted(change_parts, key=lambda x: x[1], reverse=True)  # Descending Order
+                    for college in sorted(
+                        change_parts, key=lambda x: x[1], reverse=True
+                    )  # Descending Order
                 )
                 insights["past_year_changes"] = past_year_changes
 
-               
-                max_change_college = max(change_parts, key=lambda x: abs(x[1]))
-                insights["highest_changes"] = (
-                    f"{max_change_college[0]} shows the highest {'dip' if max_change_college[1] < 0 else 'increase'} "
-                    f"of {abs(max_change_college[1])} spots among all colleges"
-                )
-
-           
-            trends = sorted(
-                [
-                    (current_year[college_id]['college_short_name'], trend)
-                    for college_id, data in multi_year.items()
-                    if (ranks := [RankingInsightsCalculator.safe_int_conversion(r) for r in data['nirf_overall_rank']])
-                    and (valid_ranks := [r for r in ranks if r is not None])
-                    and (
-                        trend := (
-                            "improving" if all(valid_ranks[i] <= valid_ranks[i + 1] for i in range(len(valid_ranks) - 1))
-                            else "declining" if all(valid_ranks[i] >= valid_ranks[i + 1] for i in range(len(valid_ranks) - 1))
-                            else "fluctuating"
-                        )
+                if change_parts:
+                    max_change_college = max(change_parts, key=lambda x: abs(x[1]))
+                    insights["highest_changes"] = (
+                        f"{max_change_college[0]} shows the highest {'dip' if max_change_college[1] < 0 else 'increase'} "
+                        f"of {abs(max_change_college[1])} spots among all colleges"
                     )
-                ],
-                reverse=True  # Descending Order
+
+            # Yearly Trends Insights
+            trends = []
+            for college_id, data in multi_year.items():
+                if college_id in current_year:
+                    college_name = current_year[college_id]["college_short_name"]
+                    ranks = [
+                        RankingInsightsCalculator.safe_int_conversion(r)
+                        for r in data["nirf_overall_rank"]
+                    ]
+                    valid_ranks = [r for r in ranks if r is not None]
+
+                    if len(valid_ranks) >= 2:
+                        if all(
+                            valid_ranks[i] <= valid_ranks[i + 1]
+                            for i in range(len(valid_ranks) - 1)
+                        ):
+                            trend = "improving"
+                        elif all(
+                            valid_ranks[i] >= valid_ranks[i + 1]
+                            for i in range(len(valid_ranks) - 1)
+                        ):
+                            trend = "declining"
+                        else:
+                            trend = "fluctuating"
+                        trends.append((college_name, trend))
+
+            trends = sorted(
+                trends,
+                key=lambda x: (
+                    0 if x[1] == "improving" else 1 if x[1] == "fluctuating" else 2
+                ),
             )
 
             if trends:
                 insights["yearly_trends"] = ", followed by ".join(
-                    f"{college[0]} shows a {college[1]} trend"
-                    for college in trends
+                    f"{college[0]} shows a {college[1]} trend" for college in trends
                 )
 
             return insights
@@ -1215,9 +1556,6 @@ class RankingInsightsCalculator:
         except Exception as e:
             print(f"Error calculating insights: {str(e)}")
             return {}
-
-
-
 
 class PlacementInsightHelper:
     @staticmethod

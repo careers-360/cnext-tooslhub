@@ -737,6 +737,7 @@ class RankingUploadList(models.Model):
     overall_rank = models.IntegerField(null=True, blank=True)
     overall_rating = models.CharField(max_length=50, null=True, blank=True)
     overall_score = models.FloatField(null=True, blank=True)  
+    rank_band=models.CharField(null=True,blank=True,max_length=50)
 
     class Meta:
         db_table = 'ranking_upload_list'

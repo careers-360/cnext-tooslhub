@@ -168,7 +168,7 @@ class RankingAccreditationComparisonView(APIView):
     def get(self, request):
         college_ids_str = request.query_params.get('college_ids')
         course_ids_str = request.query_params.get('course_ids')
-        year = request.query_params.get('year') or current_year - 1
+        year = request.query_params.get('year') or current_year -1
 
         try:
             if not college_ids_str:
