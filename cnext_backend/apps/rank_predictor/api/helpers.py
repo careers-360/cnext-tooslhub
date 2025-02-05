@@ -965,9 +965,15 @@ class RPCmsHelper:
         paginator = CustomPaginator()
         paginator.page_size = items_on_page
         paginated_results = paginator.paginate_queryset(queryset, request)
+
+        input_flow_type_mapping = RpInputFlowMaster.objects.all().values("id","input_flow_type")
+        input_flow_type_mapping = {item['id'] : item['input_flow_type'] for item in input_flow_type_mapping}
+
         for item in paginated_results:
             if item:
-                item['field_name'] = FIELD_TYPE.get(item['field_type'])
+                item['field_name'] = RP_FIELD_TYPE.get(item['field_type'])
+                item['mapped_process_type'] = FORM_INPUT_PROCESS_TYPE.get(item['mapped_process_type'])
+                item['input_flow_type'] = input_flow_type_mapping.get(item['input_flow_type'])
 
         return paginator.get_paginated_response(paginated_results)
     
