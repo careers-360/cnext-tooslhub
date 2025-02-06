@@ -2,7 +2,7 @@ from django.db.models import Avg, Count, F, Q,Max,Min
 from django.db.models.functions import Round, ExtractYear, TruncDate, Concat
 from django.core.cache import cache
 from functools import lru_cache
-from typing import Dict,List,Optional,Any,Union
+from typing import Dict,List,Optional,Any,Union,Tuple
 import hashlib
 from hashlib import md5
 from django.db.models import Subquery, ExpressionWrapper,Window, Func, OuterRef, Sum, Case, Exists,When,Value, CharField,IntegerField,DecimalField,Prefetch,FloatField,ExpressionWrapper
@@ -530,202 +530,6 @@ def get_ordinal_suffix(num: int) -> str:
 
 
 
-
-# class CollegeRankingService:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a cache key using MD5 hashing.
-#         """
-#         key = '________'.join(map(str, args))
-#         return md5(key.encode()).hexdigest()
-
-#     @staticmethod
-#     def get_state_and_ownership_ranks(
-#         college_ids: List[int],
-#         course_ids: List[int],
-#         year: int
-#     ) -> Dict[str, Dict]:
-#         """Gets state-wise and ownership-wise ranks based on overall ranks."""
-#         try:
-#             cache_key = CollegeRankingService.get_cache_key(college_ids, course_ids, year)
-#             cached_result = cache.get(cache_key)
-#             if cached_result:
-#                 return cached_result
-
-#             # Extract course IDs and create a mapping of college_id to domain
-#             course_ids_values = list(course_ids.values())
-#             courses = Course.objects.filter(id__in=course_ids_values).values('id', 'degree_domain')
-#             course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-
-#             # Create a mapping of college_id to domain
-#             college_domain_map = {}
-#             for college_id in college_ids:
-#                 course_id = course_ids.get(college_id)
-#                 if course_id:
-#                     college_domain_map[college_id] = course_domain_map.get(course_id)
-#                 else:
-#                     college_domain_map[college_id] = None
-
-#             # Initialize the result dictionary with all college IDs
-#             result = {f"college_{idx + 1}": {
-#                 "college_id": college_id,
-#                 "domain": college_domain_map[college_id],
-#                 "state_rank_display": "Not Available",
-#                 "ownership_rank_display": "Not Available",
-#             } for idx, college_id in enumerate(college_ids)}
-
-#             # Group colleges by domain
-#             domain_groups = {}
-#             for college_id in college_ids:
-#                 domain_id = college_domain_map[college_id]
-#                 domain_groups.setdefault(domain_id, []).append(college_id)
-
-#             for domain_id, domain_college_ids in domain_groups.items():
-#                 base_queryset = RankingUploadList.objects.filter(
-#                     ranking__ranking_stream=domain_id,
-#                     ranking__year=year,
-#                     ranking__status=1
-#                 ).select_related('college', 'college__location')
-
-#                 if not base_queryset.exists():
-#                     popular_stream = (
-#                         College.objects.filter(id__in=domain_college_ids)
-#                         .values_list('popular_stream', flat=True)
-#                         .first()
-#                     )
-
-#                     if popular_stream:
-#                         base_queryset = RankingUploadList.objects.filter(
-#                             ranking__ranking_stream=popular_stream,
-#                             ranking__year=year,
-#                             ranking__status=1
-#                         ).select_related('college', 'college__location')
-
-#                 total_counts = base_queryset.values(
-#                     'college__location__state_id',
-#                     'college__ownership'
-#                 )
-
-#                 state_totals = {}
-#                 ownership_totals = {}
-#                 for college in total_counts:
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-#                     if state_id:
-#                         state_totals[state_id] = state_totals.get(state_id, 0) + 1
-#                     if ownership:
-#                         ownership_totals[ownership] = ownership_totals.get(ownership, 0) + 1
-
-#                 all_ranked_colleges = list(base_queryset.values(
-#                     'college_id',
-#                     'overall_rank',
-#                     'college__location__state_id',
-#                     'college__location__loc_string',
-#                     'college__ownership'
-#                 ).filter(
-#                     overall_rank__isnull=False
-#                 ).order_by('overall_rank'))
-
-#                 state_ranks = {}
-#                 college_details = {}
-#                 ownership_groups = {}
-
-#                 for college in all_ranked_colleges:
-#                     college_id = college['college_id']
-#                     state_id = college['college__location__state_id']
-#                     ownership = college['college__ownership']
-
-#                     overall_rank_str = college['overall_rank']
-
-#                     if overall_rank_str and overall_rank_str.isdigit():
-#                         overall_rank = int(overall_rank_str)
-#                     else:
-#                         logger.warning(f"Invalid overall_rank for college_id={college_id}: {overall_rank_str}")
-#                         continue
-
-#                     if college_id in domain_college_ids:
-#                         college_details[college_id] = {
-#                             'state_id': state_id,
-#                             'state_name': college['college__location__loc_string'],
-#                             'ownership': ownership,
-#                             'overall_rank': overall_rank
-#                         }
-
-#                     if state_id not in state_ranks:
-#                         state_ranks[state_id] = {}
-#                     current_rank = len(state_ranks[state_id]) + 1
-#                     state_ranks[state_id][college_id] = current_rank
-
-#                     ownership_groups.setdefault(ownership, []).append({
-#                         'college_id': college_id,
-#                         'overall_rank': overall_rank
-#                     })
-
-#                 ownership_ranks = {}
-#                 for ownership, colleges in ownership_groups.items():
-#                     colleges.sort(key=lambda x: x['overall_rank'])
-#                     current_rank = 1
-#                     prev_rank = None
-#                     ownership_ranks[ownership] = {}
-
-#                     for idx, college in enumerate(colleges):
-#                         if idx > 0 and college['overall_rank'] > prev_rank:
-#                             current_rank = idx + 1
-#                         ownership_ranks[ownership][college['college_id']] = current_rank
-#                         prev_rank = college['overall_rank']
-
-#                 for college_id in domain_college_ids:
-#                     details = college_details.get(college_id, {})
-
-#                     if details:
-#                         state_id = details['state_id']
-#                         ownership = details['ownership']
-#                         state_name = details['state_name']
-
-#                         state_rank = state_ranks.get(state_id, {}).get(college_id, "Not Available")
-#                         ownership_rank = ownership_ranks.get(ownership, {}).get(college_id, "Not Available")
-
-#                         state_total = state_totals.get(state_id, 0)
-#                         ownership_total = ownership_totals.get(ownership, 0)
-#                         ownership_type = dict(College.OWNERSHIP_CHOICES).get(ownership, 'Unknown')
-#                     else:
-#                         state_rank = ownership_rank = "Not Available"
-#                         state_total = ownership_total = 0
-#                         state_name = ""
-#                         ownership_type = "Unknown"
-
-#                     # Update the result dictionary for the specific college
-#                     for key, value in result.items():
-#                         if value['college_id'] == college_id:
-#                             value.update({
-#                                 "domain": domain_id,
-#                                 "state_rank_display": (
-#                                     f"{state_rank}{get_ordinal_suffix(state_rank)} out of {state_total} in {state_name}"
-#                                     if isinstance(state_rank, int) else "Not Available"
-#                                 ),
-#                                 "ownership_rank_display": (
-#                                     f"{ownership_rank}{get_ordinal_suffix(ownership_rank)} out of {ownership_total} in {ownership_type} Institutes"
-#                                     if isinstance(ownership_rank, int) else "Not Available"
-#                                 ),
-#                             })
-#                             break
-
-#             # Cache the result for future use
-#             cache.set(cache_key, result, timeout=3600 * 24 * 7)  # 7 days cache
-#             return result
-
-#         except NoDataAvailableError as nde:
-#             logger.warning(f"No data available: {nde}")
-#             raise
-
-#         except Exception as e:
-#             logger.error(f"Error calculating state and ownership ranks: {traceback.format_exc()}")
-#             raise
-
-
-
-
 class CollegeRankingService:
     @staticmethod
     def get_cache_key(*args) -> str:
@@ -1044,161 +848,1252 @@ class MultiYearRankingHelper:
 
 
 
+# class RankingGraphHelper:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a unique cache key by hashing the combined arguments.
+#         """
+#         key = '___'.join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+    
+#     @staticmethod
+#     def fetch_ranking_data(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         course_ids: Dict[int, int] = None,
+#         ranking_entity: str = None,
+#     ) -> Dict:
+#         """
+#         Fetch ranking data for given colleges and year range.
+#         """
+#         try:
+#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+#         except (ValueError, TypeError):
+#             raise ValueError("college_ids must be a flat list of integers or strings.")
+
+#         # Prepare cache key with all parameters
+#         cache_key = RankingGraphHelper.get_cache_key(
+#             'ranking__graph__insight_version__', 
+#             '-'.join(map(str, college_ids)), 
+#             start_year, 
+#             end_year, 
+#             '-'.join(map(str, course_ids.values())) if course_ids else "", 
+#             ranking_entity
+#         )
+
+#         def fetch_data():
+#             year_range = list(range(start_year, end_year + 1))
+#             filters = Q(ranking__status=1, ranking__year__in=year_range)
+
+#             course_domain_map = {}
+#             if course_ids:
+#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
+#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+#                 if course_domain_map:
+#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
+
+#             if ranking_entity:
+#                 filters &= Q(ranking__ranking_entity=ranking_entity)
+
+#             rankings = (
+#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
+#                 .select_related('ranking')
+#                 .values("college_id", "ranking__year", "ranking__ranking_stream", "ranking__ranking_entity", "overall_score")
+#             )
+#             print(rankings)
+
+#             if not rankings:
+#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
+            
+#             max_scores = {}
+#             for ranking in rankings:
+#                 college_id = ranking['college_id']
+#                 year = ranking['ranking__year']
+#                 score = ranking['overall_score']
+#                 if score is not None and score < 100:
+#                     key = (college_id, year)
+#                     max_scores[key] = max(max_scores.get(key, 0), score)
+
+#             result_dict = {
+#                 f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
+#                 for i, college_id in enumerate(college_ids)
+#             }
+
+#             for (college_id, year), max_score in max_scores.items():
+#                 college_key = f"college_{college_ids.index(college_id) + 1}"
+#                 result_dict[college_key]["data"][str(year)] = max_score
+
+#             return result_dict
+
+#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+    
+#     @staticmethod
+#     def prepare_graph_insights(
+#         college_ids: List[int], 
+#         start_year: int, 
+#         end_year: int, 
+#         selected_courses: Dict[int, int]
+#     ) -> Dict:
+#         """
+#         Prepare data for the ranking insights graph.
+#         """
+#         years = list(range(start_year, end_year + 1))
+#         try:
+#             overall_data = RankingGraphHelper.fetch_ranking_data(
+#                 college_ids, start_year, end_year, ranking_entity='Overall'
+#             )
+#         except NoDataAvailableError as e:
+#             logger.error(f"No data available for overall ranking: {str(e)}")
+#             raise
+
+#         domain_data = {}
+#         for college_id in college_ids:
+#             course_id = selected_courses.get(college_id)
+#             try:
+#                 domain_data[college_id] = RankingGraphHelper.fetch_ranking_data(
+#                     [college_id], start_year, end_year, course_ids={college_id: course_id}, ranking_entity='Stream Wise Colleges'
+#                 ) if course_id else {}
+#             except NoDataAvailableError as e:
+#                 logger.error(f"No data available for course ranking: {str(e)}")
+#                 domain_data[college_id] = {}
+
+#         all_same_course = len(set(selected_courses.values())) <= 1
+#         has_na_overall, has_na_domain = False, False
+
+#         result_dict = {
+#             "years": years,
+#             "data": {
+#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
+#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
+#             },
+#             "college_names": list(
+#                 College.objects.filter(id__in=college_ids)
+#                 .annotate(order=Case(*[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
+#                     default=Value(len(college_ids)), output_field=IntegerField()))
+#                 .order_by('order')
+#                 .values_list('name', flat=True)
+#             )
+#         }
+
+#         for idx, college_id in enumerate(college_ids):
+#             college_key = f"college_{idx + 1}"
+#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id].get(f"college_1", {})
+
+#         for data_type in ["overall", "domain"]:
+#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
+#                 if college_data and "data" in college_data:
+#                     data = college_data["data"]
+#                     for year in years:
+#                         year_str = str(year)
+#                         if year_str not in data:
+#                             data[year_str] = "NA"
+#                         if data[year_str] == "NA":
+#                             if data_type == "overall":
+#                                 has_na_overall = True
+#                             elif data_type == "domain":
+#                                 has_na_domain = True
+
+#         if has_na_overall:
+#             result_dict["data"]["overall"]["type"] = "tabular"
+#         if has_na_domain:
+#             result_dict["data"]["domain"]["type"] = "tabular"
+
+#         return result_dict
+
+
+# class RankingGraphHelper:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a unique cache key by hashing the combined arguments.
+#         """
+#         key = '___'.join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+    
+#     @staticmethod
+#     def parse_rank_band(rank_band):
+#         """
+#         Parse rank band string and return a numeric score.
+#         Lower rank bands get higher scores.
+#         """
+#         if not rank_band or rank_band == 'NA':
+#             return float('inf')  # Lowest priority
+        
+#         try:
+#             # Split the rank band and take the lower bound
+#             lower_bound = int(rank_band.split('-')[0])
+#             # Invert the score so lower ranks get higher scores
+#             return 1000 - lower_bound
+#         except (ValueError, IndexError):
+#             return float('inf')
+
+#     @staticmethod
+#     def fetch_ranking_data(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         course_ids: Dict[int, int] = None,
+#         ranking_entity: str = None,
+#     ) -> Dict:
+#         """
+#         Fetch ranking data for given colleges and year range.
+#         """
+#         try:
+#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+#         except (ValueError, TypeError):
+#             raise ValueError("college_ids must be a flat list of integers or strings.")
+
+#         # Prepare cache key with all parameters
+#         cache_key = RankingGraphHelper.get_cache_key(
+#             'ranking__graph___insight_version________', 
+#             '-'.join(map(str, college_ids)), 
+#             start_year, 
+#             end_year, 
+#             '-'.join(map(str, course_ids.values())) if course_ids else "", 
+#             ranking_entity
+#         )
+
+#         def fetch_data():
+#             year_range = list(range(start_year, end_year + 1))
+#             filters = Q(ranking__status=1, ranking__year__in=year_range)
+
+#             course_domain_map = {}
+#             if course_ids:
+#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
+#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+#                 if course_domain_map:
+#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
+
+#             if ranking_entity:
+#                 filters &= Q(ranking__ranking_entity=ranking_entity)
+
+#             # Updated to fetch both overall_rank and rank_band
+#             rankings = (
+#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
+#                 .select_related('ranking')
+#                 .values("college_id", "ranking__year", "ranking__ranking_stream", "ranking__ranking_entity", "overall_score", "overall_rank", "rank_band")
+#             )
+
+#             if not rankings:
+#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
+            
+#             max_scores = {}
+#             for ranking in rankings:
+#                 college_id = ranking['college_id']
+#                 year = ranking['ranking__year']
+#                 score = ranking['overall_rank']
+                
+#                 # Prefer overall_rank, fallback to rank_band
+#                 if score is None or (not isinstance(score, (int, float)) or score >= 100):
+#                     # If overall_score is not valid, use rank_band
+#                     rank = ranking['overall_rank'] 
+#                     if not rank or rank == 'NA':
+#                         score = RankingGraphHelper.parse_rank_band(ranking['rank_band'])
+#                     else:
+#                         # If overall_rank exists, try to convert to numeric
+#                         try:
+#                             score = float(rank)
+#                         except (ValueError, TypeError):
+#                             score = RankingGraphHelper.parse_rank_band(ranking['rank_band'])
+                
+#                 if score != float('inf'):
+#                     key = (college_id, year)
+#                     max_scores[key] = max(max_scores.get(key, 0), score)
+
+#             result_dict = {
+#                 f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
+#                 for i, college_id in enumerate(college_ids)
+#             }
+
+#             for (college_id, year), max_score in max_scores.items():
+#                 college_key = f"college_{college_ids.index(college_id) + 1}"
+#                 result_dict[college_key]["data"][str(year)] = max_score
+
+#             return result_dict
+
+#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+    
+#     @staticmethod
+#     def prepare_graph_insights(
+#         college_ids: List[int], 
+#         start_year: int, 
+#         end_year: int, 
+#         selected_courses: Dict[int, int]
+#     ) -> Dict:
+#         """
+#         Prepare data for the ranking insights graph.
+#         """
+#         years = list(range(start_year, end_year + 1))
+#         try:
+#             overall_data = RankingGraphHelper.fetch_ranking_data(
+#                 college_ids, start_year, end_year, ranking_entity='Stream Wise Colleges'
+#             )
+#         except NoDataAvailableError as e:
+#             logger.error(f"No data available for overall ranking: {str(e)}")
+#             raise
+
+#         domain_data = {}
+#         for college_id in college_ids:
+#             course_id = selected_courses.get(college_id)
+#             try:
+#                 domain_data[college_id] = RankingGraphHelper.fetch_ranking_data(
+#                     [college_id], start_year, end_year, course_ids={college_id: course_id}, ranking_entity='Stream Wise Colleges'
+#                 ) if course_id else {}
+#             except NoDataAvailableError as e:
+#                 logger.error(f"No data available for course ranking: {str(e)}")
+#                 domain_data[college_id] = {}
+
+#         all_same_course = len(set(selected_courses.values())) <= 1
+#         has_na_overall, has_na_domain = False, False
+
+#         result_dict = {
+#             "years": years,
+#             "data": {
+#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
+#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
+#             },
+#             "college_names": list(
+#                 College.objects.filter(id__in=college_ids)
+#                 .annotate(order=Case(*[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
+#                     default=Value(len(college_ids)), output_field=IntegerField()))
+#                 .order_by('order')
+#                 .values_list('name', flat=True)
+#             )
+#         }
+
+#         for idx, college_id in enumerate(college_ids):
+#             college_key = f"college_{idx + 1}"
+#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id].get(f"college_1", {})
+
+#         for data_type in ["overall", "domain"]:
+#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
+#                 if college_data and "data" in college_data:
+#                     data = college_data["data"]
+#                     for year in years:
+#                         year_str = str(year)
+#                         if year_str not in data:
+#                             data[year_str] = "NA"
+#                         if data[year_str] == "NA":
+#                             if data_type == "overall":
+#                                 has_na_overall = True
+#                             elif data_type == "domain":
+#                                 has_na_domain = True
+
+#         # Modify to use explicit type detection
+#         if has_na_overall or any(
+#             all(data.get("data", {}).get(str(year)) == "NA" for year in years)
+#             for data in result_dict['data']['overall']['colleges'].values()
+#         ):
+#             result_dict["data"]["overall"]["type"] = "tabular"
+
+#         if has_na_domain or any(
+#             all(data.get("data", {}).get(str(year)) == "NA" for year in years)
+#             for data in result_dict['data']['domain']['colleges'].values()
+#         ):
+#             result_dict["data"]["domain"]["type"] = "tabular"
+
+#         return result_dict
+
+
+
+# class RankingGraphHelper:
+
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a unique cache key by hashing the combined arguments.
+#         """
+#         key = '___'.join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def process_rank(rank, rank_band):
+#         """
+#         Process ranking information with the following priority:
+#         1. Use overall_rank if it's a valid number
+#         2. Fall back to rank_band's lower bound if overall_rank is not valid
+#         3. Return "NA" if neither is valid
+#         """
+#         # Try to use overall_rank first
+#         if rank and rank != 'NA':
+#             try:
+#                 return float(rank)
+#             except (ValueError, TypeError):
+#                 pass
+
+#         # Fall back to rank_band if overall_rank is not valid
+#         if rank_band and rank_band != 'NA':
+#             try:
+#                 # Extract lower bound from rank band (e.g., "101-150" -> 101)
+#                 return rank_band
+#             except (ValueError, TypeError, IndexError):
+#                 pass
+
+#         return "NA"
+
+#     @staticmethod
+#     def fetch_ranking_data(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         course_ids: Dict[int, int] = None,
+#         ranking_entity: str = None,
+#     ) -> Dict:
+#         """
+#         Fetch ranking data for given colleges and year range, focusing on overall_rank.
+#         """
+#         try:
+#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+#         except (ValueError, TypeError):
+#             raise ValueError("college_ids must be a flat list of integers or strings.")
+
+#         # Prepare cache key
+#         cache_key = RankingGraphHelper.get_cache_key(
+#             'ranking_______graph__insight_version____',
+#             '-'.join(map(str, college_ids)),
+#             start_year,
+#             end_year,
+#             '-'.join(map(str, course_ids.values())) if course_ids else "",
+#             ranking_entity
+#         )
+
+#         def fetch_data():
+#             year_range = list(range(start_year, end_year + 1))
+#             filters = Q(ranking__status=1, ranking__year__in=year_range)
+
+#             # Set up course domain filtering if needed
+#             course_domain_map = {}
+#             if course_ids:
+#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
+#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+#                 if course_domain_map:
+#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
+
+#             if ranking_entity:
+#                 filters &= Q(ranking__ranking_entity=ranking_entity)
+
+#             # Fetch ranking data
+#             rankings = (
+#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
+#                 .select_related('ranking')
+#                 .values(
+#                     "college_id",
+#                     "ranking__year",
+#                     "ranking__ranking_stream",
+#                     "ranking__ranking_entity",
+#                     "overall_rank",
+#                     "rank_band"
+#                 )
+#             )
+
+#             if not rankings:
+#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
+
+#             # Initialize result dictionary with "NA" values for all years
+#             result_dict = {
+#                 f"college_{i + 1}": {
+#                     "college_id": college_id,
+#                     "data": {str(year): "NA" for year in year_range}
+#                 }
+#                 for i, college_id in enumerate(college_ids)
+#             }
+
+#             # Process rankings data
+#             for ranking in rankings:
+#                 college_id = ranking['college_id']
+#                 year = ranking['ranking__year']
+
+#                 # Process rank value using helper method
+#                 rank_value = RankingGraphHelper.process_rank(
+#                     ranking['overall_rank'],
+#                     ranking['rank_band']
+#                 )
+
+#                 # Update the result dictionary if we got a valid rank
+#                 college_idx = college_ids.index(college_id) + 1
+#                 college_key = f"college_{college_idx}"
+#                 if rank_value != "NA":
+#                     result_dict[college_key]["data"][str(year)] = rank_value
+
+#             return result_dict
+
+#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+
+#     @staticmethod
+#     def prepare_graph_insights(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         selected_courses: Dict[int, int]
+#     ) -> Dict:
+#         """
+#         Prepare data for the ranking insights graph.
+#         """
+#         years = list(range(start_year, end_year + 1))
+
+#         try:
+#             overall_data = RankingGraphHelper.fetch_ranking_data(
+#                 college_ids, start_year, end_year, ranking_entity='Stream Wise Colleges'
+#             )
+#         except NoDataAvailableError as e:
+#             logger.error(f"No data available for overall ranking: {str(e)}")
+#             raise
+
+#         # Initialize domain data for all colleges
+#         domain_data = {}
+#         for idx, college_id in enumerate(college_ids):
+#             course_id = selected_courses.get(college_id)
+
+#             try:
+#                 if course_id:
+#                     college_domain_data = RankingGraphHelper.fetch_ranking_data(
+#                         [college_id],
+#                         start_year,
+#                         end_year,
+#                         course_ids={college_id: course_id},
+#                         ranking_entity='Stream Wise Colleges'
+#                     )
+#                     domain_data[college_id] = college_domain_data.get("college_1", {
+#                         "college_id": college_id,
+#                         "data": {str(year): "NA" for year in years}
+#                     })
+#                 else:
+#                     domain_data[college_id] = {
+#                         "college_id": college_id,
+#                         "data": {str(year): "NA" for year in years}
+#                     }
+#             except NoDataAvailableError as e:
+#                 logger.error(f"No data available for course ranking: {str(e)}")
+#                 domain_data[college_id] = {
+#                     "college_id": college_id,
+#                     "data": {str(year): "NA" for year in years}
+#                 }
+
+#         all_same_course = len(set(selected_courses.values())) <= 1
+#         has_na_overall, has_na_domain = False, False
+
+#         # Prepare the result dictionary
+#         result_dict = {
+#             "years": years,
+#             "data": {
+#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
+#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
+#             },
+#             "college_names": list(
+#                 College.objects.filter(id__in=college_ids)
+#                 .annotate(
+#                     order=Case(
+#                         *[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
+#                         default=Value(len(college_ids)),
+#                         output_field=IntegerField()
+#                     )
+#                 )
+#                 .order_by('order')
+#                 .values_list('short_name', flat=True)
+#             )
+#         }
+
+#         # Populate domain data for all colleges
+#         for idx, college_id in enumerate(college_ids):
+#             college_key = f"college_{idx + 1}"
+#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id]
+
+#         # Check for NA values and determine graph type
+#         for data_type in ["overall", "domain"]:
+#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
+#                 if college_data and "data" in college_data:
+#                     data = college_data["data"]
+#                     for year in years:
+#                         year_str = str(year)
+#                         if year_str not in data or data[year_str] == "NA":
+#                             if data_type == "overall":
+#                                 has_na_overall = True
+#                             else:
+#                                 has_na_domain = True
+
+#         # Set appropriate visualization type based on data
+#         if has_na_overall:
+#             result_dict["data"]["overall"]["type"] = "tabular"
+#         if has_na_domain:
+#             result_dict["data"]["domain"]["type"] = "tabular"
+
+#         # If rank_band is used, force tabular type
+#         for data_type in ["overall", "domain"]:
+#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
+#                 if college_data and "data" in college_data:
+#                     data = college_data["data"]
+#                     for year in years:
+#                         year_str = str(year)
+#                         if year_str in data and isinstance(data[year_str], str) and not data[year_str].isdigit() and data[year_str] != "NA":
+#                             result_dict["data"][data_type]["type"] = "tabular"
+#                             break  # No need to check other years for this college
+#                     if result_dict["data"][data_type]["type"] == "tabular":
+#                         break # No need to check other colleges for this data type
+
+#         return result_dict
+
+
 class RankingGraphHelper:
+
+    """
+    Helper class for handling college ranking data and generating graph insights.
+    Works in conjunction with DomainHelper for domain-specific operations.
+    """
+
     @staticmethod
     def get_cache_key(*args) -> str:
         """
         Generate a unique cache key by hashing the combined arguments.
+        
+        Args:
+            *args: Variable number of arguments to include in cache key
+            
+        Returns:
+            MD5 hash string to use as cache key
         """
-        key = '___'.join(map(str, args))
+        key = '_________'.join(map(str, args))
         return hashlib.md5(key.encode()).hexdigest()
-    
+
+    @staticmethod
+    def get_domain_info(course_ids: Dict[int, int]) -> Tuple[Dict[int, str], List[str], str]:
+        """
+        Get comprehensive domain information for selected courses.
+        
+        Args:
+            course_ids: Dictionary mapping college IDs to course IDs
+            
+        Returns:
+            Tuple containing:
+            - course_domain_map: Mapping of course IDs to degree domains
+            - formatted_domains: List of formatted unique domain names
+            - default_domain: Default domain based on first course
+        """
+        # Fetch course information including degree domains
+        courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
+        course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+        
+        # Get unique domains and format them
+        unique_domains = list(set(course_domain_map.values()))
+        formatted_domains = []
+        
+        for domain in unique_domains:
+            # Get old domain name from Domain model
+            old_domain_name = Domain.objects.filter(
+                id=domain
+            ).values_list('old_domain_name', flat=True).first()
+            
+            if old_domain_name:
+                formatted_name = DomainHelper.format_domain_name(old_domain_name)
+                formatted_domains.append(formatted_name)
+        
+  
+        first_course_id = next(iter(course_ids.values()))
+        default_domain = course_domain_map.get(first_course_id)
+        
+        return course_domain_map, formatted_domains, default_domain
+
+    @staticmethod
+    def process_rank(rank: Union[str, int, float], rank_band: str) -> Union[float, str]:
+        """
+        Process ranking information with priority handling.
+        
+        Args:
+            rank: Overall rank value
+            rank_band: Rank band string (e.g., "101-150")
+            
+        Returns:
+            Processed rank value or "NA"
+        """
+        # Try to use overall_rank first
+        if rank and rank != 'NA':
+            try:
+                return float(rank)
+            except (ValueError, TypeError):
+                pass
+
+        # Fall back to rank_band if overall_rank is not valid
+        if rank_band and rank_band != 'NA':
+            try:
+               
+                return rank_band
+            except (ValueError, TypeError, IndexError):
+                pass
+
+        return "NA"
+
     @staticmethod
     def fetch_ranking_data(
         college_ids: List[int],
         start_year: int,
         end_year: int,
-        course_ids: Dict[int, int] = None,
-        ranking_entity: str = None,
+        course_ids: Optional[Dict[int, int]] = None,
+        ranking_entity: Optional[str] = None,
+        domain: Optional[str] = None
     ) -> Dict:
         """
-        Fetch ranking data for given colleges and year range.
+        Fetch and process ranking data with comprehensive filtering options.
+        
+        Args:
+            college_ids: List of college IDs
+            start_year: Starting year for ranking data
+            end_year: Ending year for ranking data
+            course_ids: Optional dictionary mapping college IDs to course IDs
+            ranking_entity: Optional ranking entity filter
+            domain: Optional domain filter
+            
+        Returns:
+            Dictionary containing processed ranking data
+            
+        Raises:
+            ValueError: If college_ids is invalid
+            NoDataAvailableError: If no ranking data is found
         """
         try:
-            college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
+            college_ids = [int(college_id) for college_id in college_ids 
+                         if isinstance(college_id, (int, str))]
         except (ValueError, TypeError):
             raise ValueError("college_ids must be a flat list of integers or strings.")
 
-        # Prepare cache key with all parameters
+        # Prepare cache key
         cache_key = RankingGraphHelper.get_cache_key(
-            'ranking__graph__insight_version__', 
-            '-'.join(map(str, college_ids)), 
-            start_year, 
-            end_year, 
-            '-'.join(map(str, course_ids.values())) if course_ids else "", 
-            ranking_entity
+            'ranking_graph_insight_version',
+            '-'.join(map(str, college_ids)),
+            start_year,
+            end_year,
+            '-'.join(map(str, course_ids.values())) if course_ids else "",
+            ranking_entity,
+            domain
         )
 
         def fetch_data():
             year_range = list(range(start_year, end_year + 1))
             filters = Q(ranking__status=1, ranking__year__in=year_range)
 
-            course_domain_map = {}
-            if course_ids:
-                courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
-                course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+            # Apply domain filtering if specified
+            if domain:
+                print(domain,"----")
+                filters &= Q(ranking__nirf_stream=domain)
+            elif course_ids:
+                # Get domain information for courses
+                course_domain_map, _, _ = RankingGraphHelper.get_domain_info(course_ids)
                 if course_domain_map:
-                    filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
+                    print(list(course_domain_map.values()))
+                    filters &= Q(ranking__nirf_stream__in=list(course_domain_map.values()))
 
             if ranking_entity:
                 filters &= Q(ranking__ranking_entity=ranking_entity)
 
+            # Fetch ranking data
             rankings = (
                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
                 .select_related('ranking')
-                .values("college_id", "ranking__year", "ranking__ranking_stream", "ranking__ranking_entity", "overall_score")
+                .values(
+                    "college_id",
+                    "ranking__year",
+                    "ranking__ranking_stream",
+                    "ranking__ranking_entity",
+                    "overall_rank",
+                    "rank_band"
+                )
             )
-            print(rankings)
 
             if not rankings:
-                raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
-            
-            max_scores = {}
-            for ranking in rankings:
-                college_id = ranking['college_id']
-                year = ranking['ranking__year']
-                score = ranking['overall_score']
-                if score is not None and score < 100:
-                    key = (college_id, year)
-                    max_scores[key] = max(max_scores.get(key, 0), score)
+                raise NoDataAvailableError(
+                    f"No ranking data found for college IDs {college_ids} "
+                    f"between {start_year} and {end_year}."
+                )
 
+            # Initialize result dictionary
             result_dict = {
-                f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
+                f"college_{i + 1}": {
+                    "college_id": college_id,
+                    "data": {str(year): "NA" for year in year_range}
+                }
                 for i, college_id in enumerate(college_ids)
             }
 
-            for (college_id, year), max_score in max_scores.items():
-                college_key = f"college_{college_ids.index(college_id) + 1}"
-                result_dict[college_key]["data"][str(year)] = max_score
+            # Process rankings data
+            for ranking in rankings:
+                college_id = ranking['college_id']
+                year = ranking['ranking__year']
+
+                # Process rank value
+                rank_value = RankingGraphHelper.process_rank(
+                    ranking['overall_rank'],
+                    ranking['rank_band']
+                )
+
+                # Update result dictionary if rank is valid
+                college_idx = college_ids.index(college_id) + 1
+                college_key = f"college_{college_idx}"
+                if rank_value != "NA":
+                    result_dict[college_key]["data"][str(year)] = rank_value
 
             return result_dict
 
         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
-    
+
     @staticmethod
     def prepare_graph_insights(
-        college_ids: List[int], 
-        start_year: int, 
-        end_year: int, 
+        college_ids: List[int],
+        start_year: int,
+        end_year: int,
         selected_courses: Dict[int, int]
     ) -> Dict:
         """
-        Prepare data for the ranking insights graph.
+        Prepare comprehensive graph insights with domain-wise organization.
+        
+        Args:
+            college_ids: List of college IDs
+            start_year: Starting year for insights
+            end_year: Ending year for insights
+            selected_courses: Dictionary mapping college IDs to course IDs
+            
+        Returns:
+            Dictionary containing processed graph insights
+            
+        Raises:
+            NoDataAvailableError: If no ranking data is found
         """
         years = list(range(start_year, end_year + 1))
+
+        # Get domain information
+        course_domain_map, unique_domains, default_domain = RankingGraphHelper.get_domain_info(
+            selected_courses
+        )
+
+        # Initialize result structure
+        result_dict = {
+            "years": years,
+            "data": {
+                "overall": {"type": "line", "colleges": {}}
+            },
+            "college_names": list(
+                College.objects.filter(id__in=college_ids)
+                .annotate(
+                    order=Case(
+                        *[When(id=college_id, then=Value(idx)) 
+                          for idx, college_id in enumerate(college_ids)],
+                        default=Value(len(college_ids)),
+                        output_field=IntegerField()
+                    )
+                )
+                .order_by('order')
+                .values_list('short_name', flat=True)
+            )
+        }
+
+        # Add domain-specific sections
+        for domain in unique_domains:
+            result_dict["data"][domain] = {"type": "line", "colleges": {}}
+
+        # Fetch overall rankings
         try:
             overall_data = RankingGraphHelper.fetch_ranking_data(
-                college_ids, start_year, end_year, ranking_entity='Overall'
+                college_ids, 
+                start_year, 
+                end_year,
+                ranking_entity='Stream Wise Colleges'
             )
+            result_dict["data"]["overall"]["colleges"] = overall_data
         except NoDataAvailableError as e:
             logger.error(f"No data available for overall ranking: {str(e)}")
             raise
 
-        domain_data = {}
-        for college_id in college_ids:
-            course_id = selected_courses.get(college_id)
+        # Fetch domain-specific rankings
+        domains_to_remove = []
+        for domain in unique_domains:
             try:
-                domain_data[college_id] = RankingGraphHelper.fetch_ranking_data(
-                    [college_id], start_year, end_year, course_ids={college_id: course_id}, ranking_entity='Stream Wise Colleges'
-                ) if course_id else {}
+                domain_data = RankingGraphHelper.fetch_ranking_data(
+                    college_ids,
+                    start_year,
+                    end_year,
+                    course_ids=selected_courses,
+                    ranking_entity='Stream Wise Colleges',
+                    domain=domain
+                )
+                
+                # Check if all data points are "NA"
+                all_na = True
+                for college_key, college_data in domain_data.items():
+                    if college_data and "data" in college_data:
+                        for year_data in college_data["data"].values():
+                            if year_data != "NA":
+                                all_na = False
+                                break
+                    if not all_na:
+                        break
+                
+                if all_na:
+                    domains_to_remove.append(domain)
+                else:
+                    result_dict["data"][domain]["colleges"] = domain_data
             except NoDataAvailableError as e:
-                logger.error(f"No data available for course ranking: {str(e)}")
-                domain_data[college_id] = {}
+                logger.error(f"No data available for domain {domain}: {str(e)}")
+                domains_to_remove.append(domain)
+                
 
-        all_same_course = len(set(selected_courses.values())) <= 1
-        has_na_overall, has_na_domain = False, False
+        # Remove domains with no data
+        for domain in domains_to_remove:
+            del result_dict["data"][domain]
+            unique_domains.remove(domain)
 
-        result_dict = {
-            "years": years,
-            "data": {
-                "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
-                "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
-            },
-            "college_names": list(
-                College.objects.filter(id__in=college_ids)
-                .annotate(order=Case(*[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
-                    default=Value(len(college_ids)), output_field=IntegerField()))
-                .order_by('order')
-                .values_list('name', flat=True)
-            )
-        }
-
-        for idx, college_id in enumerate(college_ids):
-            college_key = f"college_{idx + 1}"
-            result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id].get(f"college_1", {})
-
-        for data_type in ["overall", "domain"]:
-            for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
+        # Determine visualization types
+        for data_type in result_dict["data"]:
+            has_na = False
+            has_rank_band = False
+            
+            for college_key, college_data in result_dict["data"][data_type]["colleges"].items():
                 if college_data and "data" in college_data:
                     data = college_data["data"]
                     for year in years:
                         year_str = str(year)
-                        if year_str not in data:
-                            data[year_str] = "NA"
-                        if data[year_str] == "NA":
-                            if data_type == "overall":
-                                has_na_overall = True
-                            elif data_type == "domain":
-                                has_na_domain = True
-
-        if has_na_overall:
-            result_dict["data"]["overall"]["type"] = "tabular"
-        if has_na_domain:
-            result_dict["data"]["domain"]["type"] = "tabular"
+                        value = data.get(year_str, "NA")
+                        
+                        if value == "NA":
+                            has_na = True
+                        elif isinstance(value, str) and not value.isdigit():
+                            has_rank_band = True
+                            
+                        if has_na and has_rank_band:
+                            break
+                
+                if has_na or has_rank_band:
+                    break
+            
+            if has_na or has_rank_band:
+                result_dict["data"][data_type]["type"] = "tabular"
 
         return result_dict
 
+# class RankingGraphHelper:
+#     """
+#     Helper class for handling college ranking data and generating graph insights.
+#     Works in conjunction with DomainHelper for domain-specific operations.
+#     """
 
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """
+#         Generate a unique cache key by hashing the combined arguments.
+        
+#         Args:
+#             *args: Variable number of arguments to include in cache key
+            
+#         Returns:
+#             MD5 hash string to use as cache key
+#         """
+#         key = '_______'.join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def get_domain_info(course_ids: Dict[int, int]) -> Tuple[Dict[int, str], List[str], str]:
+#         """
+#         Get comprehensive domain information for selected courses.
+        
+#         Args:
+#             course_ids: Dictionary mapping college IDs to course IDs
+            
+#         Returns:
+#             Tuple containing:
+#             - course_domain_map: Mapping of course IDs to degree domains
+#             - formatted_domains: List of formatted unique domain names
+#             - default_domain: Default domain based on first course
+#         """
+#         # Fetch course information including degree domains
+#         courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
+#         course_domain_map = {course['id']: course['degree_domain'] for course in courses}
+        
+#         # Get unique domains and format them
+#         unique_domains = list(set(course_domain_map.values()))
+#         formatted_domains = []
+        
+#         for domain in unique_domains:
+#             # Get old domain name from Domain model
+#             old_domain_name = Domain.objects.filter(
+#                 id=domain
+#             ).values_list('old_domain_name', flat=True).first()
+            
+#             if old_domain_name:
+#                 formatted_name = DomainHelper.format_domain_name(old_domain_name)
+#                 formatted_domains.append(formatted_name)
+        
+  
+#         first_course_id = next(iter(course_ids.values()))
+#         default_domain = course_domain_map.get(first_course_id)
+        
+#         return course_domain_map, formatted_domains, default_domain
+
+#     @staticmethod
+#     def process_rank(rank: Union[str, int, float], rank_band: str) -> Union[float, str]:
+#         """
+#         Process ranking information with priority handling.
+        
+#         Args:
+#             rank: Overall rank value
+#             rank_band: Rank band string (e.g., "101-150")
+            
+#         Returns:
+#             Processed rank value or "NA"
+#         """
+#         # Try to use overall_rank first
+#         if rank and rank != 'NA':
+#             try:
+#                 return float(rank)
+#             except (ValueError, TypeError):
+#                 pass
+
+#         # Fall back to rank_band if overall_rank is not valid
+#         if rank_band and rank_band != 'NA':
+#             try:
+               
+#                 return rank_band
+#             except (ValueError, TypeError, IndexError):
+#                 pass
+
+#         return "NA"
+
+#     @staticmethod
+#     def fetch_ranking_data(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         course_ids: Optional[Dict[int, int]] = None,
+#         ranking_entity: Optional[str] = None,
+#         domain: Optional[str] = None
+#     ) -> Dict:
+#         """
+#         Fetch and process ranking data with comprehensive filtering options.
+        
+#         Args:
+#             college_ids: List of college IDs
+#             start_year: Starting year for ranking data
+#             end_year: Ending year for ranking data
+#             course_ids: Optional dictionary mapping college IDs to course IDs
+#             ranking_entity: Optional ranking entity filter
+#             domain: Optional domain filter
+            
+#         Returns:
+#             Dictionary containing processed ranking data
+            
+#         Raises:
+#             ValueError: If college_ids is invalid
+#             NoDataAvailableError: If no ranking data is found
+#         """
+#         try:
+#             college_ids = [int(college_id) for college_id in college_ids 
+#                          if isinstance(college_id, (int, str))]
+#         except (ValueError, TypeError):
+#             raise ValueError("college_ids must be a flat list of integers or strings.")
+
+#         # Prepare cache key
+#         cache_key = RankingGraphHelper.get_cache_key(
+#             'ranking_graph_insight_version',
+#             '-'.join(map(str, college_ids)),
+#             start_year,
+#             end_year,
+#             '-'.join(map(str, course_ids.values())) if course_ids else "",
+#             ranking_entity,
+#             domain
+#         )
+
+#         def fetch_data():
+#             year_range = list(range(start_year, end_year + 1))
+#             filters = Q(ranking__status=1, ranking__year__in=year_range)
+
+#             # Apply domain filtering if specified
+#             if domain:
+#                 print(domain,"----")
+#                 filters &= Q(ranking__nirf_stream=domain)
+#             elif course_ids:
+#                 # Get domain information for courses
+#                 course_domain_map, _, _ = RankingGraphHelper.get_domain_info(course_ids)
+#                 if course_domain_map:
+#                     print(list(course_domain_map.values()))
+#                     filters &= Q(ranking__nirf_stream__in=list(course_domain_map.values()))
+
+#             if ranking_entity:
+#                 filters &= Q(ranking__ranking_entity=ranking_entity)
+
+#             # Fetch ranking data
+#             rankings = (
+#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
+#                 .select_related('ranking')
+#                 .values(
+#                     "college_id",
+#                     "ranking__year",
+#                     "ranking__ranking_stream",
+#                     "ranking__ranking_entity",
+#                     "overall_rank",
+#                     "rank_band"
+#                 )
+#             )
+
+#             if not rankings:
+#                 raise NoDataAvailableError(
+#                     f"No ranking data found for college IDs {college_ids} "
+#                     f"between {start_year} and {end_year}."
+#                 )
+
+#             # Initialize result dictionary
+#             result_dict = {
+#                 f"college_{i + 1}": {
+#                     "college_id": college_id,
+#                     "data": {str(year): "NA" for year in year_range}
+#                 }
+#                 for i, college_id in enumerate(college_ids)
+#             }
+
+#             # Process rankings data
+#             for ranking in rankings:
+#                 college_id = ranking['college_id']
+#                 year = ranking['ranking__year']
+
+#                 # Process rank value
+#                 rank_value = RankingGraphHelper.process_rank(
+#                     ranking['overall_rank'],
+#                     ranking['rank_band']
+#                 )
+
+#                 # Update result dictionary if rank is valid
+#                 college_idx = college_ids.index(college_id) + 1
+#                 college_key = f"college_{college_idx}"
+#                 if rank_value != "NA":
+#                     result_dict[college_key]["data"][str(year)] = rank_value
+
+#             return result_dict
+
+#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
+
+#     @staticmethod
+#     def prepare_graph_insights(
+#         college_ids: List[int],
+#         start_year: int,
+#         end_year: int,
+#         selected_courses: Dict[int, int]
+#     ) -> Dict:
+#         """
+#         Prepare comprehensive graph insights with domain-wise organization.
+        
+#         Args:
+#             college_ids: List of college IDs
+#             start_year: Starting year for insights
+#             end_year: Ending year for insights
+#             selected_courses: Dictionary mapping college IDs to course IDs
+            
+#         Returns:
+#             Dictionary containing processed graph insights
+            
+#         Raises:
+#             NoDataAvailableError: If no ranking data is found
+#         """
+#         years = list(range(start_year, end_year + 1))
+
+#         # Get domain information
+#         course_domain_map, unique_domains, default_domain = RankingGraphHelper.get_domain_info(
+#             selected_courses
+#         )
+
+#         # Initialize result structure
+#         result_dict = {
+#             "years": years,
+#             "data": {
+#                 "overall": {"type": "line", "colleges": {}}
+#             },
+#             "college_names": list(
+#                 College.objects.filter(id__in=college_ids)
+#                 .annotate(
+#                     order=Case(
+#                         *[When(id=college_id, then=Value(idx)) 
+#                           for idx, college_id in enumerate(college_ids)],
+#                         default=Value(len(college_ids)),
+#                         output_field=IntegerField()
+#                     )
+#                 )
+#                 .order_by('order')
+#                 .values_list('short_name', flat=True)
+#             )
+#         }
+
+#         # Add domain-specific sections
+#         for domain in unique_domains:
+#             result_dict["data"][domain] = {"type": "line", "colleges": {}}
+
+#         # Fetch overall rankings
+#         try:
+#             overall_data = RankingGraphHelper.fetch_ranking_data(
+#                 college_ids, 
+#                 start_year, 
+#                 end_year,
+#                 ranking_entity='Stream Wise Colleges'
+#             )
+#             result_dict["data"]["overall"]["colleges"] = overall_data
+#         except NoDataAvailableError as e:
+#             logger.error(f"No data available for overall ranking: {str(e)}")
+#             raise
+
+#         # Fetch domain-specific rankings
+#         for domain in unique_domains:
+#             try:
+#                 domain_data = RankingGraphHelper.fetch_ranking_data(
+#                     college_ids,
+#                     start_year,
+#                     end_year,
+#                     course_ids=selected_courses,
+#                     ranking_entity='Stream Wise Colleges',
+#                     domain=domain
+#                 )
+#                 result_dict["data"][domain]["colleges"] = domain_data
+#             except NoDataAvailableError as e:
+#                 logger.error(f"No data available for domain {domain}: {str(e)}")
+#                 result_dict["data"][domain]["colleges"] = {
+#                     f"college_{idx + 1}": {
+#                         "college_id": college_id,
+#                         "data": {str(year): "NA" for year in years}
+#                     }
+#                     for idx, college_id in enumerate(college_ids)
+#                 }
+
+#         # Determine visualization types
+#         for data_type in result_dict["data"]:
+#             has_na = False
+#             has_rank_band = False
+            
+#             for college_key, college_data in result_dict["data"][data_type]["colleges"].items():
+#                 if college_data and "data" in college_data:
+#                     data = college_data["data"]
+#                     for year in years:
+#                         year_str = str(year)
+#                         value = data.get(year_str, "NA")
+                        
+#                         if value == "NA":
+#                             has_na = True
+#                         elif isinstance(value, str) and not value.isdigit():
+#                             has_rank_band = True
+                            
+#                         if has_na and has_rank_band:
+#                             break
+                
+#                 if has_na or has_rank_band:
+#                     break
+            
+#             if has_na or has_rank_band:
+#                 result_dict["data"][data_type]["type"] = "tabular"
+
+#         # Add metadata
+#         # result_dict.update({
+#         #     "default_domain": default_domain,
+#         #     "metadata": {
+#         #         "generated_at": datetime.now().isoformat(),
+#         #         "total_colleges": len(college_ids),
+#         #         "year_range": f"{start_year}-{end_year}",
+#         #         "domains_analyzed": len(unique_domains)
+#         #     }
+#         # })
+        
+#         return result_dict
 
 
 class RankingAiInsightHelper:
