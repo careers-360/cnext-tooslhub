@@ -234,7 +234,7 @@ class PeerComparisonService:
 
 
 class TopCollegesCoursesService:
-    BATCH_SIZE = 1000
+    BATCH_SIZE = 5000
     CACHE_TIMEOUT = 3600 * 168
     MAX_WORKERS = 10
 
@@ -244,9 +244,9 @@ class TopCollegesCoursesService:
         try:
             user_context = UserContextHelper.get_user_context(uid)
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_courses_v25_{domain_id}"
+            cache_key = f"top_colleges_courses_v30_{domain_id}"
             if cache_burst == 1:
-                CacheHelper.burst_cache("top_colleges_courses_v15_", domain_id)
+                CacheHelper.burst_cache("top_colleges_courses_v25_", domain_id)
             if cached := cache.get(cache_key):
                 return cached
 
@@ -270,7 +270,7 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v25_{domain_id}"
+            cache_key = f"top_colleges_v30_{domain_id}"
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_colleges_v15_", domain_id)
             if cached := cache.get(cache_key):
@@ -282,20 +282,21 @@ class TopCollegesCoursesService:
                 count=Count('*')
             ).values('count')
 
-            comparison_counts_2 = CollegeCompareData.objects.filter(
-                college_2=OuterRef('id')
-            ).values('college_2').annotate(
-                count=Count('*')
-            ).values('count')
+            # comparison_counts_2 = CollegeCompareData.objects.filter(
+            #     college_2=OuterRef('id')
+            # ).values('college_2').annotate(
+            #     count=Count('*')
+            # ).values('count')
 
             colleges = College.objects.filter(
                 published='published'
             ).annotate(
                 comparisons_as_college_1=Coalesce(Subquery(comparison_counts_1), 0),
-                comparisons_as_college_2=Coalesce(Subquery(comparison_counts_2), 0),
+                # comparisons_as_college_2=Coalesce(Subquery(comparison_counts_2), 0),
                 total_comparisons=(
-                    F('comparisons_as_college_1') +
-                    F('comparisons_as_college_2')
+                    F('comparisons_as_college_1') 
+                    # +
+                    # F('comparisons_as_college_2')
                 )
             ).select_related('location')
 
@@ -321,7 +322,7 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v25_{domain_id}"
+            cache_key = f"top_courses_v30_{domain_id}"
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_courses_v15_", domain_id)
             if cached := cache.get(cache_key):
@@ -333,20 +334,22 @@ class TopCollegesCoursesService:
                 count=Count('*')
             ).values('count')
 
-            comparison_counts_2 = CollegeCompareData.objects.filter(
-                course_2=OuterRef('id')
-            ).values('course_2').annotate(
-                count=Count('*')
-            ).values('count')
+            # comparison_counts_2 = CollegeCompareData.objects.filter(
+            #     course_2=OuterRef('id')
+            # ).values('course_2').annotate(
+            #     count=Count('*')
+            # ).values('count')
 
             courses = Course.objects.filter(
                 status=True
             ).annotate(
                 comparisons_as_course_1=Coalesce(Subquery(comparison_counts_1), 0),
-                comparisons_as_course_2=Coalesce(Subquery(comparison_counts_2), 0),
+                # ,
+                # comparisons_as_course_2=Coalesce(Subquery(comparison_counts_2), 0),
                 total_comparisons=(
-                    F('comparisons_as_course_1') +
-                    F('comparisons_as_course_2')
+                    F('comparisons_as_course_1') 
+                    # +
+                    # F('comparisons_as_course_2')
                 )
             ).select_related(
                 'college', 'degree'

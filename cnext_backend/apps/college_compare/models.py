@@ -649,8 +649,20 @@ class CollegeCompareData(models.Model):
             models.Index(fields=['college_2']),
             models.Index(fields=['course_1']),
             models.Index(fields=['course_2']),
-                 models.Index(fields=['college_3']),
+            models.Index(fields=['college_3']),
             models.Index(fields=['college_4']),
+            models.Index(
+                fields=['college_1', 'college_2'],
+                name='college_1_2_partial_idx',
+                condition=Q(college_3__isnull=True) & Q(college_4__isnull=True)
+            ),
+            models.Index(
+                fields=['course_1', 'course_2'],
+                name='course_1_2_partial_idx',
+                condition=Q(course_3__isnull=True) & Q(course_4__isnull=True)
+            ),
+
+           
       
 
      
