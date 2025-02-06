@@ -580,6 +580,18 @@ class RankPredictorAPI(APIView):
                 score = item.get('value')
                 input_flow_type = item.get('input_flow_type')
                 
+                # Handle score conversion and validation
+                if score is None:
+                    return CustomErrorResponse(
+                        {"message": "score is required"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                try:
+                    score = float(score)  # Convert to float (handles negative values and zero)
+                except (ValueError, TypeError):
+                    score = 0  # Default to 0 if conversion fails
+                
                
 
                 
@@ -606,11 +618,12 @@ class RankPredictorAPI(APIView):
 
 
                 # Validate score
-                if not score or not score.isdigit():
+                if score is None or not isinstance(score, (int, float)):
                     return CustomErrorResponse(
-                        {"message": "score is required and must be an integer"},
+                        {"message": "score is required and must be a number"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+
 
                 score = float(score)
 
