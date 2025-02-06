@@ -74,3 +74,12 @@ DEVICE_TYPE_CHOICE = {
     "Ios": "Ios"
 }
 
+CASTE_CATEGORY_MAP = {
+    caste['id']: caste['name']
+    for caste in CasteCategory.objects.all().values('id', 'name')
+}
+
+DISABILITY_CATEGORY_MAP = {
+    disability["id"] : disability['name']
+    for disability in DisabilityCategory.objects.all().values("id", "name") #TODO do it using F in django
+}

@@ -1066,3 +1066,34 @@ class FeedbackAPI(APIView):
             status=status.HTTP_200_OK,
         )
 
+class CasteDisabilityAPI(APIView):
+    """
+    API for Content Section on Result Page
+    Endpoint : api/<int:version>/rank-predictor/cast-disability
+    Params : product_id
+    Params : exam_id
+    Params : flow_id
+    """
+
+
+    permission_classes = [ApiKeyPermission]
+
+    def get(self, request, version, **kwargs):
+
+        product_id = request.GET.get('product_id')
+        exam_id = request.GET.get('exam_id')
+        flow_id = request.GET.get('flow_id')
+        
+        rp_helper = RPHelper()
+        
+        if product_id:
+            product_id = int(product_id)
+            cast_disabilitys = rp_helper._get_cast_disability_mappings(product_id=product_id, exam_id=exam_id, flow_id=flow_id)
+        
+        flow_id = int(flow_id)
+
+        # Fetch content from database and return it to client.
+        
+        cast_disabilitys = rp_helper._get_cast_disability_mappings(product_id=product_id, exam_id=exam_id, flow_id=flow_id)
+
+        return SuccessResponse(cast_disabilitys, status=status.HTTP_200_OK)
