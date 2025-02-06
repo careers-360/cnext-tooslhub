@@ -1717,6 +1717,8 @@ class ExamCutoffView(APIView):
 
             if 'error' in result:
                 print("---------")
+            
+            result['year']=current_year-2
 
         
 
@@ -1883,6 +1885,7 @@ class ExamCutGraphoffView(APIView):
                 course_ids=course_ids_list,
                 **optional_params
             )
+            result['year']=current_year-2
 
         
 
