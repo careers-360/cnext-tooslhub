@@ -5517,7 +5517,7 @@ class ExamCutoffHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
         """Generate a cache key using MD5 hashing."""
-        key = "-".join(map(str, args))
+        key = "yes-".join(map(str, args))
         return md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -5790,22 +5790,22 @@ class ExamCutoffHelper:
 
 
         for exam_id in exam_map:
-            exam_map[exam_id]["exam_name"] = (
-                Exam.objects.filter(id=exam_id).values("exam_name").first()["exam_name"]
-                if Exam.objects.filter(id=exam_id).exists()
-                else "NA"
-            )
+
+            exam = Exam.objects.filter(id=exam_id).first()
+
+            counseling = Exam.objects.filter(id=exam_map[exam_id]["counselling_id"]).first()
+
+        
+            exam_map[exam_id]["exam_name"] = exam.get_exam_display_name() if exam else "NA"
+           
             exam_map[exam_id]["counselling_name"] = (
-                Exam.objects.filter(id=exam_map[exam_id]["counselling_id"])
-                .values("exam_name")
-                .first()["exam_name"]
-                if Exam.objects.filter(id=exam_map[exam_id]["counselling_id"]).exists()
-                else "NA"
+                counseling.exam_name if counseling else "NA"
             )
+
+            # Combine exam and counseling names
             exam_map[exam_id]["exam_and_counseling"] = (
                 f"{exam_map[exam_id]['exam_name']} ({exam_map[exam_id]['counselling_name']})"
-                if exam_map[exam_id]["exam_name"] != "NA"
-                and exam_map[exam_id]["counselling_name"] != "NA"
+                if exam_map[exam_id]["exam_name"] != "NA" and exam_map[exam_id]["counselling_name"] != "NA"
                 else "NA"
             )
 
@@ -5888,7 +5888,7 @@ class ExamCutoffGraphHelper:
         )
 
         all_caste_gender_combinations = [
-            (2, 1), (2, 2), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)
+            (2, 1), (2, 2), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2), (None,None)
         ]
 
         all_exam_counseling_combinations = list(filtered_cutoff)
@@ -5904,7 +5904,8 @@ class ExamCutoffGraphHelper:
                         caste_id=caste_id_val,
                     )
 
-                    # Get all available category_of_admission_ids for this combination
+
+
                     category_of_admissions = filtered_base_cutoffs.values_list(
                         'category_of_admission_id', flat=True
                     ).distinct()
@@ -6054,7 +6055,7 @@ class ExamCutoffGraphHelper:
 
                         gender_data = {
                             "id": gender_id,
-                            "name": "Male" if gender_id == 1 else "Female",
+                            "name": "Male" if gender_id == 1 else "Female" if gender_id == 2 else "NA",
                             "cutoff_data": {
                                 "type": "tabular" if all_na else "vertical bar",
                                 **cutoff_data_dict
@@ -6067,7 +6068,7 @@ class ExamCutoffGraphHelper:
             exam_data["counseling"].append(counseling_data)
             formatted_result["exams_data"].append(exam_data)
 
-        # Get college names
+    
         college_names_dict = {
             course_id: college_name 
             for course_id, college_name in Course.objects.filter(id__in=course_ids)
@@ -6076,9 +6077,247 @@ class ExamCutoffGraphHelper:
         }
         formatted_result["college_names"] = [college_names_dict[course_id] for course_id in course_ids]
 
+        if formatted_result["exams_data"] == []:
+            raise NoDataAvailableError(
+                "No exam & cutoff data available for the provided Course's."
+            )
+
         cache.set(cache_key, formatted_result, timeout=3600)
         return formatted_result
 
+
+
+# class CutoffAnalysisHelper:
+#     @staticmethod
+#     def get_cache_key(*args) -> str:
+#         """Generate a cache key using MD5 hashing."""
+#         key = "++++++++++++=+".join(map(str, args))
+#         return hashlib.md5(key.encode()).hexdigest()
+
+#     @staticmethod
+#     def compare_cutoffs(course_ids, exam_id=None, counseling_id=None, category_id=None):
+#         if not course_ids:
+#             raise ValueError("course_ids must be provided.")
+
+#         cache_key = CutoffAnalysisHelper.get_cache_key(course_ids, exam_id, counseling_id, category_id)
+#         cached_data = cache.get(cache_key)
+#         if cached_data:
+#             return cached_data
+
+#         max_year = CutoffData.objects.filter(college_course_id__in=course_ids).aggregate(Max("year"))["year__max"]
+#         if not max_year:
+#             return []
+
+#         previous_year = max_year - 1
+#         current_year_cutoffs = CutoffData.objects.filter(college_course_id__in=course_ids, year=max_year)
+#         previous_year_cutoffs = CutoffData.objects.filter(college_course_id__in=course_ids, year=previous_year)
+
+#         # 1. Percentage difference in cutoff among courses
+#         cutoff_comparison = []
+#         for course_id in course_ids:
+#             course = Course.objects.get(id=course_id)
+#             current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+#             if current_cutoff:
+#                 for other_course_id in course_ids:
+#                     if other_course_id != course_id:
+#                         other_course = Course.objects.get(id=other_course_id)
+#                         other_current_cutoff = current_year_cutoffs.filter(college_course_id=other_course_id).first()
+#                         if other_current_cutoff and current_cutoff.exam_sub_exam_id == other_current_cutoff.exam_sub_exam_id:
+#                             if current_cutoff.final_cutoff is not None and other_current_cutoff.final_cutoff is not None:
+#                                 percentage_diff = (current_cutoff.final_cutoff - other_current_cutoff.final_cutoff) / other_current_cutoff.final_cutoff * 100
+#                                 if percentage_diff > 0:
+#                                     comparison_string = f"{course.course_name} ({course.college.short_name}) has {percentage_diff:.2f}% higher cut off as compared to {other_course.course_name} ({other_course.college.short_name})"
+#                                 elif percentage_diff < 0:
+#                                     comparison_string = f"{course.course_name} ({course.college.short_name}) has {abs(percentage_diff):.2f}% lower cut off as compared to {other_course.course_name} ({other_course.college.short_name})"
+#                                 else:
+#                                     comparison_string = f"{course.course_name} ({course.college.short_name}) has the same cut off as {other_course.course_name} ({other_course.college.short_name})"
+#                                 cutoff_comparison.append(comparison_string)
+
+#         # 2. Increase or decrease in closing rank from last year
+#         closing_rank_comparison = []
+#         for course_id in course_ids:
+#             course = Course.objects.get(id=course_id)
+#             current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+#             previous_cutoff = previous_year_cutoffs.filter(college_course_id=course_id).first()
+#             if current_cutoff and previous_cutoff:
+#                 if current_cutoff.final_cutoff is not None and previous_cutoff.final_cutoff is not None:
+#                     closing_rank_diff = (current_cutoff.final_cutoff - previous_cutoff.final_cutoff) / previous_cutoff.final_cutoff * 100
+#                     if closing_rank_diff > 0:
+#                         comparison_string = f"There is a {closing_rank_diff:.2f}% increase in closing rank for {course.course_name} ({course.college.short_name})"
+#                     elif closing_rank_diff < 0:
+#                         comparison_string = f"There is a {abs(closing_rank_diff):.2f}% decrease in closing rank for {course.course_name} ({course.college.short_name})"
+#                     else:
+#                         comparison_string = f"There is no change in closing rank for {course.course_name} ({course.college.short_name})"
+#                     closing_rank_comparison.append(comparison_string)
+
+#         # 3. Lowest cutoff in the degree
+#         degree_cutoffs = {}
+#         for course_id in course_ids:
+#             course = Course.objects.get(id=course_id)
+#             if course.degree_id not in degree_cutoffs:
+#                 degree_cutoffs[course.degree_id] = []
+#             current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+#             if current_cutoff and current_cutoff.final_cutoff is not None:
+#                 degree_cutoffs[course.degree_id].append({
+#                     "course_id": course_id,
+#                     "course_name": course.course_name,
+#                     "college_short_name": course.college.short_name,
+#                     "final_cutoff": int(current_cutoff.final_cutoff)
+#                 })
+#         lowest_degree_cutoffs = []
+#         for degree_id, cutoffs in degree_cutoffs.items():
+#             if cutoffs:
+#                 lowest_cutoff = min(cutoffs, key=lambda x: x["final_cutoff"])
+#                 lowest_degree_cutoffs.append(f"{lowest_cutoff['course_name']} ({lowest_cutoff['college_short_name']}) has the lowest closing rank of {lowest_cutoff['final_cutoff']} for ST category")
+
+#         # 4. Lowest cutoff in the branch
+#         branch_cutoffs = {}
+#         for course_id in course_ids:
+#             course = Course.objects.get(id=course_id)
+#             if course.branch_id not in branch_cutoffs:
+#                 branch_cutoffs[course.branch_id] = []
+#             current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+#             if current_cutoff and current_cutoff.final_cutoff is not None:
+#                 branch_cutoffs[course.branch_id].append({
+#                     "course_id": course_id,
+#                     "course_name": course.course_name,
+#                     "college_short_name": course.college.short_name,
+#                     "final_cutoff": int(current_cutoff.final_cutoff)
+#                 })
+#         lowest_branch_cutoffs = []
+#         for branch_id, cutoffs in branch_cutoffs.items():
+#             if cutoffs:
+#                 lowest_cutoff = min(cutoffs, key=lambda x: x["final_cutoff"])
+#                 lowest_branch_cutoffs.append(f"{lowest_cutoff['course_name']} ({lowest_cutoff['college_short_name']}) has the lowest closing rank of {lowest_cutoff['final_cutoff']} for ST category")
+
+#         result = {
+#             "cutoff_comparison": ", ".join(cutoff_comparison),
+#             "closing_rank_comparison": ", ".join(closing_rank_comparison),
+#             "lowest_degree_cutoffs": ", ".join(lowest_degree_cutoffs),
+#             "lowest_branch_cutoffs": ", ".join(lowest_branch_cutoffs)
+#         }
+
+#         cache.set(cache_key, result, timeout=60 * 15)  # Cache for 15 minutes
+#         return result
+
+class CutoffAnalysisHelper:
+    @staticmethod
+    def get_cache_key(*args) -> str:
+        """Generate a cache key using MD5 hashing."""
+        key = "++++++++++++=+yess".join(map(str, args))
+        return hashlib.md5(key.encode()).hexdigest()
+
+    @staticmethod
+    def compare_cutoffs(course_ids, exam_id=None, counseling_id=None, category_id=None):
+        if not course_ids:
+            raise ValueError("course_ids must be provided.")
+
+        cache_key = CutoffAnalysisHelper.get_cache_key(course_ids, exam_id, counseling_id, category_id)
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
+        max_year = CutoffData.objects.filter(college_course_id__in=course_ids).aggregate(Max("year"))["year__max"]
+        if not max_year:
+            return []
+
+        previous_year = max_year - 1
+        current_year_cutoffs = CutoffData.objects.filter(college_course_id__in=course_ids, year=max_year)
+        previous_year_cutoffs = CutoffData.objects.filter(college_course_id__in=course_ids, year=previous_year)
+
+        # 1. Percentage difference in cutoff among courses
+        cutoff_comparison = []
+        for course_id in course_ids:
+            course = Course.objects.get(id=course_id)
+            current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+            if current_cutoff:
+                for other_course_id in course_ids:
+                    if other_course_id != course_id:
+                        other_course = Course.objects.get(id=other_course_id)
+                        other_current_cutoff = current_year_cutoffs.filter(college_course_id=other_course_id).first()
+                        if other_current_cutoff and current_cutoff.exam_sub_exam_id == other_current_cutoff.exam_sub_exam_id:
+                            if current_cutoff.final_cutoff is not None and other_current_cutoff.final_cutoff is not None:
+                                percentage_diff = (current_cutoff.final_cutoff - other_current_cutoff.final_cutoff) / other_current_cutoff.final_cutoff * 100
+                                if percentage_diff > 0:
+                                    comparison_string = f"{course.course_name} ({course.college.short_name}) has {percentage_diff:.2f}% higher cut off as compared to {other_course.course_name} ({other_course.college.short_name})"
+                                elif percentage_diff < 0:
+                                    comparison_string = f"{course.course_name} ({course.college.short_name}) has {abs(percentage_diff):.2f}% lower cut off as compared to {other_course.course_name} ({other_course.college.short_name})"
+                                else:
+                                    comparison_string = f"{course.course_name} ({course.college.short_name}) has the same cut off as {other_course.course_name} ({other_course.college.short_name})"
+                                if comparison_string:
+                                    cutoff_comparison.append(comparison_string)
+
+        # 2. Increase or decrease in closing rank from last year
+        closing_rank_comparison = []
+        for course_id in course_ids:
+            course = Course.objects.get(id=course_id)
+            current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+            previous_cutoff = previous_year_cutoffs.filter(college_course_id=course_id).first()
+            if current_cutoff and previous_cutoff:
+                if current_cutoff.final_cutoff is not None and previous_cutoff.final_cutoff is not None:
+                    closing_rank_diff = (current_cutoff.final_cutoff - previous_cutoff.final_cutoff) / previous_cutoff.final_cutoff * 100
+                    if closing_rank_diff > 0:
+                        comparison_string = f"There is a {closing_rank_diff:.2f}% increase in closing rank for {course.course_name} ({course.college.short_name})"
+                    elif closing_rank_diff < 0:
+                        comparison_string = f"There is a {abs(closing_rank_diff):.2f}% decrease in closing rank for {course.course_name} ({course.college.short_name})"
+                    else:
+                        comparison_string = f"There is no change in closing rank for {course.course_name} ({course.college.short_name})"
+                    if comparison_string:
+                        closing_rank_comparison.append(comparison_string)
+
+        # 3. Lowest cutoff in the degree
+        degree_cutoffs = {}
+        for course_id in course_ids:
+            course = Course.objects.get(id=course_id)
+            if course.degree_id not in degree_cutoffs:
+                degree_cutoffs[course.degree_id] = []
+            current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+            if current_cutoff and current_cutoff.final_cutoff is not None:
+                degree_cutoffs[course.degree_id].append({
+                    "course_id": course_id,
+                    "course_name": course.course_name,
+                    "college_short_name": course.college.short_name,
+                    "final_cutoff": int(current_cutoff.final_cutoff)
+                })
+        lowest_degree_cutoffs = []
+        for degree_id, cutoffs in degree_cutoffs.items():
+            if cutoffs:
+                lowest_cutoff = min(cutoffs, key=lambda x: x["final_cutoff"])
+                comparison_string = f"{lowest_cutoff['course_name']} ({lowest_cutoff['college_short_name']}) has the lowest closing rank of {lowest_cutoff['final_cutoff']} for ST category"
+                if comparison_string:
+                    lowest_degree_cutoffs.append(comparison_string)
+
+        # 4. Lowest cutoff in the branch
+        branch_cutoffs = {}
+        for course_id in course_ids:
+            course = Course.objects.get(id=course_id)
+            if course.branch_id not in branch_cutoffs:
+                branch_cutoffs[course.branch_id] = []
+            current_cutoff = current_year_cutoffs.filter(college_course_id=course_id).first()
+            if current_cutoff and current_cutoff.final_cutoff is not None:
+                branch_cutoffs[course.branch_id].append({
+                    "course_id": course_id,
+                    "course_name": course.course_name,
+                    "college_short_name": course.college.short_name,
+                    "final_cutoff": int(current_cutoff.final_cutoff)
+                })
+        lowest_branch_cutoffs = []
+        for branch_id, cutoffs in branch_cutoffs.items():
+            if cutoffs:
+                lowest_cutoff = min(cutoffs, key=lambda x: x["final_cutoff"])
+                comparison_string = f"{lowest_cutoff['course_name']} ({lowest_cutoff['college_short_name']}) has the lowest closing rank of {lowest_cutoff['final_cutoff']} for ST category"
+                if comparison_string:
+                    lowest_branch_cutoffs.append(comparison_string)
+
+        result = {
+            "cutoff_comparison": ", ".join(cutoff_comparison) if cutoff_comparison else "",
+            "closing_rank_comparison": ", ".join(closing_rank_comparison) if closing_rank_comparison else "",
+            "lowest_degree_cutoffs": ", ".join(lowest_degree_cutoffs) if lowest_degree_cutoffs else "",
+            "lowest_branch_cutoffs": ", ".join(lowest_branch_cutoffs) if lowest_branch_cutoffs else ""
+        }
+
+        cache.set(cache_key, result, timeout=60 * 15)  # Cache for 15 minutes
+        return result
 
 
 class UserPreferenceHelper:
