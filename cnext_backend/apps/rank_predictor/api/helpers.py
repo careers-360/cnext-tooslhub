@@ -1326,7 +1326,18 @@ class RPCmsHelper:
         usage_from = request.GET.get('usage_from')
         usage_to = request.GET.get('usage_to')
         product_id = request.GET.get('product_id')
+        page = request.GET.get('page', 1)
+        size = request.GET.get('size', 30)
         usage_data = []
+
+        if str(page).isdigit() and str(size).isdigit():
+            page = int(page)
+            size = int(size)
+        else:
+            return False, "Invalid page or size"
+
+        offset = (page-1) * size
+        limit = offset + size
 
         if not usage_from or not usage_to or not product_id:
             return False, "usage_from, usage_to and product_id are required"
@@ -1336,7 +1347,7 @@ class RPCmsHelper:
         cast_category_dict = dict(CasteCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
         disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
 
-        queryset = CnextRpUserTracking.objects.filter(**query_filters).values()
+        queryset = CnextRpUserTracking.objects.filter(**query_filters).values().order_by("-id")[offset: limit]
 
         if len(queryset) == 0:
             return True, usage_data
