@@ -5,12 +5,12 @@ from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpF
 from tools.models import CPFeedback, CPProductCampaign, ToolsFAQ
 
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain, PreferredEducationLevel
-from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain, PreferredEducationLevel, CasteCategory
+from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL, CASTE_CATEGORY_MAP, DISABILITY_CATEGORY_MAP
 import os
 from django.utils import timezone
 from datetime import datetime
-from django.db.models import F
+from django.db.models import F, Max
 
 
 
@@ -162,9 +162,60 @@ class RPHelper:
                 fdata['list_option_data'] = [{"id": sp.split("|")[0], "val": sp.split("|")[1]} for sp in fdata['list_option_data'].split(",")]
             modified_form_data_list.append(fdata)
 
-        with_appended_cta = {'form_data': modified_form_data_list, 'input_process_type_mapping': input_process_type_mapping , 'cast_category': CASTE_CATEGORY, 'disability_category': DISABILITY_CATEGORY, 'dificulty_level': self.parse_choice(DIFFICULTY_LEVEL), 'sessions': SHIFTS}
+        with_appended_cta = {'form_data': modified_form_data_list, 'input_process_type_mapping': input_process_type_mapping , 'dificulty_level': self.parse_choice(DIFFICULTY_LEVEL), 'sessions': SHIFTS}
 
         return with_appended_cta
+    
+    def _get_cast_disability_mappings(self, product_id=None, exam_id=None, flow_id=int):
+
+        if flow_id == 3:
+        ## Percentile flow
+            max_year = RPStudentAppeared.objects.filter(exam_id=exam_id).aggregate(Max('year'))['year__max']
+
+            # print(f"latest year for percentile flow {max_year}")
+
+            caste_ids = [caste['category'] for caste in RPStudentAppeared.objects.filter(exam_id=exam_id, year=max_year).values('category').distinct() if caste['category'] != None]
+
+            # print(f"caste_ids for percentile flow {caste_ids}")
+
+            CASTE = [ { 'id': id , 'value': CASTE_CATEGORY_MAP[id]} for id in caste_ids ]
+
+
+            disability_by_category_mapping = {}
+
+            # print(f"disability {DISABILITY_CATEGORY_MAP}")
+
+            for caste in caste_ids:
+                disabilities = [ merit_list['disability'] for merit_list in RPStudentAppeared.objects.filter(category=caste, exam_id=exam_id, year=max_year).values('disability').distinct() if merit_list['disability'] != None ] 
+                # print(f"disabilities for percentile flow {disabilities}")
+                disability_by_category_mapping[caste] = [{'id': id , 'value': DISABILITY_CATEGORY_MAP[id]} for id in disabilities ]
+
+            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping }
+
+        else:
+        ## Non Percentile flow
+            max_year =   RpMeritList.objects.filter(product_id=product_id).aggregate(Max('year'))['year__max']
+            # print(f"max year {max_year}")
+
+            caste_ids = [caste['caste'] for caste in RpMeritList.objects.filter(product_id=product_id, year=max_year).values('caste').distinct()]
+            # print(f"distinct casteIds {caste_ids}")
+
+            # print(f"category {CASTE_CATEGORY_MAP}")
+            CASTE = [ { 'id': id , 'value': CASTE_CATEGORY_MAP[id]} for id in caste_ids]
+            # print(f"caste with ids {CASTE}")
+
+            disability_by_category_mapping = {}
+
+            # print(f"disability {DISABILITY_CATEGORY_MAP}")
+
+            for caste in caste_ids:
+                disabilities = [ merit_list['disability'] for merit_list in RpMeritList.objects.filter(caste=caste, product_id=product_id, year=max_year).values('disability').distinct() ] 
+                disability_by_category_mapping[caste] = [{'id': id , 'value': DISABILITY_CATEGORY_MAP[id]} for id in disabilities ]
+
+            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping }
+
+        return cast_disabilities_mapping
+
     
     def _get_top_colleges(self, exam_id=None):
         """
