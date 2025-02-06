@@ -848,592 +848,6 @@ class MultiYearRankingHelper:
 
 
 
-# class RankingGraphHelper:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a unique cache key by hashing the combined arguments.
-#         """
-#         key = '___'.join(map(str, args))
-#         return hashlib.md5(key.encode()).hexdigest()
-    
-#     @staticmethod
-#     def fetch_ranking_data(
-#         college_ids: List[int],
-#         start_year: int,
-#         end_year: int,
-#         course_ids: Dict[int, int] = None,
-#         ranking_entity: str = None,
-#     ) -> Dict:
-#         """
-#         Fetch ranking data for given colleges and year range.
-#         """
-#         try:
-#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
-#         except (ValueError, TypeError):
-#             raise ValueError("college_ids must be a flat list of integers or strings.")
-
-#         # Prepare cache key with all parameters
-#         cache_key = RankingGraphHelper.get_cache_key(
-#             'ranking__graph__insight_version__', 
-#             '-'.join(map(str, college_ids)), 
-#             start_year, 
-#             end_year, 
-#             '-'.join(map(str, course_ids.values())) if course_ids else "", 
-#             ranking_entity
-#         )
-
-#         def fetch_data():
-#             year_range = list(range(start_year, end_year + 1))
-#             filters = Q(ranking__status=1, ranking__year__in=year_range)
-
-#             course_domain_map = {}
-#             if course_ids:
-#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
-#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-#                 if course_domain_map:
-#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
-
-#             if ranking_entity:
-#                 filters &= Q(ranking__ranking_entity=ranking_entity)
-
-#             rankings = (
-#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
-#                 .select_related('ranking')
-#                 .values("college_id", "ranking__year", "ranking__ranking_stream", "ranking__ranking_entity", "overall_score")
-#             )
-#             print(rankings)
-
-#             if not rankings:
-#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
-            
-#             max_scores = {}
-#             for ranking in rankings:
-#                 college_id = ranking['college_id']
-#                 year = ranking['ranking__year']
-#                 score = ranking['overall_score']
-#                 if score is not None and score < 100:
-#                     key = (college_id, year)
-#                     max_scores[key] = max(max_scores.get(key, 0), score)
-
-#             result_dict = {
-#                 f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
-#                 for i, college_id in enumerate(college_ids)
-#             }
-
-#             for (college_id, year), max_score in max_scores.items():
-#                 college_key = f"college_{college_ids.index(college_id) + 1}"
-#                 result_dict[college_key]["data"][str(year)] = max_score
-
-#             return result_dict
-
-#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
-    
-#     @staticmethod
-#     def prepare_graph_insights(
-#         college_ids: List[int], 
-#         start_year: int, 
-#         end_year: int, 
-#         selected_courses: Dict[int, int]
-#     ) -> Dict:
-#         """
-#         Prepare data for the ranking insights graph.
-#         """
-#         years = list(range(start_year, end_year + 1))
-#         try:
-#             overall_data = RankingGraphHelper.fetch_ranking_data(
-#                 college_ids, start_year, end_year, ranking_entity='Overall'
-#             )
-#         except NoDataAvailableError as e:
-#             logger.error(f"No data available for overall ranking: {str(e)}")
-#             raise
-
-#         domain_data = {}
-#         for college_id in college_ids:
-#             course_id = selected_courses.get(college_id)
-#             try:
-#                 domain_data[college_id] = RankingGraphHelper.fetch_ranking_data(
-#                     [college_id], start_year, end_year, course_ids={college_id: course_id}, ranking_entity='Stream Wise Colleges'
-#                 ) if course_id else {}
-#             except NoDataAvailableError as e:
-#                 logger.error(f"No data available for course ranking: {str(e)}")
-#                 domain_data[college_id] = {}
-
-#         all_same_course = len(set(selected_courses.values())) <= 1
-#         has_na_overall, has_na_domain = False, False
-
-#         result_dict = {
-#             "years": years,
-#             "data": {
-#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
-#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
-#             },
-#             "college_names": list(
-#                 College.objects.filter(id__in=college_ids)
-#                 .annotate(order=Case(*[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
-#                     default=Value(len(college_ids)), output_field=IntegerField()))
-#                 .order_by('order')
-#                 .values_list('name', flat=True)
-#             )
-#         }
-
-#         for idx, college_id in enumerate(college_ids):
-#             college_key = f"college_{idx + 1}"
-#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id].get(f"college_1", {})
-
-#         for data_type in ["overall", "domain"]:
-#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
-#                 if college_data and "data" in college_data:
-#                     data = college_data["data"]
-#                     for year in years:
-#                         year_str = str(year)
-#                         if year_str not in data:
-#                             data[year_str] = "NA"
-#                         if data[year_str] == "NA":
-#                             if data_type == "overall":
-#                                 has_na_overall = True
-#                             elif data_type == "domain":
-#                                 has_na_domain = True
-
-#         if has_na_overall:
-#             result_dict["data"]["overall"]["type"] = "tabular"
-#         if has_na_domain:
-#             result_dict["data"]["domain"]["type"] = "tabular"
-
-#         return result_dict
-
-
-# class RankingGraphHelper:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a unique cache key by hashing the combined arguments.
-#         """
-#         key = '___'.join(map(str, args))
-#         return hashlib.md5(key.encode()).hexdigest()
-    
-#     @staticmethod
-#     def parse_rank_band(rank_band):
-#         """
-#         Parse rank band string and return a numeric score.
-#         Lower rank bands get higher scores.
-#         """
-#         if not rank_band or rank_band == 'NA':
-#             return float('inf')  # Lowest priority
-        
-#         try:
-#             # Split the rank band and take the lower bound
-#             lower_bound = int(rank_band.split('-')[0])
-#             # Invert the score so lower ranks get higher scores
-#             return 1000 - lower_bound
-#         except (ValueError, IndexError):
-#             return float('inf')
-
-#     @staticmethod
-#     def fetch_ranking_data(
-#         college_ids: List[int],
-#         start_year: int,
-#         end_year: int,
-#         course_ids: Dict[int, int] = None,
-#         ranking_entity: str = None,
-#     ) -> Dict:
-#         """
-#         Fetch ranking data for given colleges and year range.
-#         """
-#         try:
-#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
-#         except (ValueError, TypeError):
-#             raise ValueError("college_ids must be a flat list of integers or strings.")
-
-#         # Prepare cache key with all parameters
-#         cache_key = RankingGraphHelper.get_cache_key(
-#             'ranking__graph___insight_version________', 
-#             '-'.join(map(str, college_ids)), 
-#             start_year, 
-#             end_year, 
-#             '-'.join(map(str, course_ids.values())) if course_ids else "", 
-#             ranking_entity
-#         )
-
-#         def fetch_data():
-#             year_range = list(range(start_year, end_year + 1))
-#             filters = Q(ranking__status=1, ranking__year__in=year_range)
-
-#             course_domain_map = {}
-#             if course_ids:
-#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
-#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-#                 if course_domain_map:
-#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
-
-#             if ranking_entity:
-#                 filters &= Q(ranking__ranking_entity=ranking_entity)
-
-#             # Updated to fetch both overall_rank and rank_band
-#             rankings = (
-#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
-#                 .select_related('ranking')
-#                 .values("college_id", "ranking__year", "ranking__ranking_stream", "ranking__ranking_entity", "overall_score", "overall_rank", "rank_band")
-#             )
-
-#             if not rankings:
-#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
-            
-#             max_scores = {}
-#             for ranking in rankings:
-#                 college_id = ranking['college_id']
-#                 year = ranking['ranking__year']
-#                 score = ranking['overall_rank']
-                
-#                 # Prefer overall_rank, fallback to rank_band
-#                 if score is None or (not isinstance(score, (int, float)) or score >= 100):
-#                     # If overall_score is not valid, use rank_band
-#                     rank = ranking['overall_rank'] 
-#                     if not rank or rank == 'NA':
-#                         score = RankingGraphHelper.parse_rank_band(ranking['rank_band'])
-#                     else:
-#                         # If overall_rank exists, try to convert to numeric
-#                         try:
-#                             score = float(rank)
-#                         except (ValueError, TypeError):
-#                             score = RankingGraphHelper.parse_rank_band(ranking['rank_band'])
-                
-#                 if score != float('inf'):
-#                     key = (college_id, year)
-#                     max_scores[key] = max(max_scores.get(key, 0), score)
-
-#             result_dict = {
-#                 f"college_{i + 1}": {"college_id": college_id, "data": {str(year): "NA" for year in year_range}}
-#                 for i, college_id in enumerate(college_ids)
-#             }
-
-#             for (college_id, year), max_score in max_scores.items():
-#                 college_key = f"college_{college_ids.index(college_id) + 1}"
-#                 result_dict[college_key]["data"][str(year)] = max_score
-
-#             return result_dict
-
-#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
-    
-#     @staticmethod
-#     def prepare_graph_insights(
-#         college_ids: List[int], 
-#         start_year: int, 
-#         end_year: int, 
-#         selected_courses: Dict[int, int]
-#     ) -> Dict:
-#         """
-#         Prepare data for the ranking insights graph.
-#         """
-#         years = list(range(start_year, end_year + 1))
-#         try:
-#             overall_data = RankingGraphHelper.fetch_ranking_data(
-#                 college_ids, start_year, end_year, ranking_entity='Stream Wise Colleges'
-#             )
-#         except NoDataAvailableError as e:
-#             logger.error(f"No data available for overall ranking: {str(e)}")
-#             raise
-
-#         domain_data = {}
-#         for college_id in college_ids:
-#             course_id = selected_courses.get(college_id)
-#             try:
-#                 domain_data[college_id] = RankingGraphHelper.fetch_ranking_data(
-#                     [college_id], start_year, end_year, course_ids={college_id: course_id}, ranking_entity='Stream Wise Colleges'
-#                 ) if course_id else {}
-#             except NoDataAvailableError as e:
-#                 logger.error(f"No data available for course ranking: {str(e)}")
-#                 domain_data[college_id] = {}
-
-#         all_same_course = len(set(selected_courses.values())) <= 1
-#         has_na_overall, has_na_domain = False, False
-
-#         result_dict = {
-#             "years": years,
-#             "data": {
-#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
-#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
-#             },
-#             "college_names": list(
-#                 College.objects.filter(id__in=college_ids)
-#                 .annotate(order=Case(*[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
-#                     default=Value(len(college_ids)), output_field=IntegerField()))
-#                 .order_by('order')
-#                 .values_list('name', flat=True)
-#             )
-#         }
-
-#         for idx, college_id in enumerate(college_ids):
-#             college_key = f"college_{idx + 1}"
-#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id].get(f"college_1", {})
-
-#         for data_type in ["overall", "domain"]:
-#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
-#                 if college_data and "data" in college_data:
-#                     data = college_data["data"]
-#                     for year in years:
-#                         year_str = str(year)
-#                         if year_str not in data:
-#                             data[year_str] = "NA"
-#                         if data[year_str] == "NA":
-#                             if data_type == "overall":
-#                                 has_na_overall = True
-#                             elif data_type == "domain":
-#                                 has_na_domain = True
-
-#         # Modify to use explicit type detection
-#         if has_na_overall or any(
-#             all(data.get("data", {}).get(str(year)) == "NA" for year in years)
-#             for data in result_dict['data']['overall']['colleges'].values()
-#         ):
-#             result_dict["data"]["overall"]["type"] = "tabular"
-
-#         if has_na_domain or any(
-#             all(data.get("data", {}).get(str(year)) == "NA" for year in years)
-#             for data in result_dict['data']['domain']['colleges'].values()
-#         ):
-#             result_dict["data"]["domain"]["type"] = "tabular"
-
-#         return result_dict
-
-
-
-# class RankingGraphHelper:
-
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """
-#         Generate a unique cache key by hashing the combined arguments.
-#         """
-#         key = '___'.join(map(str, args))
-#         return hashlib.md5(key.encode()).hexdigest()
-
-#     @staticmethod
-#     def process_rank(rank, rank_band):
-#         """
-#         Process ranking information with the following priority:
-#         1. Use overall_rank if it's a valid number
-#         2. Fall back to rank_band's lower bound if overall_rank is not valid
-#         3. Return "NA" if neither is valid
-#         """
-#         # Try to use overall_rank first
-#         if rank and rank != 'NA':
-#             try:
-#                 return float(rank)
-#             except (ValueError, TypeError):
-#                 pass
-
-#         # Fall back to rank_band if overall_rank is not valid
-#         if rank_band and rank_band != 'NA':
-#             try:
-#                 # Extract lower bound from rank band (e.g., "101-150" -> 101)
-#                 return rank_band
-#             except (ValueError, TypeError, IndexError):
-#                 pass
-
-#         return "NA"
-
-#     @staticmethod
-#     def fetch_ranking_data(
-#         college_ids: List[int],
-#         start_year: int,
-#         end_year: int,
-#         course_ids: Dict[int, int] = None,
-#         ranking_entity: str = None,
-#     ) -> Dict:
-#         """
-#         Fetch ranking data for given colleges and year range, focusing on overall_rank.
-#         """
-#         try:
-#             college_ids = [int(college_id) for college_id in college_ids if isinstance(college_id, (int, str))]
-#         except (ValueError, TypeError):
-#             raise ValueError("college_ids must be a flat list of integers or strings.")
-
-#         # Prepare cache key
-#         cache_key = RankingGraphHelper.get_cache_key(
-#             'ranking_______graph__insight_version____',
-#             '-'.join(map(str, college_ids)),
-#             start_year,
-#             end_year,
-#             '-'.join(map(str, course_ids.values())) if course_ids else "",
-#             ranking_entity
-#         )
-
-#         def fetch_data():
-#             year_range = list(range(start_year, end_year + 1))
-#             filters = Q(ranking__status=1, ranking__year__in=year_range)
-
-#             # Set up course domain filtering if needed
-#             course_domain_map = {}
-#             if course_ids:
-#                 courses = Course.objects.filter(id__in=course_ids.values()).values('id', 'degree_domain')
-#                 course_domain_map = {course['id']: course['degree_domain'] for course in courses}
-#                 if course_domain_map:
-#                     filters &= Q(ranking__ranking_stream__in=list(course_domain_map.values()))
-
-#             if ranking_entity:
-#                 filters &= Q(ranking__ranking_entity=ranking_entity)
-
-#             # Fetch ranking data
-#             rankings = (
-#                 RankingUploadList.objects.filter(filters, college_id__in=college_ids)
-#                 .select_related('ranking')
-#                 .values(
-#                     "college_id",
-#                     "ranking__year",
-#                     "ranking__ranking_stream",
-#                     "ranking__ranking_entity",
-#                     "overall_rank",
-#                     "rank_band"
-#                 )
-#             )
-
-#             if not rankings:
-#                 raise NoDataAvailableError(f"No ranking data found for college IDs {college_ids} between {start_year} and {end_year}.")
-
-#             # Initialize result dictionary with "NA" values for all years
-#             result_dict = {
-#                 f"college_{i + 1}": {
-#                     "college_id": college_id,
-#                     "data": {str(year): "NA" for year in year_range}
-#                 }
-#                 for i, college_id in enumerate(college_ids)
-#             }
-
-#             # Process rankings data
-#             for ranking in rankings:
-#                 college_id = ranking['college_id']
-#                 year = ranking['ranking__year']
-
-#                 # Process rank value using helper method
-#                 rank_value = RankingGraphHelper.process_rank(
-#                     ranking['overall_rank'],
-#                     ranking['rank_band']
-#                 )
-
-#                 # Update the result dictionary if we got a valid rank
-#                 college_idx = college_ids.index(college_id) + 1
-#                 college_key = f"college_{college_idx}"
-#                 if rank_value != "NA":
-#                     result_dict[college_key]["data"][str(year)] = rank_value
-
-#             return result_dict
-
-#         return cache.get_or_set(cache_key, fetch_data, 3600 * 24 * 7)
-
-#     @staticmethod
-#     def prepare_graph_insights(
-#         college_ids: List[int],
-#         start_year: int,
-#         end_year: int,
-#         selected_courses: Dict[int, int]
-#     ) -> Dict:
-#         """
-#         Prepare data for the ranking insights graph.
-#         """
-#         years = list(range(start_year, end_year + 1))
-
-#         try:
-#             overall_data = RankingGraphHelper.fetch_ranking_data(
-#                 college_ids, start_year, end_year, ranking_entity='Stream Wise Colleges'
-#             )
-#         except NoDataAvailableError as e:
-#             logger.error(f"No data available for overall ranking: {str(e)}")
-#             raise
-
-#         # Initialize domain data for all colleges
-#         domain_data = {}
-#         for idx, college_id in enumerate(college_ids):
-#             course_id = selected_courses.get(college_id)
-
-#             try:
-#                 if course_id:
-#                     college_domain_data = RankingGraphHelper.fetch_ranking_data(
-#                         [college_id],
-#                         start_year,
-#                         end_year,
-#                         course_ids={college_id: course_id},
-#                         ranking_entity='Stream Wise Colleges'
-#                     )
-#                     domain_data[college_id] = college_domain_data.get("college_1", {
-#                         "college_id": college_id,
-#                         "data": {str(year): "NA" for year in years}
-#                     })
-#                 else:
-#                     domain_data[college_id] = {
-#                         "college_id": college_id,
-#                         "data": {str(year): "NA" for year in years}
-#                     }
-#             except NoDataAvailableError as e:
-#                 logger.error(f"No data available for course ranking: {str(e)}")
-#                 domain_data[college_id] = {
-#                     "college_id": college_id,
-#                     "data": {str(year): "NA" for year in years}
-#                 }
-
-#         all_same_course = len(set(selected_courses.values())) <= 1
-#         has_na_overall, has_na_domain = False, False
-
-#         # Prepare the result dictionary
-#         result_dict = {
-#             "years": years,
-#             "data": {
-#                 "overall": {"type": "line" if all_same_course else "line", "colleges": overall_data},
-#                 "domain": {"type": "line" if all_same_course else "line", "colleges": {}}
-#             },
-#             "college_names": list(
-#                 College.objects.filter(id__in=college_ids)
-#                 .annotate(
-#                     order=Case(
-#                         *[When(id=college_id, then=Value(idx)) for idx, college_id in enumerate(college_ids)],
-#                         default=Value(len(college_ids)),
-#                         output_field=IntegerField()
-#                     )
-#                 )
-#                 .order_by('order')
-#                 .values_list('short_name', flat=True)
-#             )
-#         }
-
-#         # Populate domain data for all colleges
-#         for idx, college_id in enumerate(college_ids):
-#             college_key = f"college_{idx + 1}"
-#             result_dict['data']['domain']['colleges'][college_key] = domain_data[college_id]
-
-#         # Check for NA values and determine graph type
-#         for data_type in ["overall", "domain"]:
-#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
-#                 if college_data and "data" in college_data:
-#                     data = college_data["data"]
-#                     for year in years:
-#                         year_str = str(year)
-#                         if year_str not in data or data[year_str] == "NA":
-#                             if data_type == "overall":
-#                                 has_na_overall = True
-#                             else:
-#                                 has_na_domain = True
-
-#         # Set appropriate visualization type based on data
-#         if has_na_overall:
-#             result_dict["data"]["overall"]["type"] = "tabular"
-#         if has_na_domain:
-#             result_dict["data"]["domain"]["type"] = "tabular"
-
-#         # If rank_band is used, force tabular type
-#         for data_type in ["overall", "domain"]:
-#             for college_key, college_data in result_dict['data'][data_type]['colleges'].items():
-#                 if college_data and "data" in college_data:
-#                     data = college_data["data"]
-#                     for year in years:
-#                         year_str = str(year)
-#                         if year_str in data and isinstance(data[year_str], str) and not data[year_str].isdigit() and data[year_str] != "NA":
-#                             result_dict["data"][data_type]["type"] = "tabular"
-#                             break  # No need to check other years for this college
-#                     if result_dict["data"][data_type]["type"] == "tabular":
-#                         break # No need to check other colleges for this data type
-
-#         return result_dict
-
 
 class RankingGraphHelper:
 
@@ -6099,687 +5513,11 @@ class CollegeReviewsRatingGraphHelper:
 
 
 
-
-# class ExamCutoffHelper:
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """Generate a cache key using MD5 hashing."""
-#         key = "1111_887777____________111".join(map(str, args))
-#         return md5(key.encode()).hexdigest()
-
-#     @staticmethod
-#     def get_exam_cutoff(course_ids, exam_id=None, counseling_id=None, category_id=None):
-#         if not course_ids:
-#             raise ValueError("course_ids must be provided.")
-
-#         cache_key = ExamCutoffHelper.get_cache_key(
-#             course_ids, exam_id, counseling_id, category_id, 
-#         )
-#         cached_data = cache.get(cache_key)
-
-#         if cached_data:
-#             return cached_data
-
-#         # MaxYearRef CTE
-#         max_year_ref = (
-#             CutoffData.objects.filter(college_course_id__in=course_ids)
-#             .values("year")
-#             .order_by("-year")
-#             .first()
-#         )
-
-#         print(max_year_ref)
-
-#         if not max_year_ref:
-#             raise NoDataAvailableError("No exam & cutoff data available for the provided Course's.")
-
-
-#         filtered_cutoff = (
-#             CutoffData.objects.filter(
-#                 college_course_id__in=course_ids, year=max_year_ref["year"]
-#             )
-#             .values("exam_sub_exam_id", "counselling_id", "college_course_id", "year")
-#             .distinct()
-#         )
-
-#         filtered_campaign = (
-#             CpProductCampaignItems.objects.filter(product__published="published")
-#             .values("exam_id", "counselling_id")
-#             .distinct()
-#         )
-
-#         max_rounds = (
-#             CutoffData.objects.filter(
-#                 college_course_id__in=course_ids, year=max_year_ref["year"]
-#             )
-#             .values("exam_sub_exam_id", "counselling_id", "college_course_id", "caste_id")
-#             .annotate(
-#                 priority_caste_id=Case(
-#                     When(caste_id=5, then=Value(5)),  # ST
-#                     When(caste_id=4, then=Value(4)),  # SC
-#                     When(caste_id=3, then=Value(3)),  # OBC
-#                     When(caste_id=2, then=Value(2)),  # General
-#                     default=Value(2),  # Others
-#                     output_field=IntegerField(),
-#                 )
-#             )
-#             .order_by(
-#                 "exam_sub_exam_id", "counselling_id", "college_course_id", "priority_caste_id"
-#             )
-#             .distinct()
-#             .annotate(total_counseling_rounds=Max("round"))
-#         )
-
-#         # Base cutoffs with lowest closing rank
-#         base_cutoffs = (
-#             CutoffData.objects.filter(
-#                 college_course_id__in=course_ids,
-#                 year=max_year_ref["year"],
-#                 exam_sub_exam_id__in=filtered_cutoff.values("exam_sub_exam_id"),
-#                 counselling_id__in=filtered_campaign.values("counselling_id"),
-#             )
-#             .values(
-#                 "exam_sub_exam_id",
-#                 "counselling_id",
-#                 "college_course_id",
-#                 "college_id",
-#                 "category_of_admission_id",
-#             )
-#             .annotate(
-#                 round_wise_opening_cutoff=Coalesce(
-#                     Min("round_wise_opening_cutoff"), Value("NA"), output_field=CharField()
-#                 ),
-#                 # Prioritize lowest caste_id (2) for final_cutoff
-#                 final_cutoff=Coalesce(
-#                     Subquery(
-#                         CutoffData.objects.filter(
-#                             year=OuterRef("year"),
-#                             college_course_id=OuterRef("college_course_id"),
-#                             exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
-#                             counselling_id=OuterRef("counselling_id"),
-#                             final_cutoff__isnull=False,
-#                         )
-#                         .annotate(
-#                             priority_caste_id=Case(
-#                                 When(caste_id=5, then=Value(5)),  # ST
-#                                 When(caste_id=4, then=Value(4)),  # SC
-#                                 When(caste_id=3, then=Value(3)),  # OBC
-#                                 When(caste_id=2, then=Value(2)),  # General
-#                                 default=Value(2),  # Others
-#                                 output_field=IntegerField(),
-#                             )
-#                         )
-#                         .order_by("priority_caste_id", "final_cutoff")
-#                         .values("final_cutoff")[:1]
-#                     ),
-#                     Value("NA"),
-#                     output_field=CharField(),
-#                 ),
-#                 lowest_closing_rank=Coalesce(
-#                     Subquery(
-#                         CutoffData.objects.filter(
-#                             year=OuterRef("year"),
-#                             college_course_id=OuterRef("college_course_id"),
-#                             exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
-#                             counselling_id=OuterRef("counselling_id"),
-#                             final_cutoff__isnull=False,
-#                         )
-#                         .annotate(
-#                             priority_caste_id=Case(
-#                                 When(caste_id=5, then=Value(1)),  # ST
-#                                 When(caste_id=4, then=Value(2)),  # SC
-#                                 When(caste_id=3, then=Value(3)),  # OBC
-#                                 When(caste_id=2, then=Value(4)),  # General
-#                                 default=Value(5),  # Others
-#                                 output_field=IntegerField(),
-#                             )
-#                         )
-#                         .order_by(
-#                             "priority_caste_id",
-#                             "final_cutoff",
-#                         )
-#                         .values("final_cutoff")[:1]
-#                     ),
-#                     Value("NA"),
-#                     output_field=CharField(),
-#                 ),
-#                 total_counseling_rounds=Subquery(
-
-#                     max_rounds.filter(
-
-#                         exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
-#                         counselling_id=OuterRef("counselling_id"),
-#                         college_course_id=OuterRef("college_course_id"),
-#                     )
-#                     .values("total_counseling_rounds")[:1]
-#                 ),
-#                 caste_id=Coalesce(
-#                     Subquery(
-#                         CutoffData.objects.filter(
-#                             year=OuterRef("year"),
-#                             college_course_id=OuterRef("college_course_id"),
-#                             exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
-#                             counselling_id=OuterRef("counselling_id"),
-#                             final_cutoff__isnull=False,
-#                         )
-#                         .annotate(
-#                             priority_caste_id=Case(
-#                                 When(caste_id=5, then=Value(1)),  # ST
-#                                 When(caste_id=4, then=Value(2)),  # SC
-#                                 When(caste_id=3, then=Value(3)),  # OBC
-#                                 When(caste_id=2, then=Value(4)),  # General
-#                                 default=Value(2),  # Others
-#                                 output_field=IntegerField(),
-#                             )
-#                         )
-#                         .order_by(
-#                             "priority_caste_id",
-#                             "final_cutoff",
-#                         )
-#                         .values("caste_id")[:1]
-#                     ),
-#                     Value(None),
-#                     output_field=IntegerField(),
-#                 ),
-#                  lowest_rank_caste_id=Coalesce(
-#                     Subquery(
-#                         CutoffData.objects.filter(
-#                             year=OuterRef("year"),
-#                             college_course_id=OuterRef("college_course_id"),
-#                             exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
-#                             counselling_id=OuterRef("counselling_id"),
-#                             final_cutoff__isnull=False,
-#                         )
-#                         .annotate(
-#                             priority_caste_id=Case(
-#                                 When(caste_id=5, then=Value(1)),  # ST
-#                                 When(caste_id=4, then=Value(2)),  # SC
-#                                 When(caste_id=3, then=Value(3)),  # OBC
-#                                 When(caste_id=2, then=Value(4)),  # General
-#                                 default=Value(5),  # Others
-#                                 output_field=IntegerField(),
-#                             )
-#                         )
-#                         .order_by(
-#                             "priority_caste_id",
-#                             "final_cutoff",
-#                         )
-#                         .values("caste_id")[:1]
-#                     ),
-#                     Value(None),
-#                     output_field=IntegerField(),
-#                 ),
-#             )
-#             .distinct()
-#         )
-
-#         # Lowest ranks with selected caste id
-#         lowest_ranks = (
-#             CutoffData.objects.filter(
-#                 year=max_year_ref["year"],
-#                 college_course_id__in=course_ids,
-#                 final_cutoff__isnull=False,
-#             )
-#             .filter(
-#                 Q(exam_sub_exam_id__in=filtered_campaign.values("exam_id"))
-#                 | Q(counselling_id__in=filtered_campaign.values("counselling_id"))
-#             )
-#             .values("exam_sub_exam_id", "counselling_id", "college_course_id")
-#             .annotate(
-#                 selected_caste_id=Subquery(
-#                     CutoffData.objects.filter(
-#                         year=max_year_ref["year"],
-#                         college_course_id=OuterRef("college_course_id"),
-#                         final_cutoff__isnull=False,
-#                     )
-#                     .annotate(
-#                         priority_caste_id=Case(
-#                             When(caste_id=5, then=Value(1)),  # ST
-#                             When(caste_id=4, then=Value(2)),  # SC
-#                             When(caste_id=3, then=Value(3)),  # OBC
-#                             When(caste_id=2, then=Value(4)),  # General
-#                             default=Value(5),  # Others
-#                             output_field=IntegerField(),
-#                         )
-#                     )
-#                     .order_by(
-#                         "priority_caste_id",  # Higher priority caste
-#                         "final_cutoff",  # Lowest final cutoff
-#                     )
-#                     .values("caste_id")[:1]
-#                 ),
-#             )
-#         )
-
-#         result = Course.objects.filter(id__in=course_ids)
-
-#         result = result.annotate(
-#             exam_id=Subquery(
-#                 CutoffData.objects.filter(college_course_id=OuterRef("id"))
-#                 .values("exam_sub_exam__id")[:1]
-#             ),
-#             exam_sub_exam_id_ann=Subquery(
-#                 CutoffData.objects.filter(college_course_id=OuterRef("id"))
-#                 .values("exam_sub_exam_id")[:1]
-#             ),
-#             counselling_id_ann=Subquery(
-#                 CutoffData.objects.filter(college_course_id=OuterRef("id"))
-#                 .values("counselling_id")[:1]
-#             ),
-#             exam_name=Coalesce(
-#                 Subquery(
-#                     Exam.objects.filter(id=OuterRef("exam_sub_exam_id_ann"))
-#                     .annotate(
-#                         display_name=Case(
-#                             When(
-#                                 exam_short_name__isnull=False,
-#                                 exam_short_name__gt="",
-#                                 then=F("exam_short_name"),
-#                             ),
-#                             When(
-#                                 parent_exam_id__isnull=False,
-#                                 then=Concat(
-#                                     "parent_exam__exam_short_name",
-#                                     Value(" ("),
-#                                     F("exam_name"),
-#                                     Value(")"),
-#                                 ),
-#                             ),
-#                             default=F("exam_name"),
-#                             output_field=CharField(),
-#                         )
-#                     )
-#                     .values("display_name")[:1]
-#                 ),
-#                 Value("NA"),
-#                 output_field=CharField(),
-#             ),
-#             counseling_name=Coalesce(
-#                 Subquery(
-#                     Exam.objects.filter(id=OuterRef("counselling_id_ann")).values(
-#                         "exam_name"
-#                     )[:1]
-#                 ),
-#                 Value("NA"),
-#                 output_field=CharField(),
-#             ),
-#         )
-
-#         result = result.annotate(
-#             exam_and_counseling=Case(
-#                 When(
-#                     ~Q(exam_name="NA") & ~Q(counseling_name="NA"),
-#                     then=Concat(
-#                         F("exam_name"), Value(" ("), F("counseling_name"), Value(")")
-#                     ),
-#                 ),
-#                 default=Value("NA"),
-#                 output_field=CharField(),
-#             )
-#         )
-
-#         # result = result.annotate(
-#         #     min_opening_cutoff=Coalesce(
-#         #         Subquery(
-#         #             base_cutoffs.filter(college_course_id=OuterRef("id"),category_of_admission__id=OuterRef("category_of_admission_id"))
-#         #             .values("round_wise_opening_cutoff")[:1]
-#         #         ),
-#         #         Value("NA"),
-#         #         output_field=CharField(),
-#         #     ),
-#         #     lowest_closest_rank=Coalesce(
-#         #         Subquery(
-#         #             base_cutoffs.filter(college_course_id=OuterRef("id"),category_of_admission__id=OuterRef("category_of_admission_id"))
-#         #             .values("lowest_closing_rank")[:1]
-#         #         ),
-#         #         Value("NA"),
-#         #         output_field=CharField(),
-#         #     ),
-#         #     min_closing_cutoff=Coalesce(
-#         #         Subquery(
-#         #             base_cutoffs.filter(college_course_id=OuterRef("id"),category_of_admission__id=OuterRef("category_of_admission_id"))
-#         #             .values("final_cutoff")[:1]
-#         #         ),
-#         #         Value("NA"),
-#         #         output_field=CharField(),
-#         #     ),
-#         #     caste_id=Coalesce(
-#         #         NullIf(
-#         #             Subquery(
-#         #                 base_cutoffs.filter(college_course_id=OuterRef("id"))
-#         #                 .values("caste_id")[:1]
-#         #             ),
-#         #             Value(""),  # Converts empty strings to NULL
-#         #         ),
-#         #         Value(None),
-#         #         output_field=IntegerField(),
-#         #     ),
-#         #     lowest_rank_caste_id=Coalesce(
-#         #         NullIf(
-#         #             Subquery(
-#         #                 lowest_ranks.filter(college_course_id=OuterRef("id"))
-#         #                 .values("selected_caste_id")[:1]
-#         #             ),
-#         #             Value(""),  # Converts empty strings to NULL
-#         #         ),
-#         #         Value(None),
-#         #         output_field=IntegerField(),
-#         #     ),
-#         #     total_counseling_rounds=Coalesce(
-#         #         NullIf(
-#         #             Subquery(
-#         #                 max_rounds.filter(
-#         #                     exam_sub_exam_id=OuterRef("exam_sub_exam_id_ann"),
-#         #                     counselling_id=OuterRef("counselling_id_ann"),
-#         #                     college_course_id=OuterRef("id"),
-#         #                 )
-#         #                 .values("total_counseling_rounds")[:1]
-#         #             ),
-#         #             Value(""),  # Converts empty strings to NULL
-#         #         ),
-#         #         Value(0),
-#         #         output_field=IntegerField(),
-#         #     ),
-#         # )
-
-#         result =result.annotate(
-#                 min_opening_cutoff=Coalesce(
-#                     Subquery(
-#                         base_cutoffs.filter(
-#                             college_course_id=OuterRef("id")
-#                         )
-#                         .values("round_wise_opening_cutoff")[:1]
-#                     ),
-#                     Value("NA"),
-#                     output_field=CharField(),
-#                 ),
-#                 lowest_closest_rank=Coalesce(
-#                     Subquery(
-#                         base_cutoffs.filter(
-#                             college_course_id=OuterRef("id")
-#                         )
-#                         .values("lowest_closing_rank")[:1]
-#                     ),
-#                     Value("NA"),
-#                     output_field=CharField(),
-#                 ),
-#                 min_closing_cutoff=Coalesce(
-#                     Subquery(
-#                         base_cutoffs.filter(
-#                             college_course_id=OuterRef("id")
-#                         )
-#                         .values("final_cutoff")[:1]
-#                     ),
-#                     Value("NA"),
-#                     output_field=CharField(),
-#                 ),
-#                 caste_id=Coalesce(
-#                     NullIf(
-#                         Subquery(
-#                             base_cutoffs.filter(college_course_id=OuterRef("id"))
-#                             .values("caste_id")[:1]
-#                         ),
-#                         Value(""),  # Converts empty strings to NULL
-#                     ),
-#                     Value(None),
-#                     output_field=IntegerField(),
-#                 ),
-#                 lowest_rank_caste_id=Coalesce(
-#                     NullIf(
-#                         Subquery(
-#                             lowest_ranks.filter(college_course_id=OuterRef("id"))
-#                             .values("selected_caste_id")[:1]
-#                         ),
-#                         Value(""),  # Converts empty strings to NULL
-#                     ),
-#                     Value(None),
-#                     output_field=IntegerField(),
-#                 ),
-#                 total_counseling_rounds=Coalesce(
-#                     NullIf(
-#                         Subquery(
-#                             max_rounds.filter(
-#                                 exam_sub_exam_id=OuterRef("exam_sub_exam_id_ann"),
-#                                 counselling_id=OuterRef("counselling_id_ann"),
-#                                 college_course_id=OuterRef("id"),
-#                             )
-#                             .values("total_counseling_rounds")[:1]
-#                         ),
-#                         Value(""),  # Converts empty strings to NULL
-#                     ),
-#                     Value(0),
-#                     output_field=IntegerField(),
-#                 ),
-#             )
-
-#         result = result.annotate(
-#             caste_name=Case(
-#                 When(caste_id=2, then=Value("General")),
-#                 When(caste_id=3, then=Value("OBC")),
-#                 When(caste_id=4, then=Value("SC")),
-#                 When(caste_id=5, then=Value("ST")),
-#                 default=Value("NA"),
-#                 output_field=CharField(),
-#             ),
-#             category_of_admission_id=Coalesce(
-#                 Subquery(
-#                     base_cutoffs.filter(college_course_id=OuterRef("id")).values(
-#                         "category_of_admission_id"
-#                     )[:1]
-#                 ),
-#                 Value("NA"),
-#                 output_field=CharField(),
-#             ),
-#             exam_education_level=Coalesce(
-#                 Subquery(
-#                     Exam.objects.filter(id=OuterRef("exam_sub_exam_id_ann")).values(
-#                         "preferred_education_level_id"
-#                     )[:1]
-#                 ),
-#                 Value(1),
-#                 output_field=IntegerField(),
-#             ),
-#         )
-
-#         result = result.order_by(
-#             Case( When(exam_education_level__in=[14, 15, 16, 18], then=Value(2)),
-#                 default=Value(1),
-#                 output_field=IntegerField(),
-#             ),
-#             "exam_sub_exam_id_ann",
-#             "counselling_id_ann",
-#             "id",
-#         ).distinct()
-
-#         if exam_id:
-#             result = result.filter(exam_sub_exam_id_ann=exam_id)
-#         if counseling_id:
-#             result = result.filter(counselling_id_ann=counseling_id)
-#         if category_id:
-#             result = result.filter(category_of_admission_id=category_id)
-
-#         def get_na_safe(value):
-#             """Safely handles null/None values by converting them to 'NA' string"""
-#             return "NA" if value is None else value
-
-#         def get_caste_name(caste_id):
-#             """Converts caste ID to corresponding caste name"""
-#             caste_map = {2: "General", 3: "OBC", 4: "SC", 5: "ST"}
-#             return caste_map.get(caste_id, "NA")
-
-#         serialized_data = []
-#         for course in result:
-#             lowest_rank_string = (
-#                 f"{course.lowest_closest_rank} ({get_caste_name(course.lowest_rank_caste_id)})"
-#                 if get_na_safe(course.lowest_closest_rank) != "NA"
-#                 else "NA"
-#             )
-
-#             # Safely convert category_of_admission_id to int
-#             if course.category_of_admission_id == 'NA' or course.category_of_admission_id in [None, '']:
-#                 category_of_admission_id = 'NA'
-#             else:
-#                 try:
-#                     category_of_admission_id = int(course.category_of_admission_id)
-#                 except (ValueError, TypeError):
-#                     category_of_admission_id = 'NA'
-
-#             category_of_admission = (
-#                 "All India" if category_of_admission_id == 1
-#                 else "Outside Home state" if category_of_admission_id == 2
-#                 else "Home state" if category_of_admission_id == 3
-#                 else "NA"
-#             ) if category_of_admission_id != 'NA' else 'NA'
-
-#             serialized_data.append({
-#                 "id": get_na_safe(course.id),
-#                 "exam_id": get_na_safe(course.exam_id),
-#                 "counselling_id": get_na_safe(course.counselling_id_ann),
-#                 "exam_and_counseling": get_na_safe(course.exam_and_counseling),
-#                 "min_opening_cutoff": get_na_safe(course.min_opening_cutoff),
-#                 "min_closing_cutoff": get_na_safe(course.min_closing_cutoff),
-#                 "caste_name": get_na_safe(course.caste_name),
-#                 "counseling_name": get_na_safe(course.counseling_name),
-#                 "category_of_admission_id": get_na_safe(course.category_of_admission_id) or 'NA',
-#                 "category_of_admission": category_of_admission,
-#                 "lowest_closing_rank": lowest_rank_string,
-#                 "college_id": get_na_safe(course.college_id),
-#                 "exam_name": get_na_safe(course.exam_name),
-#                 "total_counseling_rounds": get_na_safe(course.total_counseling_rounds),
-#                 "caste_id": get_na_safe(course.caste_id)
-#             })
-
-#         transformed_data = {
-#             "year": max_year_ref["year"] if max_year_ref else "NA",
-#             "exams": []
-#         }
-
-#         exam_map = {}
-
-#         if not serialized_data:
-#             raise NoDataAvailableError("No exam & cutoff data available for the provided Course's.")
-
-#         # Initialize categories from base_cutoffs
-#         for item in base_cutoffs:
-#             exam_id = item["exam_sub_exam_id"]
-#             if exam_id == 'NA':
-#                 continue
-#             category_id = item["category_of_admission_id"]
-            
-#             if exam_id not in exam_map:
-#                 exam_map[exam_id] = {
-#                     "exam_id": exam_id,
-#                     "exam_name": "NA",  # Will be updated later
-#                     "counselling_id": item["counselling_id"],
-#                     "counselling_name": "NA", # Will be updated later
-#                     "exam_and_counseling": "NA", # Will be updated later
-#                     "categories": {}
-#                 }
-            
-#             if category_id not in exam_map[exam_id]["categories"]:
-#                 try:
-#                     category_id_int = int(category_id)
-#                 except (ValueError, TypeError):
-#                     category_id_int = 'NA'
-                
-#                 category_name = (
-#                     "All India" if category_id_int == 1
-#                     else "Outside Home state" if category_id_int == 2
-#                     else "Home state" if category_id_int == 3
-#                     else "NA"
-#                 ) if category_id_int != 'NA' else 'NA'
-                
-#                 exam_map[exam_id]["categories"][category_id] = {
-#                     "category_id": category_id,
-#                     "category_name": category_name,
-#                     "cutoff_data": OrderedDict()
-#                 }
-                
-#                 for idx, course_id in enumerate(course_ids, 1):
-#                     college_key = f"college_{idx}"
-#                     exam_map[exam_id]["categories"][category_id]["cutoff_data"][college_key] = {
-#                         "college_course_id": course_id,
-#                         "college_id": "NA",
-#                         "opening_rank": "NA",
-#                         "closing_rank": "NA",
-#                         # "caste_id": "NA",
-#                         # "caste_name": "NA",
-#                         "total_counselling_rounds": "NA",
-#                         "lowest_closing_rank": "NA"
-#                     }
-        
-#         for item in serialized_data:
-            
-#             exam_id = item["exam_id"]
-#             if exam_id == 'NA':
-#                 continue
-            
-#             if exam_id not in exam_map:
-#                 continue
-
-#             exam_map[exam_id]["exam_name"] = item["exam_name"]
-#             exam_map[exam_id]["counselling_name"] = item["counseling_name"]
-#             exam_map[exam_id]["exam_and_counseling"] = item["exam_and_counseling"]
-        
-#         # Populate cutoff data from base_cutoffs
-#         for item in base_cutoffs:
-#             exam_id = item["exam_sub_exam_id"]
-#             if exam_id == 'NA':
-#                 continue
-#             category_id = item["category_of_admission_id"]
-#             college_course_id = item["college_course_id"]
-            
-#             if exam_id in exam_map and category_id in exam_map[exam_id]["categories"]:
-#                 for idx, course_id in enumerate(course_ids, 1):
-#                     if college_course_id == course_id:
-#                         college_key = f"college_{idx}"
-#                         exam_map[exam_id]["categories"][category_id]["cutoff_data"][college_key] = {
-#                             "college_course_id": item["college_course_id"],
-#                             "college_id": item["college_id"],
-#                             "opening_rank": item["round_wise_opening_cutoff"],
-#                             "closing_rank": item["final_cutoff"],
-#                             # "caste_id": item["caste_id"],
-#                             # "caste_name": get_caste_name(item["caste_id"]),
-#                             "total_counseling_rounds": item["total_counseling_rounds"],
-#                             "lowest_closing_rank": "NA" # lowest_closing_rank will be added later
-#                         }
-
-#         for item in serialized_data:
-#             exam_id = item["exam_id"]
-#             if exam_id == 'NA':
-#                 continue
-#             category_id = item["category_of_admission_id"]
-#             college_course_id = item["id"]
-
-#             if exam_id in exam_map and category_id in exam_map[exam_id]["categories"]:
-#                 for idx, course_id in enumerate(course_ids, 1):
-#                     if college_course_id == course_id:
-#                         college_key = f"college_{idx}"
-#                         exam_map[exam_id]["categories"][category_id]["cutoff_data"][college_key]["lowest_closing_rank"] = item["lowest_closing_rank"]
-
-#         for exam_id in exam_map:
-#             categories_list = []
-#             for category_id, category_data in exam_map[exam_id]["categories"].items():
-#                 categories_list.append({
-#                     "category_id": category_id,
-#                     "category_name": category_data["category_name"],
-#                     "cutoff_data": category_data["cutoff_data"]
-#                 })
-#             exam_map[exam_id]["categories"] = categories_list
-
-#         transformed_data["exams"] = list(exam_map.values())
-
-#         if transformed_data["exams"] == []:
-#             raise NoDataAvailableError("No exam & cutoff data available for the provided Course's.")
-
-#         return transformed_data
-
-
 class ExamCutoffHelper:
     @staticmethod
     def get_cache_key(*args) -> str:
         """Generate a cache key using MD5 hashing."""
-        key = "11110777_____________111".join(map(str, args))
+        key = "-".join(map(str, args))
         return md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -6805,13 +5543,12 @@ class ExamCutoffHelper:
             .first()
         )
 
-        print(max_year_ref)
-
         if not max_year_ref:
             raise NoDataAvailableError(
                 "No exam & cutoff data available for the provided Course's."
             )
 
+        # Filtered cutoffs
         filtered_cutoff = (
             CutoffData.objects.filter(
                 college_course_id__in=course_ids, year=max_year_ref["year"]
@@ -6820,45 +5557,13 @@ class ExamCutoffHelper:
             .distinct()
         )
 
-        filtered_campaign = (
-            CpProductCampaignItems.objects.filter(product__published="published")
-            .values("exam_id", "counselling_id")
-            .distinct()
-        )
-
-        max_rounds = (
-            CutoffData.objects.filter(
-                college_course_id__in=course_ids, year=max_year_ref["year"]
-            )
-            .values("exam_sub_exam_id", "counselling_id", "college_course_id", "caste_id")
-            .annotate(
-                priority_caste_id=Case(
-                    When(caste_id=5, then=Value(5)),  # ST
-                    When(caste_id=4, then=Value(4)),  # SC
-                    When(caste_id=3, then=Value(3)),  # OBC
-                    When(caste_id=2, then=Value(2)),  # General
-                    default=Value(2),  # Others
-                    output_field=IntegerField(),
-                )
-            )
-            .order_by(
-                "exam_sub_exam_id",
-                "counselling_id",
-                "college_course_id",
-                "priority_caste_id",
-            )
-            .distinct()
-            .annotate(total_counseling_rounds=Max("round"))
-        )
-
         # Base cutoffs with lowest closing rank
-
         base_cutoffs = (
             CutoffData.objects.filter(
                 college_course_id__in=course_ids,
                 year=max_year_ref["year"],
                 exam_sub_exam_id__in=filtered_cutoff.values("exam_sub_exam_id"),
-                counselling_id__in=filtered_campaign.values("counselling_id"),
+                counselling_id__in=filtered_cutoff.values("counselling_id"),
             )
             .values(
                 "exam_sub_exam_id",
@@ -6871,7 +5576,6 @@ class ExamCutoffHelper:
                 round_wise_opening_cutoff=Coalesce(
                     Min("round_wise_opening_cutoff"), Value("NA"), output_field=CharField()
                 ),
-                # Prioritize lowest caste_id (2) for final_cutoff
                 final_cutoff=Coalesce(
                     Subquery(
                         CutoffData.objects.filter(
@@ -6892,7 +5596,7 @@ class ExamCutoffHelper:
                                 output_field=IntegerField(),
                             )
                         )
-                        .order_by("priority_caste_id", "final_cutoff")
+                        .order_by("priority_caste_id")
                         .values("final_cutoff")[:1]
                     ),
                     Value("NA"),
@@ -6919,6 +5623,7 @@ class ExamCutoffHelper:
                             )
                         )
                         .order_by(
+                            "category_of_admission_id",
                             "priority_caste_id",
                             "final_cutoff",
                         )
@@ -6928,7 +5633,13 @@ class ExamCutoffHelper:
                     output_field=CharField(),
                 ),
                 total_counseling_rounds=Subquery(
-                    max_rounds.filter(
+                    CutoffData.objects.filter(
+                        college_course_id__in=course_ids,
+                        year=max_year_ref["year"],
+                    )
+                    .values("exam_sub_exam_id", "counselling_id", "college_course_id")
+                    .annotate(total_counseling_rounds=Max("round"))
+                    .filter(
                         exam_sub_exam_id=OuterRef("exam_sub_exam_id"),
                         counselling_id=OuterRef("counselling_id"),
                         college_course_id=OuterRef("college_course_id"),
@@ -6947,10 +5658,10 @@ class ExamCutoffHelper:
                         )
                         .annotate(
                             priority_caste_id=Case(
-                                When(caste_id=5, then=Value(1)),  # ST
-                                When(caste_id=4, then=Value(2)),  # SC
+                                When(caste_id=5, then=Value(5)),  # ST
+                                When(caste_id=4, then=Value(4)),  # SC
                                 When(caste_id=3, then=Value(3)),  # OBC
-                                When(caste_id=2, then=Value(4)),  # General
+                                When(caste_id=2, then=Value(2)),  # General
                                 default=Value(2),  # Others
                                 output_field=IntegerField(),
                             )
@@ -6987,378 +5698,19 @@ class ExamCutoffHelper:
                         .order_by(
                             "priority_caste_id",
                             "final_cutoff",
+                            "category_of_admission_id"
                         )
                         .values("caste_id")[:1]
                     ),
-                    Value(None),
+                    Value(5),
                     output_field=IntegerField(),
                 ),
             )
             .distinct()
         )
 
-        # Lowest ranks with selected caste id
-        lowest_ranks = (
-            CutoffData.objects.filter(
-                year=max_year_ref["year"],
-                college_course_id__in=course_ids,
-                final_cutoff__isnull=False,
-            )
-            .filter(
-                Q(exam_sub_exam_id__in=filtered_campaign.values("exam_id"))
-                | Q(counselling_id__in=filtered_campaign.values("counselling_id"))
-            )
-            .values("exam_sub_exam_id", "counselling_id", "college_course_id")
-            .annotate(
-                selected_caste_id=Subquery(
-                    CutoffData.objects.filter(
-                        year=max_year_ref["year"],
-                        college_course_id=OuterRef("college_course_id"),
-                        final_cutoff__isnull=False,
-                    )
-                    .annotate(
-                        priority_caste_id=Case(
-                            When(caste_id=5, then=Value(1)),  # ST
-                            When(caste_id=4, then=Value(2)),  # SC
-                            When(caste_id=3, then=Value(3)),  # OBC
-                            When(caste_id=2, then=Value(4)),  # General
-                            default=Value(5),  # Others
-                            output_field=IntegerField(),
-                        )
-                    )
-                    .order_by(
-                        "priority_caste_id",  # Higher priority caste
-                        "final_cutoff",  # Lowest final cutoff
-                    )
-                    .values("caste_id")[:1]
-                ),
-            )
-        )
-
-        result = Course.objects.filter(id__in=course_ids)
-
-        result = result.annotate(
-            exam_id=Subquery(
-                CutoffData.objects.filter(college_course_id=OuterRef("id"))
-                .values("exam_sub_exam__id")[:1]
-            ),
-            exam_sub_exam_id_ann=Subquery(
-                CutoffData.objects.filter(college_course_id=OuterRef("id"))
-                .values("exam_sub_exam_id")[:1]
-            ),
-            counselling_id_ann=Subquery(
-                CutoffData.objects.filter(college_course_id=OuterRef("id"))
-                .values("counselling_id")[:1]
-            ),
-            exam_name=Coalesce(
-                Subquery(
-                    Exam.objects.filter(id=OuterRef("exam_sub_exam_id_ann"))
-                    .annotate(
-                        display_name=Case(
-                            When(
-                                exam_short_name__isnull=False,
-                                exam_short_name__gt="",
-                                then=F("exam_short_name"),
-                            ),
-                            When(
-                                parent_exam_id__isnull=False,
-                                then=Concat(
-                                    "parent_exam__exam_short_name",
-                                    Value(" ("),
-                                    F("exam_name"),
-                                    Value(")"),
-                                ),
-                            ),
-                            default=F("exam_name"),
-                            output_field=CharField(),
-                        )
-                    )
-                    .values("display_name")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            counseling_name=Coalesce(
-                Subquery(
-                    Exam.objects.filter(id=OuterRef("counselling_id_ann")).values(
-                        "exam_name"
-                    )[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            min_opening_cutoff=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-                    ).values("round_wise_opening_cutoff")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            lowest_closest_rank=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-                    ).values("lowest_closing_rank")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            min_closing_cutoff=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-                    ).values("final_cutoff")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            caste_id=Coalesce(
-                NullIf(
-                    Subquery(
-                        base_cutoffs.filter(college_course_id=OuterRef("id"))
-                        .values("caste_id")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(None),
-                output_field=IntegerField(),
-            ),
-             lowest_rank_caste_id=Coalesce(
-                NullIf(
-                    Subquery(
-                        lowest_ranks.filter(college_course_id=OuterRef("id"))
-                        .values("selected_caste_id")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(None),
-                output_field=IntegerField(),
-            ),
-            total_counseling_rounds=Coalesce(
-                NullIf(
-                    Subquery(
-                        max_rounds.filter(
-                            exam_sub_exam_id=OuterRef("exam_sub_exam_id_ann"),
-                            counselling_id=OuterRef("counselling_id_ann"),
-                            college_course_id=OuterRef("id"),
-                        )
-                        .values("total_counseling_rounds")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(0),
-                output_field=IntegerField(),
-            ),
-        )
-
-        result = result.annotate(
-            exam_and_counseling=Case(
-                When(
-                    ~Q(exam_name="NA") & ~Q(counseling_name="NA"),
-                    then=Concat(
-                        F("exam_name"), Value(" ("), F("counseling_name"), Value(")")
-                    ),
-                ),
-                default=Value("NA"),
-                output_field=CharField(),
-            )
-        )
-
-
-
-
-        result = result.annotate(
-            min_opening_cutoff=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-               
-                    ).values("round_wise_opening_cutoff")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            lowest_closest_rank=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-                       
-                    ).values("lowest_closing_rank")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            min_closing_cutoff=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(
-                        college_course_id=OuterRef("id"),
-                    
-                    ).values("final_cutoff")[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            caste_id=Coalesce(
-                NullIf(
-                    Subquery(
-                        base_cutoffs.filter(college_course_id=OuterRef("id"))
-                        .values("caste_id")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(None),
-                output_field=IntegerField(),
-            ),
-            lowest_rank_caste_id=Coalesce(
-                NullIf(
-                    Subquery(
-                        lowest_ranks.filter(college_course_id=OuterRef("id"))
-                        .values("selected_caste_id")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(None),
-                output_field=IntegerField(),
-            ),
-            total_counseling_rounds=Coalesce(
-                NullIf(
-                    Subquery(
-                        max_rounds.filter(
-                            exam_sub_exam_id=OuterRef("exam_sub_exam_id_ann"),
-                            counselling_id=OuterRef("counselling_id_ann"),
-                            college_course_id=OuterRef("id"),
-                        )
-                        .values("total_counseling_rounds")[:1]
-                    ),
-                    Value(""),  # Converts empty strings to NULL
-                ),
-                Value(0),
-                output_field=IntegerField(),
-            ),
-        )
-        result = result.annotate(
-            caste_name=Case(
-                When(caste_id=2, then=Value("General")),
-                When(caste_id=3, then=Value("OBC")),
-                When(caste_id=4, then=Value("SC")),
-                When(caste_id=5, then=Value("ST")),
-                default=Value("NA"),
-                output_field=CharField(),
-            ),
-            category_of_admission_id=Coalesce(
-                Subquery(
-                    base_cutoffs.filter(college_course_id=OuterRef("id")).values(
-                        "category_of_admission_id"
-                    )[:1]
-                ),
-                Value("NA"),
-                output_field=CharField(),
-            ),
-            exam_education_level=Coalesce(
-                Subquery(
-                    Exam.objects.filter(id=OuterRef("exam_sub_exam_id_ann")).values(
-                        "preferred_education_level_id"
-                    )[:1]
-                ),
-                Value(1),
-                output_field=IntegerField(),
-            ),
-        )
-
-        result = result.order_by(
-            Case(
-                When(exam_education_level__in=[14, 15, 16, 18], then=Value(2)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            "exam_sub_exam_id_ann",
-            "counselling_id_ann",
-            "id",
-        ).distinct()
-
-        if exam_id:
-            result = result.filter(exam_sub_exam_id_ann=exam_id)
-        if counseling_id:
-            result = result.filter(counselling_id_ann=counseling_id)
-        if category_id:
-            result = result.filter(category_of_admission_id=category_id)
-
-        def get_na_safe(value):
-            """Safely handles null/None values by converting them to 'NA' string"""
-            return "NA" if value is None else value
-
-        def get_caste_name(caste_id):
-            """Converts caste ID to corresponding caste name"""
-            caste_map = {2: "General", 3: "OBC", 4: "SC", 5: "ST"}
-            return caste_map.get(caste_id, "NA")
-
-        serialized_data = []
-        for course in result:
-            lowest_rank_string = (
-                f"{course.lowest_closest_rank} ({get_caste_name(course.lowest_rank_caste_id)})"
-                if get_na_safe(course.lowest_closest_rank) != "NA"
-                else "NA"
-            )
-
-            # Safely convert category_of_admission_id to int
-            if (
-                course.category_of_admission_id == "NA"
-                or course.category_of_admission_id in [None, ""]
-            ):
-                category_of_admission_id = "NA"
-            else:
-                try:
-                    category_of_admission_id = int(course.category_of_admission_id)
-                except (ValueError, TypeError):
-                    category_of_admission_id = "NA"
-
-            category_of_admission = (
-                "All India"
-                if category_of_admission_id == 1
-                else "Outside Home state"
-                if category_of_admission_id == 2
-                else "Home state"
-                if category_of_admission_id == 3
-                else "NA"
-            ) if category_of_admission_id != "NA" else "NA"
-
-            serialized_data.append(
-                {
-                    "id": get_na_safe(course.id),
-                    "exam_id": get_na_safe(course.exam_id),
-                    "counselling_id": get_na_safe(course.counselling_id_ann),
-                    "exam_and_counseling": get_na_safe(course.exam_and_counseling),
-                    "min_opening_cutoff": get_na_safe(course.min_opening_cutoff),
-                    "min_closing_cutoff": get_na_safe(course.min_closing_cutoff),
-                    "caste_name": get_na_safe(course.caste_name),
-                    "counseling_name": get_na_safe(course.counseling_name),
-                    "category_of_admission_id": get_na_safe(
-                        course.category_of_admission_id
-                    )
-                    or "NA",
-                    "category_of_admission": category_of_admission,
-                    "lowest_closing_rank": lowest_rank_string,
-                    "college_id": get_na_safe(course.college_id),
-                    "exam_name": get_na_safe(course.exam_name),
-                    "total_counseling_rounds": get_na_safe(
-                        course.total_counseling_rounds
-                    ),
-                    "caste_id": get_na_safe(course.caste_id),
-                }
-            )
-
-        transformed_data = {"year": max_year_ref["year"] if max_year_ref else "NA", "exams": []}
-
-        exam_map = {}
-
-        if not serialized_data:
-            raise NoDataAvailableError(
-                "No exam & cutoff data available for the provided Course's."
-            )
-
         # Initialize categories from base_cutoffs
+        exam_map = {}
         for item in base_cutoffs:
             exam_id = item["exam_sub_exam_id"]
             if exam_id == "NA":
@@ -7406,23 +5758,9 @@ class ExamCutoffHelper:
                         "college_id": "NA",
                         "opening_rank": "NA",
                         "closing_rank": "NA",
-                        # "caste_id": "NA",
-                        # "caste_name": "NA",
                         "total_counselling_rounds": "NA",
                         "lowest_closing_rank": "NA",
                     }
-
-        for item in serialized_data:
-            exam_id = item["exam_id"]
-            if exam_id == "NA":
-                continue
-
-            if exam_id not in exam_map:
-                continue
-
-            exam_map[exam_id]["exam_name"] = item["exam_name"]
-            exam_map[exam_id]["counselling_name"] = item["counseling_name"]
-            exam_map[exam_id]["exam_and_counseling"] = item["exam_and_counseling"]
 
         # Populate cutoff data from base_cutoffs
         for item in base_cutoffs:
@@ -7446,30 +5784,32 @@ class ExamCutoffHelper:
                             "college_id": item["college_id"],
                             "opening_rank": item["round_wise_opening_cutoff"],
                             "closing_rank": item["final_cutoff"],
-                            # "caste_id": item["caste_id"],
-                            # "caste_name": get_caste_name(item["caste_id"]),
                             "total_counseling_rounds": item["total_counseling_rounds"],
-                            "lowest_closing_rank": "NA",  # lowest_closing_rank will be added later
+                            "lowest_closing_rank": item["lowest_closing_rank"]+" " + "(ST)",
                         }
 
-        for item in serialized_data:
-            exam_id = item["exam_id"]
-            if exam_id == "NA":
-                continue
-            category_id = item["category_of_admission_id"]
-            college_course_id = item["id"]
 
-            if (
-                exam_id in exam_map
-                and category_id in exam_map[exam_id]["categories"]
-            ):
-                for idx, course_id in enumerate(course_ids, 1):
-                    if college_course_id == course_id:
-                        college_key = f"college_{idx}"
-                        exam_map[exam_id]["categories"][category_id]["cutoff_data"][
-                            college_key
-                        ]["lowest_closing_rank"] = item["lowest_closing_rank"]
+        for exam_id in exam_map:
+            exam_map[exam_id]["exam_name"] = (
+                Exam.objects.filter(id=exam_id).values("exam_name").first()["exam_name"]
+                if Exam.objects.filter(id=exam_id).exists()
+                else "NA"
+            )
+            exam_map[exam_id]["counselling_name"] = (
+                Exam.objects.filter(id=exam_map[exam_id]["counselling_id"])
+                .values("exam_name")
+                .first()["exam_name"]
+                if Exam.objects.filter(id=exam_map[exam_id]["counselling_id"]).exists()
+                else "NA"
+            )
+            exam_map[exam_id]["exam_and_counseling"] = (
+                f"{exam_map[exam_id]['exam_name']} ({exam_map[exam_id]['counselling_name']})"
+                if exam_map[exam_id]["exam_name"] != "NA"
+                and exam_map[exam_id]["counselling_name"] != "NA"
+                else "NA"
+            )
 
+        transformed_data = {"year": max_year_ref["year"] if max_year_ref else "NA", "exams": []}
         for exam_id in exam_map:
             categories_list = []
             for category_id, category_data in exam_map[exam_id]["categories"].items():
@@ -7480,31 +5820,35 @@ class ExamCutoffHelper:
                         "cutoff_data": category_data["cutoff_data"],
                     }
                 )
-            exam_map[exam_id]["categories"] = categories_list
-
-        transformed_data["exams"] = list(exam_map.values())
+            transformed_data["exams"].append(
+                {
+                    "exam_id": exam_id,
+                    "exam_name": exam_map[exam_id]["exam_name"],
+                    "counselling_id": exam_map[exam_id]["counselling_id"],
+                    "counselling_name": exam_map[exam_id]["counselling_name"],
+                    "exam_and_counseling": exam_map[exam_id]["exam_and_counseling"],
+                    "categories": categories_list,
+                }
+            )
 
         if transformed_data["exams"] == []:
             raise NoDataAvailableError(
                 "No exam & cutoff data available for the provided Course's."
             )
+        
+        cache.set(cache_key, transformed_data, timeout=3600)
 
         return transformed_data
 
 
 
 
-       
-
-
-
 
 class ExamCutoffGraphHelper:
-
     @staticmethod
     def get_cache_key(*args) -> str:
         """Generate a cache key using MD5 hashing."""
-        key = "_".join(map(str, args))
+        key = "________".join(map(str, args))
         return hashlib.md5(key.encode()).hexdigest()
 
     @staticmethod
@@ -7513,13 +5857,11 @@ class ExamCutoffGraphHelper:
         if not course_ids:
             raise ValueError("course_ids must be provided.")
 
-    
         cache_key = ExamCutoffGraphHelper.get_cache_key(course_ids, exam_id, counseling_id, category_id, caste_id, gender_id)
         cached_data = cache.get(cache_key)
         if cached_data:
             return cached_data
 
-  
         max_year = CutoffData.objects.filter(college_course_id__in=course_ids).aggregate(Max("year"))["year__max"]
         if not max_year:
             return []
@@ -7550,7 +5892,6 @@ class ExamCutoffGraphHelper:
         ]
 
         all_exam_counseling_combinations = list(filtered_cutoff)
-
         result_list = []
 
         for course_id in course_ids:
@@ -7563,61 +5904,62 @@ class ExamCutoffGraphHelper:
                         caste_id=caste_id_val,
                     )
 
-                    annotated_cutoffs = filtered_base_cutoffs.aggregate(
-                        min_opening_rank=Coalesce(Min("round_wise_opening_cutoff"), Value("NA"), output_field=CharField()),
-                        min_closing_rank=Coalesce(Min("final_cutoff"), Value("NA"), output_field=CharField()),
-                    )
+                    # Get all available category_of_admission_ids for this combination
+                    category_of_admissions = filtered_base_cutoffs.values_list(
+                        'category_of_admission_id', flat=True
+                    ).distinct()
 
-                    exam = Exam.objects.filter(id=exam_counseling['exam_sub_exam_id']).first()
-                    counseling = Exam.objects.filter(id=exam_counseling['counselling_id']).first()
+                    for category_of_admission_id in category_of_admissions:
+                        category_filtered_cutoffs = filtered_base_cutoffs.filter(
+                            category_of_admission_id=category_of_admission_id
+                        )
 
-                    exam_name_result = exam.get_exam_display_name() if exam else "NA"
-                    counseling_name_result = counseling.exam_name if counseling else "NA"
+                        annotated_cutoffs = category_filtered_cutoffs.aggregate(
+                            min_opening_rank=Coalesce(Min("round_wise_opening_cutoff"), Value("NA"), output_field=CharField()),
+                            min_closing_rank=Coalesce(Min("final_cutoff"), Value("NA"), output_field=CharField()),
+                        )
 
-                    caste_name = "NA"
-                    if caste_id_val == 2:
-                        caste_name = "General"
-                    elif caste_id_val == 3:
-                        caste_name = "OBC"
-                    elif caste_id_val == 4:
-                        caste_name = "SC"
-                    elif caste_id_val == 5:
-                        caste_name = "ST"
+                        exam = Exam.objects.filter(id=exam_counseling['exam_sub_exam_id']).first()
+                        counseling = Exam.objects.filter(id=exam_counseling['counselling_id']).first()
 
-                    category_of_admission = "NA"
-                    category_of_admission_id = 'NA'
-                    if filtered_base_cutoffs.filter(category_of_admission_id=1).exists():
-                        category_of_admission = "All India"
-                        category_of_admission_id = 1
-                    elif filtered_base_cutoffs.filter(category_of_admission_id=2).exists():
-                        category_of_admission = "Outside Home State"
-                        category_of_admission_id = 2
-                    elif filtered_base_cutoffs.filter(category_of_admission_id=3).exists():
-                        category_of_admission = "Home State"
-                        category_of_admission_id = 3
+                        exam_name_result = exam.get_exam_display_name() if exam else "NA"
+                        counseling_name_result = counseling.exam_name if counseling else "NA"
 
-                    result_dict = {
-                        "college_course_id": course_id,
-                        "exam_sub_exam_id": exam_counseling['exam_sub_exam_id'],
-                        "counselling_id": exam_counseling['counselling_id'],
-                        "exam_name": exam_name_result,
-                        "counseling_name": counseling_name_result,
-                        "caste_name": caste_name,
-                        "category_of_admission": category_of_admission,
-                        "category_id": category_of_admission_id,
-                        "min_closing_cutoff": annotated_cutoffs['min_closing_rank'],
-                        "caste_id": caste_id_val,
-                        "gender_id": gender_id_val,
-                    }
-                    result_list.append(result_dict)
+                        caste_name = {
+                            2: "General",
+                            3: "OBC",
+                            4: "SC",
+                            5: "ST"
+                        }.get(caste_id_val, "NA")
 
-       
+                        category_of_admission = {
+                            "1": "All India",
+                            "2": "Outside Home State",
+                            "3": "Home State"
+                        }.get(category_of_admission_id, "NA")
+
+                        result_dict = {
+                            "college_course_id": course_id,
+                            "exam_sub_exam_id": exam_counseling['exam_sub_exam_id'],
+                            "counselling_id": exam_counseling['counselling_id'],
+                            "exam_name": exam_name_result,
+                            "counseling_name": counseling_name_result,
+                            "caste_name": caste_name,
+                            "category_of_admission": category_of_admission,
+                            "category_id": category_of_admission_id,
+                            "min_closing_cutoff": annotated_cutoffs['min_closing_rank'],
+                            "caste_id": caste_id_val,
+                            "gender_id": gender_id_val,
+                        }
+                        result_list.append(result_dict)
+
+        # Apply filters
         if exam_id:
             result_list = [item for item in result_list if item['exam_sub_exam_id'] == exam_id]
         if counseling_id:
             result_list = [item for item in result_list if item['counselling_id'] == counseling_id]
         if category_id:
-            result_list = [item for item in result_list if item['category_of_admission'] != "NA" and  CutoffData.objects.filter(college_course_id=item['college_course_id'],exam_sub_exam_id=item['exam_sub_exam_id'],counselling_id=item['counselling_id'],caste_id=item['caste_id'],category_of_admission_id=category_id).exists()]
+            result_list = [item for item in result_list if item['category_id'] == category_id]
         if caste_id:
             result_list = [item for item in result_list if item['caste_id'] == caste_id]
         if gender_id:
@@ -7645,41 +5987,45 @@ class ExamCutoffGraphHelper:
                 "categories": []
             }
 
-            all_category_ids = set(item['category_id'] for item in items if item['category_id'] != 'NA')
-            if not all_category_ids:
-                all_category_ids.add('NA')
+            # Group by category
+            category_groups = {}
+            for item in items:
+                category_id = item['category_id']
+                if category_id not in category_groups:
+                    category_groups[category_id] = []
+                category_groups[category_id].append(item)
 
-            for category_id_val in all_category_ids:
-                category_items = [item for item in items if item['category_id'] == category_id_val]
-                
-                if not category_items:
-                    continue
-
+            for category_id, category_items in category_groups.items():
                 category_data = {
-                    "id": category_id_val,
+                    "id": category_id,
                     "name": category_items[0]['category_of_admission'],
                     "caste": []
                 }
 
-                all_caste_ids = set(item['caste_id'] for item in category_items)
+                # Group by caste
+                caste_groups = {}
+                for item in category_items:
+                    caste_id = item['caste_id']
+                    if caste_id not in caste_groups:
+                        caste_groups[caste_id] = []
+                    caste_groups[caste_id].append(item)
 
-                for caste_id_val in all_caste_ids:
-                    caste_items = [item for item in category_items if item['caste_id'] == caste_id_val]
-                    
-                    if not caste_items:
-                        continue
-
+                for caste_id, caste_items in caste_groups.items():
                     caste_data = {
-                        "id": caste_id_val,
+                        "id": caste_id,
                         "name": caste_items[0]['caste_name'],
                         "gender": []
                     }
 
-                    all_gender_ids = set(item['gender_id'] for item in caste_items)
+                    # Group by gender
+                    gender_groups = {}
+                    for item in caste_items:
+                        gender_id = item['gender_id']
+                        if gender_id not in gender_groups:
+                            gender_groups[gender_id] = []
+                        gender_groups[gender_id].append(item)
 
-                    for gender_id_val in all_gender_ids:
-                        gender_items = [item for item in caste_items if item['gender_id'] == gender_id_val]
-                        
+                    for gender_id, gender_items in gender_groups.items():
                         cutoff_data_dict = {}
                         all_na = True
 
@@ -7698,18 +6044,17 @@ class ExamCutoffGraphHelper:
 
                         # Fill missing colleges
                         for i, course_id in enumerate(course_ids):
-                            
                             college_key = f"college_{i + 1}"
                             if college_key not in cutoff_data_dict:
-                                all_na=True
+                                all_na = True
                                 cutoff_data_dict[college_key] = {
                                     "closing_rank": "NA",
                                     "course_id": course_id
                                 }
 
                         gender_data = {
-                            "id": gender_id_val,
-                            "name": "Male" if gender_id_val == 1 else "Female",
+                            "id": gender_id,
+                            "name": "Male" if gender_id == 1 else "Female",
                             "cutoff_data": {
                                 "type": "tabular" if all_na else "vertical bar",
                                 **cutoff_data_dict
@@ -7727,13 +6072,12 @@ class ExamCutoffGraphHelper:
             course_id: college_name 
             for course_id, college_name in Course.objects.filter(id__in=course_ids)
             .select_related('college')
-            .values_list('id', 'college__name')
+            .values_list('id', 'college__short_name')
         }
         formatted_result["college_names"] = [college_names_dict[course_id] for course_id in course_ids]
 
         cache.set(cache_key, formatted_result, timeout=3600)
         return formatted_result
-
 
 
 
@@ -8151,190 +6495,4 @@ class AliasReverseChecker:
             logger.error(f"Error in get_result: {str(e)}", exc_info=True)
             raise
 
-# class AliasReverseChecker:
-#     """Helper class for reverse checking aliases and handling parameterization."""
-    
-#     @staticmethod
-#     def get_cache_key(*args) -> str:
-#         """Generate a cache key using MD5 hashing."""
-#         key = "_".join(map(str, args))
-#         return hashlib.md5(key.encode()).hexdigest()
-        
-#     def __init__(self, alias: str, college_ids: Optional[List[int]] = None, 
-#                  course_ids: Optional[List[int]] = None):
-#         """
-#         Initialize AliasReverseChecker with alias and optional IDs.
-        
-#         Args:
-#             alias (str): The alias to check
-#             college_ids (Optional[List[int]]): Optional list of two college IDs
-#             course_ids (Optional[List[int]]): Optional list of two course IDs
-#         """
-#         logger.debug(f"Initializing AliasReverseChecker with alias: {alias}, "
-#                     f"colleges: {college_ids}, courses: {course_ids}")
-#         self.alias = alias
-#         self.provided_college_ids = college_ids
-#         self.course_ids = course_ids
-#         self.source_college_ids = None
-#         self.validate_input()
-    
-#     def validate_input(self):
-#         """
-#         Validate the alias and optional parameters.
-        
-#         Raises:
-#             ValueError: If input validation fails
-#         """
-#         if not self.alias:
-#             raise ValueError("Alias must be provided.")
-            
-#         if self.provided_college_ids is not None:
-#             if not isinstance(self.provided_college_ids, list):
-#                 raise ValueError("college_ids must be a list.")
-#             if len(self.provided_college_ids) != 2:
-#                 raise ValueError("college_ids must contain exactly two college IDs.")
-            
-#         if self.course_ids is not None:
-#             if not isinstance(self.course_ids, list):
-#                 raise ValueError("course_ids must be a list.")
-#             if len(self.course_ids) != 2:
-#                 raise ValueError("course_ids must contain exactly two course IDs.")
-    
-#     def extract_college_ids(self, source: str) -> Optional[List[int]]:
-#         """
-#         Extract college IDs from the source field.
-        
-#         Args:
-#             source (str): Source string containing college IDs
-            
-#         Returns:
-#             Optional[List[int]]: List of extracted college IDs or None
-#         """
-#         try:
-#             parts = source.split('/')
-#             if len(parts) >= 3:
-#                 return [int(parts[-2]), int(parts[-1])]
-#         except (IndexError, ValueError) as e:
-#             logger.warning(f"Error extracting college IDs from source {source}: {str(e)}")
-#             return None
-#         return None
-    
-#     def validate_college_ids_match(self):
-#         """
-#         Validate that provided college IDs match the source if both exist.
-        
-#         Raises:
-#             ValueError: If college IDs don't match
-#         """
-#         if self.provided_college_ids and self.source_college_ids:
-#             provided_set = set(self.provided_college_ids)
-#             source_set = set(self.source_college_ids)
-#             if provided_set != source_set:
-#                 raise ValueError(
-#                     f"Provided college IDs {self.provided_college_ids} do not match "
-#                     f"the IDs in the source {self.source_college_ids}"
-#                 )
-    
-#     def get_alias_data(self) -> Dict:
-#         """
-#         Get alias data and extract college IDs from source.
-        
-#         Returns:
-#             Dict: Alias data dictionary
-            
-#         Raises:
-#             NoDataAvailableError: If no matching record is found
-#             ValueError: If college IDs cannot be extracted
-#         """
-#         alias_data = BaseUrlAlias.objects.filter(
-#             alias=self.alias,
-#             url_meta_pattern_id=102
-#         ).values('source', 'alias').first()
-        
-#         if not alias_data:
-#             raise NoDataAvailableError(
-#                 f"No matching record found for the provided alias: {self.alias}"
-#             )
-        
-#         self.source_college_ids = self.extract_college_ids(alias_data['source'])
-#         if not self.source_college_ids:
-#             raise ValueError(f"Could not extract college IDs from source: {alias_data['source']}")
-        
-#         self.validate_college_ids_match()
-#         return alias_data
-    
-#     def get_final_college_ids(self) -> List[int]:
-#         """
-#         Get the final college IDs to use, preferring provided IDs if they exist.
-        
-#         Returns:
-#             List[int]: Final list of college IDs to use
-#         """
-#         return self.provided_college_ids if self.provided_college_ids else self.source_college_ids
-    
-#     def generate_alias_parameterized(self) -> str:
-#         """
-#         Generate the parameterized alias with parameters.
-        
-#         Returns:
-#             str: Parameterized alias string
-            
-#         Raises:
-#             ValueError: If college IDs are not available
-#         """
-#         college_ids = self.get_final_college_ids()
-#         if not college_ids:
-#             raise ValueError("College IDs must be available before generating parameterized alias.")
-        
-#         college_ids_str = ",".join(map(str, college_ids))
-#         parameterized = f"{self.alias}?college_ids={college_ids_str}"
-        
-#         if self.course_ids:
-#             course_ids_str = ",".join(map(str, self.course_ids))
-#             parameterized = f"{parameterized}&course_ids={course_ids_str}"
-        
-#         return parameterized
-    
-#     def get_result(self) -> Dict:
-#         """
-#         Get the final result containing alias and parameterized alias with caching.
-        
-#         Returns:
-#             Dict: Dictionary containing alias information or error message
-#         """
-#         cache_key = self.get_cache_key(
-#             'alias_reverse_v1',
-#             self.alias,
-#             '_'.join(map(str, sorted(self.provided_college_ids))) if self.provided_college_ids else 'no_colleges',
-#             '_'.join(map(str, sorted(self.course_ids))) if self.course_ids else 'no_courses'
-#         )
 
-#         cached_result = cache.get(cache_key)
-#         if cached_result:
-#             logger.debug(f"Cache hit for key: {cache_key}")
-#             return cached_result
-
-#         try:
-#             alias_data = self.get_alias_data()
-#             alias_parameterized = self.generate_alias_parameterized()
-#             final_college_ids = self.get_final_college_ids()
-            
-#             result = {
-#                 "alias": self.alias,
-#                 "alias_parameterized": alias_parameterized,
-#                 "college_ids": final_college_ids,
-#                 "course_ids": self.course_ids or 'NA'
-#             }
-
-#             logger.debug(f"Caching result for key: {cache_key}")
-#             cache.set(cache_key, result, timeout=3600)  # 1 hour cache
-#             return result
-            
-#         except NoDataAvailableError as e:
-#             logger.warning(f"No data available: {str(e)}")
-#             error_result = {"error": str(e)}
-#             cache.set(cache_key, error_result, timeout=3600*24)  # 5 minutes cache for errors
-#             return error_result
-#         except Exception as e:
-#             logger.error(f"Error in get_result: {str(e)}", exc_info=True)
-#             raise
