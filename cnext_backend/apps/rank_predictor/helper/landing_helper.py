@@ -303,7 +303,7 @@ class RPHelper:
 
         product_id = int(split_string[1])
 
-        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration", "for_web").first()
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values("exam", "smart_registration", "for_web", "created").first()
 
         # print(f"product dict {product_dict}")
 
@@ -311,6 +311,7 @@ class RPHelper:
             exam_id = product_dict.get("exam", "")
             smart_registration = product_dict.get("smart_registration", False)
             form_enable =  product_dict.get("for_web") 
+            created = product_dict.get("created")
 
             # print(f"for web {form_enable}")
 
@@ -328,7 +329,7 @@ class RPHelper:
         # if domain_dict != None:
         #     domain_name = domain_dict.get('name', "")
 
-        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration, "form_enable": True if form_enable == 1 else False}
+        return { "product_id": product_id, "exam_id": exam_id, 'domain': domain_id, 'level': level, 'domain_name': domain_name, 'smart_registration': smart_registration, "form_enable": True if form_enable == 1 else False, "rp_created": created}
         
     def _related_products(self, product_id=None, alias=None):
         
