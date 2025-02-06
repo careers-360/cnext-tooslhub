@@ -214,7 +214,7 @@ class RPHelper:
                 disabilities = [ merit_list['disability'] for merit_list in RpMeritList.objects.filter(caste=caste, product_id=product_id, year=max_year).values('disability').distinct() ] 
                 disability_by_category_mapping[caste] = [{'id': id , 'value': DISABILITY_CATEGORY_MAP[id]} for id in disabilities ]
 
-            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping }
+            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping, 'flow_id': flow_id }
 
         return cast_disabilities_mapping
 
