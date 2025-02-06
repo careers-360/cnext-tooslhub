@@ -5,12 +5,13 @@ from rank_predictor.models import CnextRpVariationFactor, RPStudentAppeared, RpF
 from tools.models import CPFeedback, CPProductCampaign, ToolsFAQ
 
 from wsgiref import validate
-from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain, PreferredEducationLevel, CasteCategory
+from tools.models import CPProductCampaign, CPTopCollege, UrlAlias, Exam, ProductSession, Domain, PreferredEducationLevel, CasteCategory, AuthorProfile, User
 from  utils.helpers.choices import HEADER_DISPLAY_PREFERANCE, CASTE_CATEGORY, DISABILITY_CATEGORY, DIFFICULTY_LEVEL, CASTE_CATEGORY_MAP, DISABILITY_CATEGORY_MAP
 import os
 from django.utils import timezone
 from datetime import datetime
 from django.db.models import F, Max
+import pytz
 
 
 
@@ -88,6 +89,7 @@ class RPHelper:
     def __init__(self):
         self.base_image_url = os.getenv("CAREERS_BASE_IMAGES_URL","https://cnextassets.careers360.de/media_tools/")
         self.exam_logo_base_url = os.getenv("CAREERS_EXAM_BASE_IMAGES_URL", "https://cache.careers360.mobi/media/presets/45X45/")
+        self.author_profile_image_base_url = os.getenv("CAREERS_AUTHOR_PROFILE_IMAGE_BASE_URL", "https://production-cnext.s3.amazonaws.com/media/")
         pass
 
     def parse_choice(self, data_dic=dict)->list:
@@ -256,7 +258,36 @@ class RPHelper:
             content['image_wap'] = self.base_image_url+content.get('image_wap', None)
             content_response.append(content)
 
-        return content_response
+        product_dict = CPProductCampaign.objects.filter(id=product_id).values('updated_by', 'updated').first()
+
+        # print(f"product dict updated by  {product_dict['updated_by']}")
+        # print(f"product dict updated  {product_dict['updated']}")
+
+        user_id = product_dict['updated_by']
+        timestamp = product_dict['updated']
+        india_tz = pytz.timezone('Asia/Kolkata')
+        timestamp_ist = timestamp.astimezone(india_tz)
+
+        # Format the datetime object to the desired format
+        formatted_timestamp = timestamp_ist.strftime("%d %b %Y, %I:%M %p IST")
+        # print(f"formated date : {formatted_timestamp}")
+
+        # print(f'searching for user with id : {user_id}')
+
+        author_dict = AuthorProfile.objects.filter(user_id=user_id).values('user_id', 'profile_image').first()
+        # print(f"author id :  {author_dict['user_id']}")
+        # print(f"profile image :  {author_dict['profile_image']}")
+
+        if author_dict != None:
+            profile_image = author_dict['profile_image']
+
+        user_dict = User.objects.filter(id=user_id).values('name').first()
+        # print(f"user display name :  {user_dict['name']}")
+
+        if user_dict != None:
+            author_name = user_dict['name']
+
+        return { "content": content_response, "updated_date_time": formatted_timestamp , "image": f"{self.author_profile_image_base_url}{profile_image}" , 'author_name': author_name}
     
     def _get_product__exam_from_alias(self , alias):
 
