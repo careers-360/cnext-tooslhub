@@ -9,7 +9,7 @@ from utils.helpers.custom_permission import ApiKeyPermission
 from college_compare.api.serializers.comparison_result_page_serialzers import FeedbackSubmitSerializer,UserPreferenceSaveSerializer
 from utils.helpers.response import SuccessResponse, CustomErrorResponse
 
-from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,FeesInsightsCalculator,PlacementInsightsCalculator,RankingInsightsCalculator,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
+from college_compare.api.helpers.comparison_result_page_helpers import (RankingAccreditationHelper,FeesInsightsCalculator,CutoffAnalysisHelper,PlacementInsightsCalculator,RankingInsightsCalculator,AliasReverseChecker,SlugChecker,UserPreferenceHelper,ExamCutoffGraphHelper, CollegeReviewAiInsightHelper,FeesAiInsightHelper,ClassProfileAiInsightHelper,RankingAiInsightHelper,PlacementAiInsightHelper,NoDataAvailableError,CollegeAmenitiesHelper,PlacementInsightHelper,CollegeReviewsRatingGraphHelper,MultiYearRankingHelper,CollegeRankingService,PlacementGraphInsightsHelper,FeesGraphHelper,ProfileInsightsHelper,RankingGraphHelper,CourseFeeComparisonHelper,FeesHelper,CollegeFacilitiesHelper,ClassProfileHelper,CollegeReviewsHelper,ExamCutoffHelper,UserPreferenceOptionsHelper)
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -1905,6 +1905,73 @@ class ExamCutGraphoffView(APIView):
             )
 
 
+
+class ExamCutoffInsightsView(APIView):
+    permission_classes = [ApiKeyPermission]
+
+    @extend_schema(
+        summary="Get Cutoff Insights",
+        description="Retrieve cutoff analysis insights for given courses.",
+        parameters=[
+            OpenApiParameter(
+                name='course_ids',
+                type=str,
+                description='Comma-separated list of course IDs',
+                required=True
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description='Successfully retrieved cutoff insights',
+                response=dict,
+                examples=[
+                    {
+                        "cutoff_differences": "B.Tech CSE IIT Delhi has 20% higher cut off as compared to B.Tech CSE (IIT Bombay).",
+                        "closing_rank_changes": "There is a 20% increase in closing rank for B.Tech CSE (IIT Delhi).",
+                        "lowest_cutoff_degree": "B.Tech CSE (IIT Delhi) has the lowest closing rank of 650 for ST category.",
+                        "lowest_cutoff_branch": "B.Tech Mechanical (IIT Bombay) has the lowest closing rank of 700 for ST category."
+                    }
+                ]
+            ),
+            400: OpenApiResponse(description='Invalid parameters'),
+            500: OpenApiResponse(description='Internal server error'),
+        }
+    )
+    def get(self, request):
+        """
+        GET endpoint to retrieve cutoff analysis insights.
+        """
+        course_ids = request.query_params.get('course_ids')
+
+        try:
+            if not course_ids:
+                raise ValidationError("course_ids is a required parameter")
+
+            try:
+                course_ids_list = [int(cid.strip()) for cid in course_ids.split(',') if cid.strip()]
+                if not course_ids_list:
+                    raise ValidationError("At least one valid course id is required")
+            except ValueError:
+                raise ValidationError("Invalid course ID format - must be comma-separated integers")
+
+            # Fetch cutoff analysis insights
+            cutoff_insights = CutoffAnalysisHelper.compare_cutoffs(course_ids_list)
+
+            # Return only the cutoff insights
+            return SuccessResponse(cutoff_insights, status=status.HTTP_200_OK)
+
+        except ValidationError as ve:
+            logger.error("Validation error in ExamCutoffView: %s", str(ve))
+            return CustomErrorResponse(
+                {"error": str(ve)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error("Error in ExamCutoffView: %s", str(e))
+            return CustomErrorResponse(
+                {"error": "An unexpected error occurred while processing your request"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class FeedbackSubmitView(APIView):
     @extend_schema(
