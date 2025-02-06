@@ -176,7 +176,10 @@ class LandingDataAPI(APIView):
             resp = {
             "product_id" : product_id,
             "header_content" : header_content,
-            "cotent_section": content_section
+            "cotent_section": content_section["content"],
+            "updated_date_time": content_section["updated_date_time"],
+            "image": content_section["image"],
+            "author_name": content_section["author_name"]
             }
             return SuccessResponse(resp, status=status.HTTP_200_OK)
         
@@ -1098,7 +1101,7 @@ class CasteDisabilityAPI(APIView):
         flow_id = request.GET.get('flow_id')
         
         rp_helper = RPHelper()
-        
+
         if product_id:
             product_id = int(product_id)
             cast_disabilitys = rp_helper._get_cast_disability_mappings(product_id=product_id, exam_id=exam_id, flow_id=flow_id)

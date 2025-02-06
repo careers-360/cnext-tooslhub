@@ -4,7 +4,7 @@ from django.db import models
 from users.models import User
 from django.core.validators import RegexValidator, ValidationError, MinValueValidator, FileExtensionValidator, MaxValueValidator
 from datetime import datetime, date
-
+from unixtimestampfield.fields import UnixTimeStampField
 
 CURRENT_YEAR = datetime.today().year
 
@@ -894,3 +894,84 @@ class ProductSession(models.Model):
 
     class Meta:
         db_table = 'product_session'
+
+class AuthorProfile(models.Model):
+    id = models.AutoField(primary_key=True)
+    user_id = models.IntegerField(null=False, blank=False)
+    designation = models.CharField(max_length=255, null=True, blank=True, default=None)
+    linkedin = models.CharField(max_length=255, null=True, blank=True, default=None)
+    twitter = models.CharField(max_length=255, null=True, blank=True, default=None)
+    facebook = models.CharField(max_length=255, null=True, blank=True, default=None)
+    experience = models.TextField(null=True, blank=True, default=None)
+    education = models.TextField(null=True, blank=True, default=None)
+    status = models.BooleanField(default=False, null=True, blank=True)
+    added_on = models.DateTimeField(auto_now_add=True, null=True)
+    updated_on = models.DateTimeField(auto_now=True, null=True)
+    created_by = models.IntegerField(null=True, blank=True, default=None)
+    updated_by = models.IntegerField(null=True, blank=True, default=None)
+    profile_image = models.CharField(max_length=255, null=True, blank=True, default=None)  
+    instagram = models.CharField(max_length=1200, null=True, blank=True, default=None)
+    author_type = models.CharField(max_length=10, choices=[('Article', 'Article'), ('News', 'News'), ('All', 'All')], null=True, blank=True)
+    domain = models.IntegerField(null=True, blank=True, default=None)
+    content_autofetched = models.BooleanField(default=False)  
+
+    class Meta:
+        db_table = 'author_profile'
+        managed = False
+
+class User(models.Model):
+	id = models.AutoField(db_column='uid', primary_key=True)
+	user_type = models.CharField(max_length=255, blank=True, null=True)
+	username = models.CharField(unique=True, max_length=235, blank=True, null=True)
+	name = models.CharField(max_length=255, db_column='display_name')
+	email = models.EmailField(verbose_name="email address", max_length=255)
+	dob = models.DateField(null=True)
+	gender = models.CharField(max_length=255, blank=True, null=True)
+	profile_picture = models.ImageField(blank=True, null=True)
+	google_status = models.BooleanField(default=False)
+	google_id = models.CharField(max_length=255, blank=True, null=True)
+	facebook_status = models.BooleanField(default=False)
+	facebook_id = models.IntegerField(null=True)
+	truecaller_status = models.BooleanField(default=False)
+	isd_code = models.IntegerField(null=False, default=91)
+	phone_number = models.CharField( max_length=20, blank=True, db_index=True, db_column='mobile_number')  
+	is_active = models.BooleanField(default=True, db_column='active')
+	is_staff = models.BooleanField(default=False, db_column='staff')
+	is_superuser = models.BooleanField(default=False, db_column='admin')
+	education_stream = models.IntegerField(null=True, blank=True, db_column='education_stream')
+	current_education_level = models.IntegerField(null=True, blank=True)
+	current_education_passing_year = models.IntegerField(null=True, blank=True)
+	twelfth_passing_year = models.IntegerField(null=True, blank=True)
+	target_year = models.IntegerField(null=True, blank=True)
+	school_board = models.CharField(max_length=255, blank=True, null=True)
+	course_interested = models.IntegerField(null=True, blank=True)
+	learn_user_id = models.IntegerField(blank=True, null=True, default=0)
+	location_id = models.IntegerField(null=True, blank=True)
+	about = models.TextField(blank=True, null=True)
+	sf_status = models.IntegerField(default=0, null=True, blank=True)
+	admission_help = models.CharField(max_length=255, blank=True, null=True)
+	connect_me_whatsapp = models.IntegerField(null=True)
+	user_profile_status = models.IntegerField(null=True, blank=True, default=False)
+	added_on = UnixTimeStampField(auto_now_add=True, db_column='created')
+	updated_on = UnixTimeStampField(auto_now=True, db_column='updated')
+	last_login = UnixTimeStampField(null=True)
+	paytm_user_id= models.IntegerField(blank=True, null=True, default=0)
+	email_status = models.BooleanField(default=False)
+	mobile_verify = models.BooleanField(default=False)
+	email_verify = models.BooleanField(default=False)
+	email_medium = models.CharField(max_length=255, blank=True, null=True)
+	manual_status = models.BooleanField(default=False)
+	aspiring_stream = models.CharField(max_length=255, blank=True, null=True)
+	domain_id = models.IntegerField(null=True, blank=True)
+	auto_city = models.CharField(max_length=255, blank=True, null=True)
+	auto_state = models.CharField(max_length=255, blank=True, null=True)
+	auto_country = models.CharField(max_length=255, blank=True, null=True)
+	auto_ip = models.CharField(max_length=255, blank=True, null=True)
+	action_location = models.CharField(max_length=255, blank=True, null=True)
+	admission_preference_status = models.IntegerField(default=0)
+	coaching_interested = models.BooleanField(default=False)
+     
+	class Meta:
+		db_table = "users"
+		verbose_name_plural = "Users"
+		managed = False
