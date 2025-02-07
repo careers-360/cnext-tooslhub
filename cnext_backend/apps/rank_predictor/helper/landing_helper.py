@@ -192,7 +192,7 @@ class RPHelper:
                 # print(f"disabilities for percentile flow {disabilities}")
                 disability_by_category_mapping[caste] = [{'id': id , 'value': DISABILITY_CATEGORY_MAP[id]} for id in disabilities ]
 
-            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping }
+            cast_disabilities_mapping = {'cast_category': CASTE, 'disability_category': disability_by_category_mapping , 'flow_id': flow_id }
 
         else:
         ## Non Percentile flow
