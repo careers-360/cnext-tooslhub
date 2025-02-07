@@ -419,6 +419,8 @@ class RankingGraphInsightsView(APIView):
                 raise NoDataAvailableError(
                     "No ranking graph insights available for the provided inputs."
                 )
+            
+            result['year']=current_year-1
 
             # Return successful response
             return SuccessResponse(result, status=status.HTTP_200_OK)
@@ -613,6 +615,7 @@ class PlacementGraphInsightsView(APIView):
                 selected_courses=selected_courses,
                 year=year
             )
+            result['year']=current_year-1
 
             return SuccessResponse(result, status=status.HTTP_200_OK)
 
@@ -1266,7 +1269,7 @@ class CollegeReviewsComparisonView(APIView):
         try:
             college_ids = request.query_params.get('college_ids')
             course_ids = request.query_params.get('course_ids')
-            grad_year = request.query_params.get('grad_year') or current_year -2
+            grad_year = request.query_params.get('grad_year') or current_year -1
 
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required")
@@ -1560,7 +1563,7 @@ class CollegeReviewRatingGraphView(APIView):
         try:
             
             college_ids = request.query_params.get('college_ids')
-            grad_year = request.query_params.get('grad_year') or current_year -2
+            grad_year = request.query_params.get('grad_year') or current_year -1
 
             if not college_ids or not grad_year:
                 raise ValidationError("Both college_ids and grad_year are required.")
