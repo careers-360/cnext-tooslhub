@@ -1327,17 +1327,17 @@ class RPCmsHelper:
         usage_to = request.GET.get('usage_to')
         product_id = request.GET.get('product_id')
         page = request.GET.get('page', 1)
-        size = request.GET.get('size', 30)
+        page_size = request.GET.get('page_size', 10)
         usage_data = []
 
-        if str(page).isdigit() and str(size).isdigit():
+        if str(page).isdigit() and str(page_size).isdigit():
             page = int(page)
-            size = int(size)
+            page_size = int(page_size)
         else:
-            return False, "Invalid page or size"
+            return False, "Invalid page or page_size"
 
-        offset = (page-1) * size
-        limit = offset + size
+        offset = (page-1) * page_size
+        limit = offset + page_size
 
         if not usage_from or not usage_to or not product_id:
             return False, "usage_from, usage_to and product_id are required"
@@ -1347,7 +1347,12 @@ class RPCmsHelper:
         cast_category_dict = dict(CasteCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
         disability_category_dict = dict(DisabilityCategory.objects.annotate(key=F('id'), value=F('name')).values_list('key', 'value'))
 
-        queryset = CnextRpUserTracking.objects.filter(**query_filters).values().order_by("-id")[offset: limit]
+        queryset = CnextRpUserTracking.objects.filter(**query_filters).values().order_by("-id")
+
+        # Paginate the results
+        paginator = CustomPaginator()
+        paginator.page_size = page_size
+        paginated_results = paginator.paginate_queryset(queryset, request)
 
         if len(queryset) == 0:
             return True, usage_data
@@ -1355,7 +1360,7 @@ class RPCmsHelper:
         input_flow_type_mapping = list(RpInputFlowMaster.objects.filter(status=1).values('id', 'input_flow_type', 'input_type'))
         input_flow_type_mapping = {item['id'] : {'input_flow_type' : item['input_flow_type'], 'input_type' : item['input_type']} for item in input_flow_type_mapping}
 
-        for item in queryset:
+        for item in paginated_results[offset:limit]:
 
             ## Input Flow Type
             flow_type = item['flow_type'] if item['flow_type'] else None
@@ -1438,7 +1443,8 @@ class RPCmsHelper:
             }
             usage_data.append(dataset)
 
-        return True, usage_data
+        paginated_data = paginator.get_paginated_response(usage_data)
+        return True, paginated_data
 
     def formate_output_data(self, flow_type, data):
         formated_data = []
