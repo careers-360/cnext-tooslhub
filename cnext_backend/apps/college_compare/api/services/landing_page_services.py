@@ -244,7 +244,7 @@ class TopCollegesCoursesService:
         try:
             user_context = UserContextHelper.get_user_context(uid)
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_courses_v30_{domain_id}"
+            cache_key = f"top_colleges_courses_v31_{domain_id}"
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_colleges_courses_v25_", domain_id)
             if cached := cache.get(cache_key):
@@ -270,7 +270,7 @@ class TopCollegesCoursesService:
         """Get top colleges using batch processing with caching."""
         try:
             domain_id = user_context.get('domain_id')
-            cache_key = f"top_colleges_v30_{domain_id}"
+            cache_key = f"top_colleges_v31_{domain_id}"
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_colleges_v15_", domain_id)
             if cached := cache.get(cache_key):
@@ -322,7 +322,7 @@ class TopCollegesCoursesService:
         try:
             domain_id = user_context.get('domain_id')
             education_level = user_context.get('education_level')
-            cache_key = f"top_courses_v30_{domain_id}"
+            cache_key = f"top_courses_v31_{domain_id}"
             if cache_burst == 1:
                 CacheHelper.burst_cache("top_courses_v15_", domain_id)
             if cached := cache.get(cache_key):
